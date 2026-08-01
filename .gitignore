@@ -1,0 +1,5 @@
+*.beam
+*.ez
+/pixel_scribe_frontend/build
+/pixel_scribe_backend/build
+erl_crash.dump
