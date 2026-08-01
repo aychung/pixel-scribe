@@ -17,9 +17,10 @@ const index_html = "<html lang='en'>
   <body>
     Hello, world!
   </body>
-</html>"
+</html>
+"
 
-pub fn new(port: Int) -> ChildSpecification(Supervisor) {
+pub fn new(bind_address: String, port: Int) -> ChildSpecification(Supervisor) {
   let not_found =
     response.new(404)
     |> response.set_body(mist.Bytes(bytes_tree.new()))
@@ -54,7 +55,7 @@ pub fn new(port: Int) -> ChildSpecification(Supervisor) {
     }
   }
   |> mist.new
-  |> mist.bind("localhost")
+  |> mist.bind(bind_address)
   |> mist.with_ipv6
   |> mist.port(port)
   |> mist.supervised
