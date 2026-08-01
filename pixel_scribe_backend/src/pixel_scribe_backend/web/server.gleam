@@ -1,14 +1,14 @@
-import gleam/bit_array
 import gleam/bytes_tree
+import gleam/erlang/process
 import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
-import gleam/int
 import gleam/io
 import gleam/option
 import gleam/otp/static_supervisor.{type Supervisor}
 import gleam/otp/supervision.{type ChildSpecification}
-import logging
+import gleam/result
 import mist.{type Connection, type ResponseData}
+import pixel_scribe_backend/user_registry
 
 const index_html = "<html lang='en'>
   <head>
@@ -20,36 +20,76 @@ const index_html = "<html lang='en'>
 </html>
 "
 
-pub fn new(bind_address: String, port: Int) -> ChildSpecification(Supervisor) {
+pub type Registration {
+  Registered(name: String)
+  RejectedDuplicate
+}
+
+fn reject_connection_duplicate() {
+  let sbj = process.new_subject()
+  let selector =
+    process.new_selector()
+    |> process.select(sbj)
+
+  process.send(sbj, RejectedDuplicate)
+  #(RejectedDuplicate, option.Some(selector))
+}
+
+pub fn new(
+  bind_address: String,
+  port: Int,
+  user_registry_name: process.Name(user_registry.Message),
+) -> ChildSpecification(Supervisor) {
   let not_found =
     response.new(404)
     |> response.set_body(mist.Bytes(bytes_tree.new()))
+  let not_authorized =
+    response.new(401)
+    |> response.set_body(mist.Bytes(bytes_tree.new()))
 
   fn(req: Request(Connection)) -> Response(ResponseData) {
-    let _ = case mist.get_connection_info(req.body) {
-      Ok(info) -> {
-        logging.log(
-          logging.Info,
-          "Got a request from: " <> mist.connection_info_to_string(info),
-        )
-      }
-      Error(_nil) -> {
-        logging.log(logging.Info, "Failed to get connection info")
-      }
-    }
     case request.path_segments(req) {
       [] ->
         response.new(200)
-        |> response.prepend_header("my-value", "abc")
-        |> response.prepend_header("my-value", "123")
         |> response.set_body(mist.Bytes(bytes_tree.from_string(index_html)))
-      ["ws"] ->
-        mist.websocket(
-          request: req,
-          on_init: fn(_conn) { #(Nil, option.None) },
-          on_close: fn(_state) { io.println("WS disconnected!") },
-          handler: handle_ws_message,
-        )
+      ["ws"] -> {
+        req
+        |> request.get_header("x-name")
+        |> result.map(fn(user_name) {
+          mist.websocket(
+            request: req,
+            on_init: fn(_conn) {
+              case
+                process.call(
+                  process.named_subject(user_registry_name),
+                  100,
+                  fn(subject) { user_registry.Add(subject, user_name) },
+                )
+              {
+                "DUPLICATE_USERNAME" -> {
+                  reject_connection_duplicate()
+                }
+                _ -> {
+                  #(Registered(user_name), option.None)
+                }
+              }
+            },
+            on_close: fn(state) {
+              case state {
+                Registered(name) ->
+                  process.send(
+                    process.named_subject(user_registry_name),
+                    user_registry.Remove(name),
+                  )
+                RejectedDuplicate -> Nil
+              }
+              io.println("WS disconnected!")
+            },
+            handler: handle_ws_message,
+          )
+        })
+        |> result.unwrap(not_authorized)
+      }
 
       _ -> not_found
     }
@@ -62,28 +102,14 @@ pub fn new(bind_address: String, port: Int) -> ChildSpecification(Supervisor) {
 }
 
 fn handle_ws_message(state, message, conn) {
-  case message {
-    mist.Text("ping") -> {
-      let assert Ok(_) = mist.send_text_frame(conn, "pong")
+  case state, message {
+    RejectedDuplicate, mist.Custom(RejectedDuplicate) ->
+      mist.stop_abnormal("username_taken")
+    Registered(_), mist.Text(message) -> {
+      let _ = mist.send_text_frame(conn, message)
       mist.continue(state)
     }
-    mist.Text(msg) -> {
-      logging.log(logging.Info, "Received text frame: " <> msg)
-      mist.continue(state)
-    }
-    mist.Binary(msg) -> {
-      logging.log(
-        logging.Info,
-        "Received binary frame ("
-          <> int.to_string(bit_array.byte_size(msg))
-          <> ")",
-      )
-      mist.continue(state)
-    }
-    mist.Custom(text) -> {
-      let assert Ok(_) = mist.send_text_frame(conn, text)
-      mist.continue(state)
-    }
-    mist.Closed | mist.Shutdown -> mist.stop()
+    _, mist.Closed | _, mist.Shutdown -> mist.stop()
+    _, _ -> mist.continue(state)
   }
 }
