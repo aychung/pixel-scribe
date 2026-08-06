@@ -1,24 +1,16 @@
 import gleam/bytes_tree
+import gleam/erlang/application
 import gleam/erlang/process
 import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
 import gleam/io
-import gleam/option
+import gleam/option.{None}
 import gleam/otp/static_supervisor.{type Supervisor}
 import gleam/otp/supervision.{type ChildSpecification}
 import gleam/result
+import gleam/string
 import mist.{type Connection, type ResponseData}
 import pixel_scribe_backend/user_registry
-
-const index_html = "<html lang='en'>
-  <head>
-    <title>PIXEL SCRIBE</title>
-  </head>
-  <body>
-    Hello, world!
-  </body>
-</html>
-"
 
 pub type Registration {
   Registered(name: String)
@@ -33,6 +25,26 @@ fn reject_connection_duplicate() {
 
   process.send(sbj, RejectedDuplicate)
   #(RejectedDuplicate, option.Some(selector))
+}
+
+fn get_public_file_path(file_path: String) -> String {
+  let assert Ok(priv_dir) = application.priv_directory("pixel_scribe_backend")
+  priv_dir <> "/public/" <> file_path
+}
+
+fn serve_file(
+  _req: Request(Connection),
+  file_path: List(String),
+) -> Result(Response(ResponseData), _) {
+  let file_path = get_public_file_path(string.join(file_path, "/"))
+
+  // Omitting validation for brevity
+  mist.send_file(file_path, offset: 0, limit: None)
+  |> result.map(fn(file) {
+    response.new(200)
+    |> response.prepend_header("content-type", "text/html")
+    |> response.set_body(file)
+  })
 }
 
 pub fn new(
@@ -50,8 +62,9 @@ pub fn new(
   fn(req: Request(Connection)) -> Response(ResponseData) {
     case request.path_segments(req) {
       [] ->
-        response.new(200)
-        |> response.set_body(mist.Bytes(bytes_tree.from_string(index_html)))
+        serve_file(req, ["index.html"])
+        |> result.unwrap(not_found)
+
       ["ws"] -> {
         req
         |> request.get_header("x-name")
@@ -70,7 +83,7 @@ pub fn new(
                   reject_connection_duplicate()
                 }
                 _ -> {
-                  #(Registered(user_name), option.None)
+                  #(Registered(user_name), None)
                 }
               }
             },
@@ -91,7 +104,9 @@ pub fn new(
         |> result.unwrap(not_authorized)
       }
 
-      _ -> not_found
+      file_path ->
+        serve_file(req, file_path)
+        |> result.lazy_unwrap(fn() { not_found })
     }
   }
   |> mist.new
