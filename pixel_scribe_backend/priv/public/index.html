@@ -63,14 +63,26 @@
     <script>
       // Open a connection to the SSE endpoint
       const messages = document.querySelector('#messages');
-      const source = new EventSource('/sse');
-      source.onmessage = (event) => {
-        // When a message is received, insert it at the end
-        const message = document.createElement('article');
-        message.append(event.data);
-        messages.append(message);
-        // Scroll to the end of the container
-        messages.scrollTop = messages.scrollHeight;
+      const socket = new WebSocket('/ws');
+      // Connection opened
+      socket.onopen = function(event) {
+        console.log('Connected to the server.');
+        socket.send('Hello Server!');
+      };
+
+      // Listen for messages
+      socket.onmessage = function(event) {
+        console.log('Message from server: ', event.data);
+      };
+
+      // Handle errors
+      socket.onerror = function(error) {
+        console.error('WebSocket error: ', error);
+      };
+
+      // Connection closed
+      socket.onclose = function(event) {
+        console.log('Connection closed.');
       };
 
       // Handle form submission client-side
@@ -79,8 +91,8 @@
         // Prevent the browser from navigating to /post
         event.preventDefault();
         // Send the message to the POST endpoint
-        const body = new FormData(form).get('message');
-        await fetch('/post', { method: 'POST', body });
+        const msg = new FormData(form).get('message');
+        socket.send(msg)
         // Clear the message field
         form.reset();
       };

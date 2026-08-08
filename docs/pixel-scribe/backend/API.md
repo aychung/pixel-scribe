@@ -1,0 +1,2 @@
+- /ws/{username} - websocket
+	- let's user join a room

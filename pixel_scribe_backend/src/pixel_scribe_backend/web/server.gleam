@@ -10,6 +10,7 @@ import gleam/otp/supervision.{type ChildSpecification}
 import gleam/result
 import gleam/string
 import mist.{type Connection, type ResponseData}
+import pixel_scribe_backend/chat/room
 import pixel_scribe_backend/user_registry
 
 pub type Registration {
@@ -51,6 +52,7 @@ pub fn new(
   bind_address: String,
   port: Int,
   user_registry_name: process.Name(user_registry.Message),
+  room_registry_name: process.Name(room.Message),
 ) -> ChildSpecification(Supervisor) {
   let not_found =
     response.new(404)
@@ -61,47 +63,45 @@ pub fn new(
 
   fn(req: Request(Connection)) -> Response(ResponseData) {
     case request.path_segments(req) {
-      [] ->
+      [] -> {
+        io.println("> serving index html")
         serve_file(req, ["index.html"])
         |> result.unwrap(not_found)
+      }
 
-      ["ws"] -> {
-        req
-        |> request.get_header("x-name")
-        |> result.map(fn(user_name) {
-          mist.websocket(
-            request: req,
-            on_init: fn(_conn) {
-              case
-                process.call(
+      ["ws", user_name] -> {
+        mist.websocket(
+          request: req,
+          on_init: fn(conn) {
+            case
+              process.call(
+                process.named_subject(user_registry_name),
+                100,
+                fn(subject) { user_registry.Add(subject, "user_name", conn) },
+              )
+            {
+              "DUPLICATE_USERNAME" -> {
+                reject_connection_duplicate()
+              }
+              _ -> {
+                #(Registered("user_name"), None)
+              }
+            }
+          },
+          on_close: fn(state) {
+            io.println("> ws: on close")
+            case state {
+              Registered(name) ->
+                process.send(
                   process.named_subject(user_registry_name),
-                  100,
-                  fn(subject) { user_registry.Add(subject, user_name) },
+                  user_registry.Remove(name),
                 )
-              {
-                "DUPLICATE_USERNAME" -> {
-                  reject_connection_duplicate()
-                }
-                _ -> {
-                  #(Registered(user_name), None)
-                }
-              }
-            },
-            on_close: fn(state) {
-              case state {
-                Registered(name) ->
-                  process.send(
-                    process.named_subject(user_registry_name),
-                    user_registry.Remove(name),
-                  )
-                RejectedDuplicate -> Nil
-              }
-              io.println("WS disconnected!")
-            },
-            handler: handle_ws_message,
-          )
-        })
-        |> result.unwrap(not_authorized)
+              RejectedDuplicate -> Nil
+            }
+            io.println("WS disconnected!")
+          },
+          handler: handle_ws_message,
+        )
       }
 
       file_path ->
@@ -121,6 +121,7 @@ fn handle_ws_message(state, message, conn) {
     RejectedDuplicate, mist.Custom(RejectedDuplicate) ->
       mist.stop_abnormal("username_taken")
     Registered(_), mist.Text(message) -> {
+      io.println("> ws: handle message: " <> message)
       let _ = mist.send_text_frame(conn, message)
       mist.continue(state)
     }

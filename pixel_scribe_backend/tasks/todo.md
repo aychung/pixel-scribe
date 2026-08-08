@@ -1,0 +1,422 @@
+# Pixel Scribe Backend MVP Tasks
+
+This checklist executes `docs/mvp-backend-spec.md` through `tasks/plan.md`. Finish
+and verify tasks in dependency order. Do not preserve exploratory code merely
+because it already exists.
+
+## Task 0: Clean the exploratory baseline and add foundation dependencies
+
+**Description:** Remove or replace incomplete exploratory modules and create minimal
+test scaffolding so the repository has a buildable starting point. Add the two
+approved foundation dependencies through Gleam tooling before feature work begins.
+
+**Acceptance criteria:**
+
+- [ ] Incomplete or superseded starter modules no longer prevent formatting,
+  compilation, or tests; any retained starter code has a clear role in the MVP.
+- [ ] `gleam add wisp gleam_json` has added both packages as direct dependencies
+  with deterministic `gleam.toml` and `manifest.toml` changes.
+- [ ] A minimal `test/` tree exists and the repository-wide format, build, and test
+  commands provide a green baseline for Task 1.
+
+**Verification:**
+
+- [ ] Review the dependency and lockfile diff produced by Gleam tooling.
+- [ ] `gleam format --check src test`
+- [ ] `gleam build`
+- [ ] `gleam test`
+
+**Dependencies:** None. The Wisp and `gleam_json` additions are explicitly approved
+by the MVP plan and do not require a second dependency-approval step.
+
+**Files likely touched:**
+
+- `gleam.toml`
+- `manifest.toml`
+- Exploratory modules under `src/pixel_scribe_backend/`
+- `test/pixel_scribe_backend/`
+- Stale placeholder assets under `priv/public/`, only if they obstruct the clean
+  baseline
+
+**Estimated scope:** Medium; keep cleanup limited to establishing the MVP baseline.
+
+## Task 1: Prove the Wisp/Mist platform baseline
+
+**Description:** Verify the Task 0 Wisp version against the current Gleam and Mist
+stack and establish tested HTTP handler wiring. This task is an early compatibility
+gate, not a full server implementation.
+
+**Acceptance criteria:**
+
+- [ ] Wisp and `gleam_json` remain direct dependencies with reviewed,
+  deterministic manifest changes from Task 0.
+- [ ] The selected Wisp-to-Mist adapter and supervised Mist startup approach are
+  documented from official version-appropriate sources.
+- [ ] A Wisp handler test proves basic success and not-found responses compile.
+
+**Verification:**
+
+- [ ] `gleam format --check src test`
+- [ ] `gleam build`
+- [ ] `gleam test`
+
+**Dependencies:** Task 0.
+
+**Files likely touched:**
+
+- `src/pixel_scribe_backend/web.gleam`
+- `test/pixel_scribe_backend/web_test.gleam`
+- `docs/mvp-backend-spec.md`
+
+**Estimated scope:** Medium, 3 files.
+
+## Task 2: Define validated domain types
+
+**Description:** Define opaque room IDs, usernames, message text, connection IDs,
+message IDs, presences, and chat messages. Put normalization and validation at
+constructors so trusted internal code cannot create invalid values accidentally.
+
+**Acceptance criteria:**
+
+- [ ] Room IDs accept the approved syntax and expose the `default` constant without
+  coupling domain types to active-room lookup.
+- [ ] Username and message constructors enforce trimming, grapheme limits, and
+  control-character rules.
+- [ ] ID and RFC 3339 timestamp representations satisfy server-lifetime uniqueness
+  and serialization requirements without an unapproved dependency.
+
+**Verification:**
+
+- [ ] Boundary, Unicode, control-character, and normalization tests pass.
+- [ ] `gleam format --check src test`
+- [ ] `gleam build`
+- [ ] `gleam test`
+
+**Dependencies:** Task 0; coordinate exported type names with Task 3.
+
+**Files likely touched:**
+
+- `src/pixel_scribe_backend/domain.gleam`
+- `src/pixel_scribe_backend/validation.gleam`
+- `test/pixel_scribe_backend/domain_test.gleam`
+- `test/pixel_scribe_backend/validation_test.gleam`
+
+**Estimated scope:** Medium, 4 files.
+
+## Task 3: Implement typed WebSocket protocol codecs
+
+**Description:** Implement exhaustive JSON decoding for client events and encoding
+for server events and structured errors. Keep raw JSON and malformed data outside
+trusted actor messages.
+
+**Acceptance criteria:**
+
+- [ ] `join_room` and `send_message` decode only valid `snake_case` payloads with
+  explicit `room_id`.
+- [ ] All server events and error codes in the specification encode exactly as
+  documented, including nullable error room context.
+- [ ] Unknown, malformed, binary, and oversized inputs produce stable failures and
+  never crash a decoder.
+- [ ] The current error inventory and codec-level behavior are written back to the
+  specification and covered by tests; connection-phase and close behavior may be
+  refined when Task 7 implements the state machine.
+
+**Verification:**
+
+- [ ] Every event variant has golden or round-trip tests.
+- [ ] Malformed-shape and size-boundary tests pass.
+- [ ] `gleam format --check src test`
+- [ ] `gleam build`
+- [ ] `gleam test`
+
+**Dependencies:** Task 2.
+
+**Files likely touched:**
+
+- `src/pixel_scribe_backend/protocol.gleam`
+- `test/pixel_scribe_backend/protocol_test.gleam`
+- `docs/mvp-backend-spec.md`
+
+**Estimated scope:** Medium, 3 files.
+
+## Task 4: Implement the authoritative room actor
+
+**Description:** Build one typed actor that serializes joins, messages, leaves,
+connection-down notifications, capacity, and bounded history. Keep the state
+transition logic directly testable without WebSockets.
+
+**Acceptance criteria:**
+
+- [ ] Joining generates a connection ID, monitors the connection, returns a
+  snapshot, and broadcasts one presence event to existing users.
+- [ ] Sending generates the message ID and UTC timestamp, broadcasts in actor
+  order, and keeps exactly the newest 50 messages.
+- [ ] Capacity, unknown senders, explicit leave, and process-down cleanup are
+  atomic and idempotent.
+
+**Verification:**
+
+- [ ] Tests cover duplicate labels, the 51st join, message 51 eviction, ordering,
+  and leave/down races.
+- [ ] `gleam format --check src test`
+- [ ] `gleam build`
+- [ ] `gleam test`
+
+**Dependencies:** Task 2.
+
+**Files likely touched:**
+
+- `src/pixel_scribe_backend/room.gleam`
+- `test/pixel_scribe_backend/room_test.gleam`
+
+**Estimated scope:** Small, 2 files.
+
+## Task 5: Implement the monitored room directory
+
+**Description:** Build the actor that registers and resolves rooms by validated
+string ID while monitoring their PIDs. It must safely replace restarted room
+handles without dynamic registered names.
+
+**Acceptance criteria:**
+
+- [ ] `default` resolves to its current opaque room handle; unknown IDs return
+  `RoomNotFound`.
+- [ ] A live duplicate registration is rejected, while a dead room handle can be
+  replaced.
+- [ ] A delayed down notification for an old PID cannot remove its replacement.
+
+**Verification:**
+
+- [ ] Registration, lookup, monitoring, restart-race, and no-dynamic-name tests
+  pass.
+- [ ] `gleam format --check src test`
+- [ ] `gleam build`
+- [ ] `gleam test`
+
+**Dependencies:** Tasks 2 and 4.
+
+**Files likely touched:**
+
+- `src/pixel_scribe_backend/room_directory.gleam`
+- `test/pixel_scribe_backend/room_directory_test.gleam`
+
+**Estimated scope:** Small, 2 files.
+
+## Task 6: Start rooms through the factory and root supervision tree
+
+**Description:** Add a named room factory with typed `RoomStartArguments`, create
+and register `default` during factory startup, and assemble the `RestForOne` root
+tree in directory-factory-web order.
+
+**Acceptance criteria:**
+
+- [ ] The factory does not report successful startup until `default` is registered.
+- [ ] An abnormal room failure starts a clean replacement from the same arguments;
+  a failed default startup cleans up the factory and fails the child start.
+- [ ] Root restart behavior matches the approved `RestForOne` dependency policy.
+
+**Verification:**
+
+- [ ] Factory and supervision failure-injection tests pass.
+- [ ] A restarted room replaces the directory handle.
+- [ ] `gleam format --check src test`
+- [ ] `gleam build`
+- [ ] `gleam test`
+
+**Dependencies:** Tasks 1, 4, and 5.
+
+**Files likely touched:**
+
+- `src/pixel_scribe_backend/room_factory.gleam`
+- `src/pixel_scribe_backend/supervisor.gleam`
+- `src/pixel_scribe_backend.gleam`
+- `test/pixel_scribe_backend/room_factory_test.gleam`
+- `test/pixel_scribe_backend/supervisor_test.gleam`
+
+**Estimated scope:** Medium, 5 files.
+
+## Task 7: Deliver WebSocket join and presence end to end
+
+**Description:** Implement the Mist WebSocket handler as the connection actor,
+including connection phases, room resolution, mutual monitoring, initial snapshot,
+presence broadcasts, room mismatch handling, and socket cleanup.
+
+**Acceptance criteria:**
+
+- [ ] A valid `join_room` receives `room_state`; all peers receive exactly one
+  `user_joined` and one eventual `user_left`.
+- [ ] Duplicate usernames remain distinct and cannot modify each other's presence.
+- [ ] Pre-join messages, repeated joins, unsupported rooms, and mismatched room IDs
+  return the specified errors without mutating room state.
+- [ ] The specification's error behavior is finalized for the implemented state
+  machine, including room context, recoverability, socket closure, and the phase
+  after each error; protocol and connection tests match it.
+
+**Verification:**
+
+- [ ] Connection state-machine tests pass.
+- [ ] Two-client WebSocket integration tests cover join, duplicate labels, snapshot,
+  and disconnect.
+- [ ] `gleam format --check src test`
+- [ ] `gleam build`
+- [ ] `gleam test`
+
+**Dependencies:** Tasks 1, 3, 5, and 6.
+
+**Files likely touched:**
+
+- `src/pixel_scribe_backend/connection.gleam`
+- `src/pixel_scribe_backend/web.gleam`
+- `test/pixel_scribe_backend/connection_test.gleam`
+- `test/pixel_scribe_backend/websocket_integration_test.gleam`
+- `docs/mvp-backend-spec.md`
+
+**Estimated scope:** Medium, 5 files.
+
+## Task 8: Deliver chat, history, and rate limiting end to end
+
+**Description:** Connect validated chat sends to the room actor, add the approved
+per-connection token bucket, broadcast server-authored messages, and include the
+latest 50 messages in reconnect snapshots.
+
+**Acceptance criteria:**
+
+- [ ] Accepted messages carry server-issued ID, sender ID and label, text, and UTC
+  timestamp and are broadcast once to every room member including the sender.
+- [ ] New joins receive the latest 50 messages in order and can deduplicate by ID.
+- [ ] A five-message burst is allowed, refill is one per second, and excess sends
+  receive recoverable `rate_limited` without entering room history.
+
+**Verification:**
+
+- [ ] Deterministic token-bucket tests use an injected clock.
+- [ ] Multi-client chat, reconnect-history, ordering, and overflow tests pass.
+- [ ] `gleam format --check src test`
+- [ ] `gleam build`
+- [ ] `gleam test`
+
+**Dependencies:** Tasks 3, 4, and 7.
+
+**Files likely touched:**
+
+- `src/pixel_scribe_backend/rate_limit.gleam`
+- `src/pixel_scribe_backend/connection.gleam`
+- `src/pixel_scribe_backend/room.gleam`
+- `test/pixel_scribe_backend/rate_limit_test.gleam`
+- `test/pixel_scribe_backend/websocket_integration_test.gleam`
+
+**Estimated scope:** Medium, 5 files.
+
+## Task 9: Add connection liveness and supervised failure recovery
+
+**Description:** Enforce the join deadline, use adapter-level ping/pong when
+supported, close clients whose room dies, and prove monitor-based cleanup across
+connection, room, factory, and directory failures.
+
+**Acceptance criteria:**
+
+- [ ] An unjoined socket closes after 10 seconds, and dead connections do not leave
+  stale presence.
+- [ ] A room crash emits `room_unavailable` when possible, closes attached sockets,
+  and the factory registers a clean replacement.
+- [ ] Cleanup remains idempotent under close callbacks, monitor delivery, delayed
+  notifications, and restart races.
+
+**Verification:**
+
+- [ ] Deterministic deadline and monitor-race tests pass.
+- [ ] Supervision integration tests prove the approved restart boundaries.
+- [ ] `gleam format --check src test`
+- [ ] `gleam build`
+- [ ] `gleam test`
+
+**Dependencies:** Tasks 5–8.
+
+**Files likely touched:**
+
+- `src/pixel_scribe_backend/connection.gleam`
+- `src/pixel_scribe_backend/room.gleam`
+- `src/pixel_scribe_backend/room_directory.gleam`
+- `test/pixel_scribe_backend/connection_test.gleam`
+- `test/pixel_scribe_backend/supervisor_test.gleam`
+
+**Estimated scope:** Medium, 5 files.
+
+## Task 10: Harden HTTP configuration and static delivery
+
+**Description:** Add validated configuration, health and WebSocket routes, known
+static-file serving, origin checks, response security headers, and production-safe
+failure responses through Wisp.
+
+**Acceptance criteria:**
+
+- [ ] `/healthz`, `/ws`, `/`, known assets, and unknown-path `404` behavior match
+  the specification without directory traversal or SPA fallback.
+- [ ] Production WebSocket upgrades require same origin; development origins are
+  explicit configuration and never wildcarded.
+- [ ] Port, an in-memory adapter-valid Wisp key base, static directory, security
+  headers, graceful shutdown, and structured lifecycle logging are handled without
+  exposing internal errors, usernames, message contents, or the generated key.
+
+**Verification:**
+
+- [ ] Handler and configuration tests cover good, missing, and invalid settings.
+- [ ] Header, origin, traversal, missing-asset, and health tests pass.
+- [ ] `gleam format --check src test`
+- [ ] `gleam build`
+- [ ] `gleam test`
+
+**Dependencies:** Tasks 1, 6, 7, and 9.
+
+**Files likely touched:**
+
+- `src/pixel_scribe_backend/config.gleam`
+- `src/pixel_scribe_backend/web.gleam`
+- `test/pixel_scribe_backend/config_test.gleam`
+- `test/pixel_scribe_backend/web_test.gleam`
+
+**Estimated scope:** Medium, 4 files.
+
+## Task 11: Integrate frontend artifacts and run MVP acceptance checks
+
+**Description:** Finalize the frontend build-output contract, define one
+reproducible build-and-copy command into `priv/public`, and verify the complete MVP
+through the browser-facing origin. Generated JavaScript remains generated.
+
+**Acceptance criteria:**
+
+- [ ] One documented repository-level command builds the frontend and populates
+  the backend static directory reproducibly.
+- [ ] The running backend serves the entry page and assets, while two clients can
+  join `default`, observe presence, chat, disconnect, and reconnect with history.
+- [ ] README and specification reflect the final commands, limits, accepted risks,
+  and intentionally deferred features.
+
+**Verification:**
+
+- [ ] Full `gleam format --check src test`, `gleam build`, and `gleam test` pass.
+- [ ] The frontend build-and-copy command succeeds from a clean artifact directory.
+- [ ] Manual two-browser smoke test and automated MVP integration test pass.
+
+**Dependencies:** Tasks 1–10 and finalized frontend bundler output.
+
+**Files likely touched:**
+
+- `test/pixel_scribe_backend/mvp_integration_test.gleam`
+- `README.md`
+- `docs/mvp-backend-spec.md`
+- Repository-level frontend build/copy command, with its path chosen alongside the
+  frontend package.
+
+**Estimated scope:** Medium, 3 backend files plus one repository integration file.
+
+## Final Review Gate
+
+- [ ] Every task's acceptance criteria are checked.
+- [ ] Every checkpoint in `tasks/plan.md` is checked.
+- [ ] No authentication, database, extra active room, movement, or media feature
+  entered the implementation.
+- [ ] No generated frontend artifact was hand-edited or committed without an
+  explicit repository policy change.
+- [ ] The complete change passes code, security, and simplification review before
+  merge.
