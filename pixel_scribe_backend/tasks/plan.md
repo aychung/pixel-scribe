@@ -82,7 +82,7 @@ Wisp/Mist baseline + JSON codecs + room supervision
 
 ### Phase 2: Supervised room subsystem
 
-- [ ] Task 4: Implement the authoritative room actor.
+- [x] Task 4: Implement the authoritative room actor.
 - [ ] Task 5: Implement the monitored room directory.
 - [ ] Task 6: Start rooms through the factory and root supervision tree.
 

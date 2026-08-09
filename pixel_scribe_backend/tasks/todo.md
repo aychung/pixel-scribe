@@ -328,20 +328,20 @@ transition logic directly testable without WebSockets.
 
 **Acceptance criteria:**
 
-- [ ] Joining generates a connection ID, monitors the connection, returns a
+- [x] Joining generates a connection ID, monitors the connection, returns a
   snapshot, and broadcasts one presence event to existing users.
-- [ ] Sending generates the message ID and UTC timestamp, broadcasts in actor
+- [x] Sending generates the message ID and UTC timestamp, broadcasts in actor
   order, and keeps exactly the newest 50 messages.
-- [ ] Capacity, unknown senders, explicit leave, and process-down cleanup are
+- [x] Capacity, unknown senders, explicit leave, and process-down cleanup are
   atomic and idempotent.
 
 **Verification:**
 
-- [ ] Tests cover duplicate labels, the 51st join, message 51 eviction, ordering,
+- [x] Tests cover duplicate labels, the 51st join, message 51 eviction, ordering,
   and leave/down races.
-- [ ] `gleam format --check src test`
-- [ ] `gleam build`
-- [ ] `gleam test`
+- [x] `gleam format --check src test`
+- [x] `gleam build`
+- [x] `gleam test`
 
 **Dependencies:** Task 2.
 
