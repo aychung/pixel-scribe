@@ -165,14 +165,16 @@ pub fn process_down_cleanup_is_idempotent_test() {
   let #(remaining_connection, remaining_subject) = new_connection()
 
   room.join(room_actor, username("Ada"), remote_connection)
-  let assert room.Joined(_, _, _, _) = receive_event(remote_subject)
+  let assert room.Joined(_, remote_id, _, _) = receive_event(remote_subject)
   room.join(room_actor, username("Grace"), remaining_connection)
   let assert room.UserJoined(_, _) = receive_event(remote_subject)
   let assert room.Joined(_, _, _, _) = receive_event(remaining_subject)
 
   process.kill(remote_pid)
-  let assert room.UserLeft(_, _) = receive_event(remaining_subject)
-  room.connection_down(room_actor, remote_pid)
+  let assert room.UserLeft(_, left_id) = receive_event(remaining_subject)
+  assert left_id == remote_id
+
+  room.leave(room_actor, remote_id)
   assert process.receive(from: remaining_subject, within: 50) == Error(Nil)
 }
 

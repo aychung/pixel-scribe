@@ -1,4 +1,4 @@
-import gleam/erlang/process.{type Monitor, type Pid, type Selector, type Subject}
+import gleam/erlang/process.{type Monitor, type Pid, type Subject}
 import gleam/list
 import gleam/otp/actor
 import gleam/result
@@ -16,7 +16,7 @@ pub opaque type ConnectionSink {
   ConnectionSink(subject: Subject(RoomEvent), pid: Pid)
 }
 
-pub type RoomCommand {
+type RoomCommand {
   Join(username: domain.Username, connection: ConnectionSink)
   SendMessage(connection_id: domain.ConnectionId, text: domain.MessageText)
   Leave(connection_id: domain.ConnectionId)
@@ -43,7 +43,6 @@ pub type RoomError {
 type State {
   State(
     room_id: domain.RoomId,
-    subject: Subject(RoomCommand),
     connections: List(Connection),
     messages: List(domain.ChatMessage),
   )
@@ -54,14 +53,19 @@ type Connection {
     connection_id: domain.ConnectionId,
     username: domain.Username,
     sink: ConnectionSink,
-    pid: Pid,
     monitor: Monitor,
   )
 }
 
 pub fn start(room_id: domain.RoomId) -> Result(Room, actor.StartError) {
   actor.new_with_initialiser(1000, fn(subject) {
-    actor.initialised(State(room_id, subject, [], []))
+    let selector =
+      process.new_selector()
+      |> process.select(subject)
+      |> process.select_monitors(down_to_command)
+
+    actor.initialised(State(room_id, [], []))
+    |> actor.selecting(selector)
     |> actor.returning(subject)
     |> Ok
   })
@@ -105,10 +109,6 @@ pub fn leave(room: Room, connection_id: domain.ConnectionId) -> Nil {
   process.send(room.subject, Leave(connection_id))
 }
 
-pub fn connection_down(room: Room, pid: Pid) -> Nil {
-  process.send(room.subject, ConnectionDown(pid))
-}
-
 fn handle_message(
   state: State,
   command: RoomCommand,
@@ -141,8 +141,7 @@ fn handle_join(
           actor.continue(state)
         }
         True -> {
-          let connection =
-            Connection(connection_id, username, sink, sink.pid, monitor)
+          let connection = Connection(connection_id, username, sink, monitor)
           let connections = list.append(state.connections, [connection])
           let users = list.map(connections, connection_to_presence)
 
@@ -158,12 +157,7 @@ fn handle_join(
             ),
           )
 
-          continue_with_selector(State(
-            state.room_id,
-            state.subject,
-            connections,
-            state.messages,
-          ))
+          actor.continue(State(state.room_id, connections, state.messages))
         }
       }
     }
@@ -175,7 +169,11 @@ fn handle_send_message(
   connection_id: domain.ConnectionId,
   text: domain.MessageText,
 ) -> actor.Next(State, RoomCommand) {
-  case find_connection(state.connections, connection_id) {
+  case
+    list.find(state.connections, fn(connection) {
+      connection.connection_id == connection_id
+    })
+  {
     Error(Nil) -> actor.continue(state)
     Ok(connection) -> {
       let message =
@@ -188,12 +186,7 @@ fn handle_send_message(
         )
       let messages = append_message(state.messages, message)
       broadcast(state.connections, MessageSent(state.room_id, message))
-      actor.continue(State(
-        state.room_id,
-        state.subject,
-        state.connections,
-        messages,
-      ))
+      actor.continue(State(state.room_id, state.connections, messages))
     }
   }
 }
@@ -202,72 +195,18 @@ fn handle_leave(
   state: State,
   connection_id: domain.ConnectionId,
 ) -> actor.Next(State, RoomCommand) {
-  let #(connections, removed) =
-    remove_connection(state.connections, connection_id)
-
-  case removed {
-    Error(Nil) -> actor.continue(state)
-    Ok(connection) -> {
-      process.demonitor_process(connection.monitor)
-      broadcast(connections, UserLeft(state.room_id, connection.connection_id))
-      continue_with_selector(State(
-        state.room_id,
-        state.subject,
-        connections,
-        state.messages,
-      ))
-    }
-  }
+  remove_matching_connections(state, fn(connection) {
+    connection.connection_id == connection_id
+  })
 }
 
 fn handle_connection_down(
   state: State,
   pid: Pid,
 ) -> actor.Next(State, RoomCommand) {
-  let #(connections, removed) = remove_connections(state.connections, pid)
-
-  case removed {
-    [] -> actor.continue(state)
-    _ -> {
-      list.each(removed, fn(connection) {
-        process.demonitor_process(connection.monitor)
-      })
-      list.each(removed, fn(connection) {
-        broadcast(
-          connections,
-          UserLeft(state.room_id, connection.connection_id),
-        )
-      })
-      continue_with_selector(State(
-        state.room_id,
-        state.subject,
-        connections,
-        state.messages,
-      ))
-    }
-  }
-}
-
-fn continue_with_selector(state: State) -> actor.Next(State, RoomCommand) {
-  let selector = connection_selector(state.subject, state.connections)
-  actor.continue(state) |> actor.with_selector(selector)
-}
-
-fn connection_selector(
-  subject: Subject(RoomCommand),
-  connections: List(Connection),
-) -> Selector(RoomCommand) {
-  list.fold(
-    connections,
-    process.new_selector() |> process.select(subject),
-    fn(selector, connection) {
-      process.select_specific_monitor(
-        selector,
-        connection.monitor,
-        down_to_command,
-      )
-    },
-  )
+  remove_matching_connections(state, fn(connection) {
+    connection.sink.pid == pid
+  })
 }
 
 fn down_to_command(down: process.Down) -> RoomCommand {
@@ -287,49 +226,22 @@ fn connection_to_presence(connection: Connection) -> domain.Presence {
   domain.new_presence(connection.connection_id, connection.username)
 }
 
-fn find_connection(
-  connections: List(Connection),
-  connection_id: domain.ConnectionId,
-) -> Result(Connection, Nil) {
-  case connections {
-    [] -> Error(Nil)
-    [connection, ..rest] ->
-      case connection.connection_id == connection_id {
-        True -> Ok(connection)
-        False -> find_connection(rest, connection_id)
-      }
-  }
-}
+fn remove_matching_connections(
+  state: State,
+  should_remove: fn(Connection) -> Bool,
+) -> actor.Next(State, RoomCommand) {
+  let #(removed, remaining) = list.partition(state.connections, should_remove)
 
-fn remove_connection(
-  connections: List(Connection),
-  connection_id: domain.ConnectionId,
-) -> #(List(Connection), Result(Connection, Nil)) {
-  case connections {
-    [] -> #([], Error(Nil))
-    [connection, ..rest] ->
-      case connection.connection_id == connection_id {
-        True -> #(rest, Ok(connection))
-        False -> {
-          let #(remaining, removed) = remove_connection(rest, connection_id)
-          #([connection, ..remaining], removed)
-        }
-      }
-  }
-}
-
-fn remove_connections(
-  connections: List(Connection),
-  pid: Pid,
-) -> #(List(Connection), List(Connection)) {
-  case connections {
-    [] -> #([], [])
-    [connection, ..rest] -> {
-      let #(remaining, removed) = remove_connections(rest, pid)
-      case connection.pid == pid {
-        True -> #(remaining, [connection, ..removed])
-        False -> #([connection, ..remaining], removed)
-      }
+  case removed {
+    [] -> actor.continue(state)
+    _ -> {
+      list.each(removed, fn(connection) {
+        process.demonitor_process(connection.monitor)
+      })
+      list.each(removed, fn(connection) {
+        broadcast(remaining, UserLeft(state.room_id, connection.connection_id))
+      })
+      actor.continue(State(state.room_id, remaining, state.messages))
     }
   }
 }
