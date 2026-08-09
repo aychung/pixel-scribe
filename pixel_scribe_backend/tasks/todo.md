@@ -391,18 +391,18 @@ tree in directory-factory-web order.
 
 **Acceptance criteria:**
 
-- [ ] The factory does not report successful startup until `default` is registered.
-- [ ] An abnormal room failure starts a clean replacement from the same arguments;
+- [x] The factory does not report successful startup until `default` is registered.
+- [x] An abnormal room failure starts a clean replacement from the same arguments;
   a failed default startup cleans up the factory and fails the child start.
-- [ ] Root restart behavior matches the approved `RestForOne` dependency policy.
+- [x] Root restart behavior matches the approved `RestForOne` dependency policy.
 
 **Verification:**
 
-- [ ] Factory and supervision failure-injection tests pass.
-- [ ] A restarted room replaces the directory handle.
-- [ ] `gleam format --check src test`
-- [ ] `gleam build`
-- [ ] `gleam test`
+- [x] Factory and supervision failure-injection tests pass.
+- [x] A restarted room replaces the directory handle.
+- [x] `gleam format --check src test`
+- [x] `gleam build`
+- [x] `gleam test`
 
 **Dependencies:** Tasks 1, 4, and 5.
 

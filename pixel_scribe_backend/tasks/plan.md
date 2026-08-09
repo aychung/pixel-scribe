@@ -84,14 +84,14 @@ Wisp/Mist baseline + JSON codecs + room supervision
 
 - [x] Task 4: Implement the authoritative room actor.
 - [x] Task 5: Implement the monitored room directory.
-- [ ] Task 6: Start rooms through the factory and root supervision tree.
+- [x] Task 6: Start rooms through the factory and root supervision tree.
 
 ### Checkpoint: Room subsystem
 
-- [ ] Factory startup registers `default` before reporting readiness.
-- [ ] Presence, capacity, history, and room restart tests pass.
-- [ ] Directory replacement cannot be undone by a delayed monitor notification.
-- [ ] Format, build, and tests pass.
+- [x] Factory startup registers `default` before reporting readiness.
+- [x] Presence, capacity, history, and room restart tests pass.
+- [x] Directory replacement cannot be undone by a delayed monitor notification.
+- [x] Format, build, and tests pass.
 
 ### Phase 3: Real-time user flows
 

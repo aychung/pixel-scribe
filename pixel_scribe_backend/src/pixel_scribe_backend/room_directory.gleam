@@ -1,9 +1,15 @@
 import gleam/dict
 import gleam/erlang/process.{type Pid, type Subject}
+import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
+import gleam/otp/supervision.{type ChildSpecification, worker}
 import gleam/result
 import pixel_scribe_backend/domain
 import pixel_scribe_backend/room
+
+pub opaque type RoomDirectoryName {
+  RoomDirectoryName(process.Name(RoomDirectoryMessage))
+}
 
 pub opaque type RoomDirectory {
   RoomDirectory(subject: Subject(RoomDirectoryMessage))
@@ -34,20 +40,24 @@ type State {
 }
 
 pub fn start() -> Result(RoomDirectory, actor.StartError) {
-  actor.new_with_initialiser(1000, fn(subject) {
-    let selector =
-      process.new_selector()
-      |> process.select(subject)
-      |> process.select_monitors(down_to_command)
+  start_actor(None)
+  |> result.map(fn(started) { started.data })
+}
 
-    actor.initialised(State(dict.new()))
-    |> actor.selecting(selector)
-    |> actor.returning(subject)
-    |> Ok
-  })
-  |> actor.on_message(handle_message)
-  |> actor.start
-  |> result.map(fn(started) { RoomDirectory(started.data) })
+pub fn new_name() -> RoomDirectoryName {
+  RoomDirectoryName(process.new_name("room_directory"))
+}
+
+pub fn from_name(name: RoomDirectoryName) -> RoomDirectory {
+  let RoomDirectoryName(name) = name
+  RoomDirectory(process.named_subject(name))
+}
+
+pub fn supervised(
+  name: RoomDirectoryName,
+) -> ChildSpecification(RoomDirectory) {
+  let RoomDirectoryName(name) = name
+  worker(fn() { start_actor(Some(name)) })
 }
 
 pub fn register(
@@ -78,6 +88,35 @@ fn handle_message(
     ResolveRoom(room_id, reply_to) -> handle_resolve(state, room_id, reply_to)
     RoomDown(pid) -> handle_room_down(state, pid)
   }
+}
+
+fn start_actor(
+  name: Option(process.Name(RoomDirectoryMessage)),
+) -> actor.StartResult(RoomDirectory) {
+  let builder =
+    actor.new_with_initialiser(1000, fn(subject) {
+      let selector =
+        process.new_selector()
+        |> process.select(subject)
+        |> process.select_monitors(down_to_command)
+
+      actor.initialised(State(dict.new()))
+      |> actor.selecting(selector)
+      |> actor.returning(subject)
+      |> Ok
+    })
+    |> actor.on_message(handle_message)
+
+  let builder = case name {
+    None -> builder
+    Some(name) -> actor.named(builder, name)
+  }
+
+  builder
+  |> actor.start
+  |> result.map(fn(started) {
+    actor.Started(pid: started.pid, data: RoomDirectory(started.data))
+  })
 }
 
 fn handle_register(
