@@ -17,10 +17,10 @@ pub opaque type ConnectionSink {
 }
 
 type RoomCommand {
-  Join(username: domain.Username, connection: ConnectionSink)
+  Join(username: domain.Username, sink: ConnectionSink)
   SendMessage(connection_id: domain.ConnectionId, text: domain.MessageText)
   Leave(connection_id: domain.ConnectionId)
-  ConnectionDown(pid: Pid)
+  MemberDown(pid: Pid)
 }
 
 pub type RoomEvent {
@@ -43,13 +43,13 @@ pub type RoomError {
 type State {
   State(
     room_id: domain.RoomId,
-    connections: List(Connection),
+    members: List(RoomMember),
     messages: List(domain.ChatMessage),
   )
 }
 
-type Connection {
-  Connection(
+type RoomMember {
+  RoomMember(
     connection_id: domain.ConnectionId,
     username: domain.Username,
     sink: ConnectionSink,
@@ -92,9 +92,9 @@ pub fn pid(room: Room) -> Pid {
 pub fn join(
   room: Room,
   username: domain.Username,
-  connection: ConnectionSink,
+  sink: ConnectionSink,
 ) -> Nil {
-  process.send(room.subject, Join(username, connection))
+  process.send(room.subject, Join(username, sink))
 }
 
 pub fn send_message(
@@ -114,11 +114,11 @@ fn handle_message(
   command: RoomCommand,
 ) -> actor.Next(State, RoomCommand) {
   case command {
-    Join(username, connection) -> handle_join(state, username, connection)
+    Join(username, sink) -> handle_join(state, username, sink)
     SendMessage(connection_id, text) ->
       handle_send_message(state, connection_id, text)
     Leave(connection_id) -> handle_leave(state, connection_id)
-    ConnectionDown(pid) -> handle_connection_down(state, pid)
+    MemberDown(pid) -> handle_member_down(state, pid)
   }
 }
 
@@ -127,7 +127,7 @@ fn handle_join(
   username: domain.Username,
   sink: ConnectionSink,
 ) -> actor.Next(State, RoomCommand) {
-  case list.length(state.connections) >= max_connections {
+  case list.length(state.members) >= max_connections {
     True -> {
       process.send(sink.subject, JoinRejected(state.room_id, RoomFull))
       actor.continue(state)
@@ -141,20 +141,20 @@ fn handle_join(
           actor.continue(state)
         }
         True -> {
-          let connection = Connection(connection_id, username, sink, monitor)
-          let connections = list.append(state.connections, [connection])
-          let users = list.map(connections, connection_to_presence)
+          let member = RoomMember(connection_id, username, sink, monitor)
+          let members = list.append(state.members, [member])
+          let users = list.map(members, member_to_presence)
 
           process.send(
             sink.subject,
             Joined(state.room_id, connection_id, users, state.messages),
           )
           broadcast(
-            state.connections,
+            state.members,
             UserJoined(state.room_id, domain.Presence(connection_id, username)),
           )
 
-          actor.continue(State(state.room_id, connections, state.messages))
+          actor.continue(State(state.room_id, members, state.messages))
         }
       }
     }
@@ -167,23 +167,23 @@ fn handle_send_message(
   text: domain.MessageText,
 ) -> actor.Next(State, RoomCommand) {
   case
-    list.find(state.connections, fn(connection) {
-      connection.connection_id == connection_id
+    list.find(state.members, fn(member) {
+      member.connection_id == connection_id
     })
   {
     Error(Nil) -> actor.continue(state)
-    Ok(connection) -> {
+    Ok(member) -> {
       let message =
         domain.ChatMessage(
           domain.new_message_id(),
           connection_id,
-          connection.username,
+          member.username,
           text,
           domain.new_sent_at(),
         )
       let messages = append_message(state.messages, message)
-      broadcast(state.connections, MessageSent(state.room_id, message))
-      actor.continue(State(state.room_id, state.connections, messages))
+      broadcast(state.members, MessageSent(state.room_id, message))
+      actor.continue(State(state.room_id, state.members, messages))
     }
   }
 }
@@ -192,51 +192,51 @@ fn handle_leave(
   state: State,
   connection_id: domain.ConnectionId,
 ) -> actor.Next(State, RoomCommand) {
-  remove_matching_connections(state, fn(connection) {
-    connection.connection_id == connection_id
+  remove_matching_members(state, fn(member) {
+    member.connection_id == connection_id
   })
 }
 
-fn handle_connection_down(
+fn handle_member_down(
   state: State,
   pid: Pid,
 ) -> actor.Next(State, RoomCommand) {
-  remove_matching_connections(state, fn(connection) {
-    connection.sink.pid == pid
+  remove_matching_members(state, fn(member) {
+    member.sink.pid == pid
   })
 }
 
 fn down_to_command(down: process.Down) -> RoomCommand {
   case down {
-    process.ProcessDown(_, pid, _) -> ConnectionDown(pid)
-    process.PortDown(_, _, _) -> ConnectionDown(process.self())
+    process.ProcessDown(_, pid, _) -> MemberDown(pid)
+    process.PortDown(_, _, _) -> MemberDown(process.self())
   }
 }
 
-fn broadcast(connections: List(Connection), event: RoomEvent) -> Nil {
-  list.each(connections, fn(connection) {
-    process.send(connection.sink.subject, event)
+fn broadcast(members: List(RoomMember), event: RoomEvent) -> Nil {
+  list.each(members, fn(member) {
+    process.send(member.sink.subject, event)
   })
 }
 
-fn connection_to_presence(connection: Connection) -> domain.Presence {
-  domain.Presence(connection.connection_id, connection.username)
+fn member_to_presence(member: RoomMember) -> domain.Presence {
+  domain.Presence(member.connection_id, member.username)
 }
 
-fn remove_matching_connections(
+fn remove_matching_members(
   state: State,
-  should_remove: fn(Connection) -> Bool,
+  should_remove: fn(RoomMember) -> Bool,
 ) -> actor.Next(State, RoomCommand) {
-  let #(removed, remaining) = list.partition(state.connections, should_remove)
+  let #(removed, remaining) = list.partition(state.members, should_remove)
 
   case removed {
     [] -> actor.continue(state)
     _ -> {
-      list.each(removed, fn(connection) {
-        process.demonitor_process(connection.monitor)
+      list.each(removed, fn(member) {
+        process.demonitor_process(member.monitor)
       })
-      list.each(removed, fn(connection) {
-        broadcast(remaining, UserLeft(state.room_id, connection.connection_id))
+      list.each(removed, fn(member) {
+        broadcast(remaining, UserLeft(state.room_id, member.connection_id))
       })
       actor.continue(State(state.room_id, remaining, state.messages))
     }
