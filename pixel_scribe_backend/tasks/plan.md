@@ -70,7 +70,7 @@ Wisp/Mist baseline + JSON codecs + room supervision
 - [ ] Task 0 checkpoint: Approve all six revisions and the cumulative green
   baseline.
 - [ ] Task 1: Prove the Wisp/Mist platform baseline.
-- [ ] Task 2: Define validated domain types.
+- [x] Task 2: Define validated domain types.
 - [ ] Task 3: Implement the typed WebSocket protocol codecs.
 
 ### Checkpoint: Contract foundation
