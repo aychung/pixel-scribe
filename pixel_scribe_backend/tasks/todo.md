@@ -22,16 +22,16 @@ touch any other source, dependencies, tests, task documents, or static assets.
 
 **Acceptance criteria:**
 
-- [ ] `src/pixel_scribe_backend.gleam` contains a minimal valid `main` entry point.
-- [ ] `supervisor.gleam`, `web/server.gleam`, and `chat/room.gleam` are deleted
+- [x] `src/pixel_scribe_backend.gleam` contains a minimal valid `main` entry point.
+- [x] `supervisor.gleam`, `web/server.gleam`, and `chat/room.gleam` are deleted
   without porting or repairing their abandoned behavior.
-- [ ] The revision contains exactly the one entry-point edit and three deletions.
+- [x] The revision contains exactly the one entry-point edit and three deletions.
 
 **Verification:**
 
-- [ ] `gleam format --check src`
-- [ ] `gleam build`
-- [ ] Review `jj diff --summary` and confirm exactly four source files changed.
+- [x] `gleam format --check src`
+- [x] `gleam build`
+- [x] Review `jj diff --summary` and confirm exactly four source files changed.
 
 **Dependencies:** None.
 
@@ -52,15 +52,15 @@ module. Do not replace it; production configuration belongs to Task 10.
 
 **Acceptance criteria:**
 
-- [ ] `src/pixel_scribe_backend/config.gleam` is deleted.
-- [ ] No other file changes are included.
-- [ ] The package remains buildable.
+- [x] `src/pixel_scribe_backend/config.gleam` is deleted.
+- [x] No other file changes are included.
+- [x] The package remains buildable.
 
 **Verification:**
 
-- [ ] `gleam format --check src`
-- [ ] `gleam build`
-- [ ] Review `jj diff --summary` and confirm this revision deletes one file only.
+- [x] `gleam format --check src`
+- [x] `gleam build`
+- [x] Review `jj diff --summary` and confirm this revision deletes one file only.
 
 **Dependencies:** Task 0A, approved by the human reviewer.
 
@@ -78,15 +78,15 @@ the approved room model replaces both in later tasks.
 
 **Acceptance criteria:**
 
-- [ ] `src/pixel_scribe_backend/user_registry.gleam` is deleted.
-- [ ] No other file changes are included.
-- [ ] The package remains buildable.
+- [x] `src/pixel_scribe_backend/user_registry.gleam` is deleted.
+- [x] No other file changes are included.
+- [x] The package remains buildable.
 
 **Verification:**
 
-- [ ] `gleam format --check src`
-- [ ] `gleam build`
-- [ ] Review `jj diff --summary` and confirm this revision deletes one file only.
+- [x] `gleam format --check src`
+- [x] `gleam build`
+- [x] Review `jj diff --summary` and confirm this revision deletes one file only.
 
 **Dependencies:** Task 0B, approved by the human reviewer.
 
@@ -99,8 +99,8 @@ the approved room model replaces both in later tasks.
 ### Review checkpoint: Tasks 0A-0C
 
 - [ ] Each task is a separate reviewed `jj` revision.
-- [ ] `gleam format --check src` passes.
-- [ ] `gleam build` passes.
+- [x] `gleam format --check src` passes.
+- [x] `gleam build` passes.
 
 ### Task 0D: Remove the remaining chat placeholders
 
@@ -109,16 +109,16 @@ They have no callers after Task 0A and no role in the approved room architecture
 
 **Acceptance criteria:**
 
-- [ ] `chat/supervisor.gleam` and `chat/registry.gleam` are deleted.
-- [ ] No other file changes are included.
-- [ ] No `todo` remains in the production source tree.
+- [x] `chat/supervisor.gleam` and `chat/registry.gleam` are deleted.
+- [x] No other file changes are included.
+- [x] No `todo` remains in the production source tree.
 
 **Verification:**
 
-- [ ] `gleam format --check src`
-- [ ] `gleam build`
-- [ ] `rg -n "todo" src` returns no matches.
-- [ ] Review `jj diff --summary` and confirm exactly two files were deleted.
+- [x] `gleam format --check src`
+- [x] `gleam build`
+- [x] `rg -n "todo" src` returns no matches.
+- [x] Review `jj diff --summary` and confirm exactly two files were deleted.
 
 **Dependencies:** Task 0C and its review checkpoint.
 
@@ -137,16 +137,16 @@ application APIs merely to manufacture a test case.
 
 **Acceptance criteria:**
 
-- [ ] A minimal `test/pixel_scribe_backend_test.gleam` invokes Gleeunit.
-- [ ] No production source, dependency, or static asset changes are included.
-- [ ] The repository-wide format, build, and test commands all exit successfully.
+- [x] A minimal `test/pixel_scribe_backend_test.gleam` invokes Gleeunit.
+- [x] No production source, dependency, or static asset changes are included.
+- [x] The repository-wide format, build, and test commands all exit successfully.
 
 **Verification:**
 
-- [ ] `gleam format --check src test`
-- [ ] `gleam build`
-- [ ] `gleam test`
-- [ ] Review `jj diff --summary` and confirm this revision adds one test file only.
+- [x] `gleam format --check src test`
+- [x] `gleam build`
+- [x] `gleam test`
+- [x] Review `jj diff --summary` and confirm this revision adds one test file only.
 
 **Dependencies:** Task 0D, approved by the human reviewer.
 
@@ -164,17 +164,17 @@ and review the resolver-generated configuration and lockfile diff. Do not hand-e
 
 **Acceptance criteria:**
 
-- [ ] Wisp and `gleam_json` are direct dependencies in `gleam.toml`.
-- [ ] `manifest.toml` is generated by Gleam tooling and its complete package diff
+- [x] Wisp and `gleam_json` are direct dependencies in `gleam.toml`.
+- [x] `manifest.toml` is generated by Gleam tooling and its complete package diff
   is understood and limited to resolver-required changes.
-- [ ] No application or test behavior is added in this revision.
+- [x] No application or test behavior is added in this revision.
 
 **Verification:**
 
-- [ ] Review the complete `gleam.toml` and `manifest.toml` diff.
-- [ ] `gleam format --check src test`
-- [ ] `gleam build`
-- [ ] `gleam test`
+- [x] Review the complete `gleam.toml` and `manifest.toml` diff.
+- [x] `gleam format --check src test`
+- [x] `gleam build`
+- [x] `gleam test`
 
 **Dependencies:** Task 0E, approved by the human reviewer.
 

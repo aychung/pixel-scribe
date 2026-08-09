@@ -9,6 +9,11 @@
 - If persistence is added, prefer SQLite through `sqlight` for the MVP.
 - Screen sharing and video sharing are future work.
 
+## Repository
+
+- This project uses Jujutsu (`jj`) for version control.
+- The `jj` repository is rooted in the parent folder, `pixel_scribe`.
+
 ## Working guidelines
 
 - Favor the smallest implementation that satisfies the current MVP.
