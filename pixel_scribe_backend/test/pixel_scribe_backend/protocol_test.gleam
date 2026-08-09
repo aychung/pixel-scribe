@@ -67,9 +67,19 @@ pub fn client_event_decoder_rejects_invalid_domain_values_test() {
     == Error(protocol.InvalidUsernameValue)
 
   assert protocol.decode_client_event(protocol.TextFrame(
-      "{\"type\":\"send_message\",\"room_id\":\"default\",\"text\":\"Hello\\nworld\"}",
+      "{\"type\":\"send_message\",\"room_id\":\"default\",\"text\":\"Hello\\rworld\"}",
     ))
     == Error(protocol.InvalidMessageTextValue)
+}
+
+pub fn client_event_decoder_accepts_multiline_messages_test() {
+  let assert Ok(protocol.SendMessage(room_id, text)) =
+    protocol.decode_client_event(protocol.TextFrame(
+      "{\"type\":\"send_message\",\"room_id\":\"default\",\"text\":\"First line\\nSecond line\"}",
+    ))
+
+  assert domain.room_id_to_string(room_id) == "default"
+  assert domain.message_text_to_string(text) == "First line\nSecond line"
 }
 
 pub fn binary_frames_are_rejected_before_json_decoding_test() {

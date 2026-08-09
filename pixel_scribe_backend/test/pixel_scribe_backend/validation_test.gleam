@@ -33,6 +33,10 @@ pub fn messages_are_trimmed_and_counted_by_grapheme_test() {
   let assert Ok(message) = validation.normalize_message_text("  e\u{301}  ")
   assert message == "e\u{301}"
 
+  let assert Ok(message) =
+    validation.normalize_message_text("First line\nSecond line")
+  assert message == "First line\nSecond line"
+
   let assert Ok(_) = validation.normalize_message_text(string.repeat("👩🏽‍💻", 500))
   assert validation.normalize_message_text(string.repeat("👩🏽‍💻", 501))
     == Error(validation.MessageTextTooLong)
@@ -40,7 +44,7 @@ pub fn messages_are_trimmed_and_counted_by_grapheme_test() {
     == Error(validation.MessageTextContainsControlCharacter)
 }
 
-pub fn usernames_and_messages_reject_control_characters_test() {
+pub fn usernames_reject_control_characters_and_messages_reject_non_lf_controls_test() {
   assert validation.normalize_username("Ada\nLovelace")
     == Error(validation.UsernameContainsControlCharacter)
   assert validation.normalize_username("\nAda")

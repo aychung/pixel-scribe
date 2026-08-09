@@ -10,6 +10,7 @@ over WebSockets.
 - Let visitors choose a username without creating an account.
 - Remember the username in a browser cookie.
 - Send and receive chat messages in real time.
+- Allow chat messages to contain multiple lines.
 - Keep chat history ephemeral; losing it when the server restarts is acceptable.
 
 SQLite through `sqlight` may be added for local chat persistence, but durable

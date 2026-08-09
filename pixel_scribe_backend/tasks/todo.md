@@ -262,7 +262,7 @@ constructors so trusted internal code cannot create invalid values accidentally.
 - [x] Room IDs accept the approved syntax and expose the `default` constant without
   coupling domain types to active-room lookup.
 - [x] Username and message constructors enforce trimming, grapheme limits, and
-  control-character rules.
+  control-character rules, allowing LF in message text for multiline messages.
 - [x] ID and RFC 3339 timestamp representations satisfy server-lifetime uniqueness
   and serialization requirements without an unapproved dependency.
 

@@ -128,6 +128,9 @@ Message rules:
 
 - Accept text messages only; never interpret text as HTML or markup.
 - Trim leading and trailing whitespace.
+- Allow LF (`\n`) characters inside messages for multiline text.
+- Reject other control characters, including CR (`\r`) and Unicode line
+  separators.
 - Require 1–500 Unicode characters after trimming.
 - Reject oversized, malformed, binary, or unknown events.
 - Limit each decoded WebSocket event to 8 KiB in addition to the character limit.
@@ -198,7 +201,8 @@ meanings must not change silently.
 ```
 
 `join_room` must be the first application event and may succeed only once. A
-client cannot send messages before joining. The `room_id` on later client events
+client cannot send messages before joining. Message text may contain escaped LF
+characters (`\n`) for multiline messages. The `room_id` on later client events
 must match the joined room; a mismatch is rejected without mutating either room.
 
 The MVP accepts only `default`. Future multiple-office support adds accepted room
