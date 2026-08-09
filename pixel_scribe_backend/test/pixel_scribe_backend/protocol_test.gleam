@@ -245,46 +245,26 @@ pub fn every_error_code_has_stable_wire_metadata_test() {
     #(protocol.RoomFull, "room_full", "Room is full.", False),
   ]
 
-  let actual =
-    list.map(cases, fn(item) {
-      let #(code, code_string, message, recoverable) = item
-      #(
-        protocol.error_code_to_string(code),
-        protocol.error_message(code),
-        protocol.error_is_recoverable(code),
-        protocol.encode_server_event(protocol.ErrorEvent(None, code)),
-        code_string,
-        message,
-        recoverable,
-      )
-    })
-
-  assert list.all(actual, fn(item) {
-    let #(
-      code,
-      message,
-      recoverable,
-      encoded,
-      expected_code,
-      expected_message,
-      expected_recoverable,
-    ) = item
+  list.each(cases, fn(item) {
+    let #(code, expected_wire_code, expected_message, expected_recoverable) =
+      item
     let expected_recoverable_json = case expected_recoverable {
       True -> "true"
       False -> "false"
     }
     let expected_wire =
       "{\"type\":\"error\",\"room_id\":null,\"code\":\""
-      <> expected_code
+      <> expected_wire_code
       <> "\",\"message\":\""
       <> expected_message
       <> "\",\"recoverable\":"
       <> expected_recoverable_json
       <> "}"
 
-    code == expected_code
-    && message == expected_message
-    && recoverable == expected_recoverable
-    && encoded == expected_wire
+    assert protocol.error_code_to_string(code) == expected_wire_code
+    assert protocol.error_message(code) == expected_message
+    assert protocol.error_is_recoverable(code) == expected_recoverable
+    assert protocol.encode_server_event(protocol.ErrorEvent(None, code))
+      == expected_wire
   })
 }

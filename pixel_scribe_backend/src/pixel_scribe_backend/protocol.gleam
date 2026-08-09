@@ -52,6 +52,10 @@ pub type ErrorCode {
   RoomFull
 }
 
+type ErrorMetadata {
+  ErrorMetadata(wire_code: String, message: String, recoverable: Bool)
+}
+
 type RawClientEvent {
   RawInvalid
   RawJoinRoom(room_id: String, username: String)
@@ -134,48 +138,66 @@ pub fn decode_error_to_error_code(error: DecodeError) -> ErrorCode {
 }
 
 pub fn error_code_to_string(code: ErrorCode) -> String {
-  case code {
-    InvalidEvent -> "invalid_event"
-    JoinRequired -> "join_required"
-    AlreadyJoined -> "already_joined"
-    InvalidRoomId -> "invalid_room_id"
-    RoomNotFound -> "room_not_found"
-    RoomMismatch -> "room_mismatch"
-    RoomUnavailable -> "room_unavailable"
-    InvalidUsername -> "invalid_username"
-    InvalidMessage -> "invalid_message"
-    RateLimited -> "rate_limited"
-    RoomFull -> "room_full"
-  }
+  error_metadata(code).wire_code
 }
 
 pub fn error_message(code: ErrorCode) -> String {
-  case code {
-    InvalidEvent -> "Invalid event."
-    JoinRequired -> "Join a room before sending messages."
-    AlreadyJoined -> "This connection has already joined a room."
-    InvalidRoomId -> "Room ID is invalid."
-    RoomNotFound -> "Room not found."
-    RoomMismatch -> "Room ID does not match the joined room."
-    RoomUnavailable -> "Room is unavailable. Reconnect to continue."
-    InvalidUsername -> "Username must contain between 1 and 32 characters."
-    InvalidMessage -> "Message must contain between 1 and 500 characters."
-    RateLimited -> "You are sending messages too quickly."
-    RoomFull -> "Room is full."
-  }
+  error_metadata(code).message
 }
 
 pub fn error_is_recoverable(code: ErrorCode) -> Bool {
+  error_metadata(code).recoverable
+}
+
+fn error_metadata(code: ErrorCode) -> ErrorMetadata {
   case code {
-    InvalidEvent | RoomUnavailable | RoomFull -> False
-    JoinRequired
-    | AlreadyJoined
-    | InvalidRoomId
-    | RoomNotFound
-    | RoomMismatch
-    | InvalidUsername
-    | InvalidMessage
-    | RateLimited -> True
+    InvalidEvent -> ErrorMetadata("invalid_event", "Invalid event.", False)
+    JoinRequired ->
+      ErrorMetadata(
+        "join_required",
+        "Join a room before sending messages.",
+        True,
+      )
+    AlreadyJoined ->
+      ErrorMetadata(
+        "already_joined",
+        "This connection has already joined a room.",
+        True,
+      )
+    InvalidRoomId ->
+      ErrorMetadata("invalid_room_id", "Room ID is invalid.", True)
+    RoomNotFound -> ErrorMetadata("room_not_found", "Room not found.", True)
+    RoomMismatch ->
+      ErrorMetadata(
+        "room_mismatch",
+        "Room ID does not match the joined room.",
+        True,
+      )
+    RoomUnavailable ->
+      ErrorMetadata(
+        "room_unavailable",
+        "Room is unavailable. Reconnect to continue.",
+        False,
+      )
+    InvalidUsername ->
+      ErrorMetadata(
+        "invalid_username",
+        "Username must contain between 1 and 32 characters.",
+        True,
+      )
+    InvalidMessage ->
+      ErrorMetadata(
+        "invalid_message",
+        "Message must contain between 1 and 500 characters.",
+        True,
+      )
+    RateLimited ->
+      ErrorMetadata(
+        "rate_limited",
+        "You are sending messages too quickly.",
+        True,
+      )
+    RoomFull -> ErrorMetadata("room_full", "Room is full.", False)
   }
 }
 
@@ -216,14 +238,17 @@ fn server_event_to_json(event: ServerEvent) -> json.Json {
         #("room_id", json.string(domain.room_id_to_string(room_id))),
         #("message", message_to_json(message)),
       ])
-    ErrorEvent(room_id, code) ->
+    ErrorEvent(room_id, code) -> {
+      let metadata = error_metadata(code)
+
       json.object([
         #("type", json.string("error")),
         #("room_id", optional_room_id_to_json(room_id)),
-        #("code", json.string(error_code_to_string(code))),
-        #("message", json.string(error_message(code))),
-        #("recoverable", json.bool(error_is_recoverable(code))),
+        #("code", json.string(metadata.wire_code)),
+        #("message", json.string(metadata.message)),
+        #("recoverable", json.bool(metadata.recoverable)),
       ])
+    }
   }
 }
 
