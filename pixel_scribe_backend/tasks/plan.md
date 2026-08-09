@@ -58,32 +58,32 @@ Wisp/Mist baseline + JSON codecs + room supervision
 
 ### Phase 1: Contract and platform foundation
 
-- [ ] Task 0A: Detach and delete the broken four-file runtime chain, then stop for
+- [x] Task 0A: Detach and delete the broken four-file runtime chain, then stop for
   review.
-- [ ] Task 0B: Delete the orphaned configuration module, then stop for review.
-- [ ] Task 0C: Delete the orphaned user registry, then stop for review.
-- [ ] Review checkpoint: Approve Tasks 0A-0C and confirm the package builds.
-- [ ] Task 0D: Delete the two remaining chat placeholders, then stop for review.
-- [ ] Task 0E: Add the minimal Gleam test runner, then stop for review.
-- [ ] Task 0F: Add Wisp and `gleam_json` through Gleam tooling, then stop for
+- [x] Task 0B: Delete the orphaned configuration module, then stop for review.
+- [x] Task 0C: Delete the orphaned user registry, then stop for review.
+- [x] Review checkpoint: Approve Tasks 0A-0C and confirm the package builds.
+- [x] Task 0D: Delete the two remaining chat placeholders, then stop for review.
+- [x] Task 0E: Add the minimal Gleam test runner, then stop for review.
+- [x] Task 0F: Add Wisp and `gleam_json` through Gleam tooling, then stop for
   review.
-- [ ] Task 0 checkpoint: Approve all six revisions and the cumulative green
+- [x] Task 0 checkpoint: Approve all six revisions and the cumulative green
   baseline.
-- [ ] Task 1: Prove the Wisp/Mist platform baseline.
+- [x] Task 1: Prove the Wisp/Mist platform baseline.
 - [x] Task 2: Define validated domain types.
 - [x] Task 3: Implement the typed WebSocket protocol codecs.
 
 ### Checkpoint: Contract foundation
 
-- [ ] Wisp and the locked Mist version have a documented compatible setup.
-- [ ] All public payload variants have round-trip and rejection tests.
-- [ ] Format, build, and tests pass.
-- [ ] Review contract implementation before shared state is added.
+- [x] Wisp and the locked Mist version have a documented compatible setup.
+- [x] All public payload variants have round-trip and rejection tests.
+- [x] Format, build, and tests pass.
+- [x] Review contract implementation before shared state is added.
 
 ### Phase 2: Supervised room subsystem
 
 - [x] Task 4: Implement the authoritative room actor.
-- [ ] Task 5: Implement the monitored room directory.
+- [x] Task 5: Implement the monitored room directory.
 - [ ] Task 6: Start rooms through the factory and root supervision tree.
 
 ### Checkpoint: Room subsystem

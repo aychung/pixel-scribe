@@ -201,9 +201,7 @@ fn handle_member_down(
   state: State,
   pid: Pid,
 ) -> actor.Next(State, RoomCommand) {
-  remove_matching_members(state, fn(member) {
-    member.sink.pid == pid
-  })
+  remove_matching_members(state, fn(member) { member.sink.pid == pid })
 }
 
 fn down_to_command(down: process.Down) -> RoomCommand {
@@ -214,9 +212,7 @@ fn down_to_command(down: process.Down) -> RoomCommand {
 }
 
 fn broadcast(members: List(RoomMember), event: RoomEvent) -> Nil {
-  list.each(members, fn(member) {
-    process.send(member.sink.subject, event)
-  })
+  list.each(members, fn(member) { process.send(member.sink.subject, event) })
 }
 
 fn member_to_presence(member: RoomMember) -> domain.Presence {

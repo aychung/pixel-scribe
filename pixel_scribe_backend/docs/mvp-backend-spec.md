@@ -437,9 +437,8 @@ stopped during normal MVP operation.
 The directory serializes room registration and lookup:
 
 ```gleam
-pub type RoomDirectoryMessage {
+type RoomDirectoryMessage {
   RegisterRoom(
-    room_id: RoomId,
     room: Room,
     reply_to: Subject(Result(Nil, RegisterRoomError)),
   )
@@ -462,11 +461,11 @@ pub type RegisterRoomError {
 At startup, the factory-created default room registers itself as `default` before
 the HTTP server accepts traffic. The directory monitors the registered room PID.
 Re-registration replaces a handle only when its old owner is no longer alive; an
-active duplicate returns `RoomAlreadyRegistered`. `RoomDown` removes a mapping
-only when the reported PID is still the current process for that room, so a late
-notification for an old room process cannot delete its replacement. In the MVP,
-`ResolveRoom` can therefore return only the current default room or
-`RoomNotFound`.
+active duplicate returns `RoomAlreadyRegistered`. Registration derives the room
+ID from the opaque room handle. `RoomDown` removes a mapping only when the
+reported PID is still the current process for that room, so a late notification
+for an old room process cannot delete its replacement. In the MVP, `ResolveRoom`
+can therefore return only the current default room or `RoomNotFound`.
 
 ### Messages: connection to room
 

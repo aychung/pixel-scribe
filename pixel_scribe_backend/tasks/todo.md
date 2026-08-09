@@ -98,7 +98,7 @@ the approved room model replaces both in later tasks.
 
 ### Review checkpoint: Tasks 0A-0C
 
-- [ ] Each task is a separate reviewed `jj` revision.
+- [x] Each task is a separate reviewed `jj` revision.
 - [x] `gleam format --check src` passes.
 - [x] `gleam build` passes.
 
@@ -360,19 +360,19 @@ handles without dynamic registered names.
 
 **Acceptance criteria:**
 
-- [ ] `default` resolves to its current opaque room handle; unknown IDs return
+- [x] `default` resolves to its current opaque room handle; unknown IDs return
   `RoomNotFound`.
-- [ ] A live duplicate registration is rejected, while a dead room handle can be
+- [x] A live duplicate registration is rejected, while a dead room handle can be
   replaced.
-- [ ] A delayed down notification for an old PID cannot remove its replacement.
+- [x] A delayed down notification for an old PID cannot remove its replacement.
 
 **Verification:**
 
-- [ ] Registration, lookup, monitoring, restart-race, and no-dynamic-name tests
+- [x] Registration, lookup, monitoring, restart-race, and no-dynamic-name tests
   pass.
-- [ ] `gleam format --check src test`
-- [ ] `gleam build`
-- [ ] `gleam test`
+- [x] `gleam format --check src test`
+- [x] `gleam build`
+- [x] `gleam test`
 
 **Dependencies:** Tasks 2 and 4.
 
