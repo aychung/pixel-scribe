@@ -229,17 +229,17 @@ gate, not a full server implementation.
 
 **Acceptance criteria:**
 
-- [ ] Wisp and `gleam_json` remain direct dependencies with reviewed,
+- [x] Wisp and `gleam_json` remain direct dependencies with reviewed,
   deterministic manifest changes from Task 0.
-- [ ] The selected Wisp-to-Mist adapter and supervised Mist startup approach are
+- [x] The selected Wisp-to-Mist adapter and supervised Mist startup approach are
   documented from official version-appropriate sources.
-- [ ] A Wisp handler test proves basic success and not-found responses compile.
+- [x] A Wisp handler test proves basic success and not-found responses compile.
 
 **Verification:**
 
-- [ ] `gleam format --check src test`
-- [ ] `gleam build`
-- [ ] `gleam test`
+- [x] `gleam format --check src test`
+- [x] `gleam build`
+- [x] `gleam test`
 
 **Dependencies:** Task 0.
 
