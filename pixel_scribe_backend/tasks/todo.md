@@ -192,19 +192,19 @@ revisions and the cumulative repository state satisfies the following criteria.
 
 **Acceptance criteria:**
 
-- [ ] Incomplete or superseded starter modules no longer prevent formatting,
+- [x] Incomplete or superseded starter modules no longer prevent formatting,
   compilation, or tests; any retained starter code has a clear role in the MVP.
-- [ ] `gleam add wisp gleam_json` has added both packages as direct dependencies
+- [x] `gleam add wisp gleam_json` has added both packages as direct dependencies
   with deterministic `gleam.toml` and `manifest.toml` changes.
-- [ ] A minimal `test/` tree exists and the repository-wide format, build, and test
+- [x] A minimal `test/` tree exists and the repository-wide format, build, and test
   commands provide a green baseline for Task 1.
 
 **Verification:**
 
-- [ ] Review the dependency and lockfile diff produced by Gleam tooling.
-- [ ] `gleam format --check src test`
-- [ ] `gleam build`
-- [ ] `gleam test`
+- [x] Review the dependency and lockfile diff produced by Gleam tooling.
+- [x] `gleam format --check src test`
+- [x] `gleam build`
+- [x] `gleam test`
 
 **Dependencies:** Tasks 0A-0F. The Wisp and `gleam_json` additions are explicitly
 approved by the MVP plan and do not require a second dependency-approval step.

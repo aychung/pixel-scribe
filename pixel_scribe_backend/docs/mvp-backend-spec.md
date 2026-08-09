@@ -625,6 +625,19 @@ Task 0 adds Wisp and `gleam_json` with `gleam add wisp gleam_json`. Task 1 then
 proves and documents that the resolved Wisp adapter is compatible with the locked
 Mist version before application behavior depends on it.
 
+### Task 1 platform baseline
+
+The web module uses Wisp 2.2.2's `wisp/wisp_mist.handler` adapter to convert a
+Wisp request handler into the Mist request/response shape. Its `supervised`
+function accepts the listening port, passes that adapter through `mist.new` and
+`mist.port`, and then calls `mist.supervised`, producing the supervised server
+child that the root supervision tree will start in Task 6.
+This follows the versioned [Wisp/Mist adapter documentation](https://wisp.hexdocs.pm/wisp/wisp_mist.html)
+and the locked [Mist 6.0.3 server API](https://mist.hexdocs.pm/mist.html). The
+Wisp standalone example mentions `mist.start_http`; the locked Mist API exposes
+`mist.start` and `mist.supervised`, so the supervised form is the compatible
+choice for this application.
+
 The MVP does not use Wisp signing, encryption, or backend-owned cookies. The
 server may therefore generate any adapter-valid key base at startup, keep it only
 in memory, and replace it on restart. It must never be logged or exposed. A stable
