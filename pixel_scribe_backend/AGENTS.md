@@ -22,3 +22,6 @@
 - Add focused tests for behavior changes and keep documentation aligned with scope.
 - Do not introduce durable infrastructure, authentication, or future media features
   without an explicit requirement.
+- Keep each reviewable set of changes in its own Jujutsu revision. After verifying
+  a change set, run `jj describe -m "<type>: <short reason>"`, then run `jj new`
+  before starting the next change set.
