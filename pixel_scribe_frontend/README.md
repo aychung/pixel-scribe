@@ -1,0 +1,328 @@
+# Pixel Scribe Frontend
+
+Pixel Scribe is a client-side Lustre application for a small virtual office. The
+MVP presents a pixel-art office on an HTML5 canvas and a room chat beside it.
+Gleam compiles the application to JavaScript; the backend serves the built assets
+and provides a JSON WebSocket API.
+
+Lustre runs only as a browser SPA. The frontend does not use Lustre server
+components, server-side rendering, or Lustre's DOM-patch WebSocket protocol. The
+existing backend remains the authority for the JSON `/ws` contract.
+
+This package is currently a scaffold. The application source, static entry page,
+styles, tests, and build-to-backend integration still need to be created.
+
+## MVP
+
+The frontend must let a visitor:
+
+1. Choose a display username, with a previous choice prefilled from a
+   frontend-owned cookie.
+2. Join the built-in `default` office.
+3. See the current room participants and recent chat history.
+4. Send and receive plain-text chat messages in real time.
+5. Keep the pixel-art office visible while using chat on desktop and mobile.
+6. Understand connecting, reconnecting, validation, rate-limit, room-full, and
+   unavailable states.
+
+Authentication, multiple active rooms, avatar coordinates, movement, durable
+chat, offline delivery, voice, video, and screen sharing are outside the MVP.
+The canvas is therefore a local visual scene for now; no backend event currently
+drives objects or coordinates on it.
+
+## Basic UX flow
+
+1. `GET /` loads the app. Before joining, show a small username form over or
+   beside a non-interactive preview of the office. Prefill the last username from
+   the browser cookie, but do not treat it as identity.
+2. Trim and validate the username using the same visible limits as the backend:
+   1–32 Unicode grapheme clusters, with no control characters or line breaks.
+3. On submit, persist the preference, open the same-origin `GET /ws` WebSocket,
+   and show a clear connecting state. When the socket opens, immediately send
+   one `join_room` event for `default`; the server requires a join within 10
+   seconds.
+4. Do not enable chat until `room_state` arrives. That snapshot establishes the
+   current connection ID, participant list, and up to 50 recent messages.
+5. Once joined, show the office canvas and chat workspace. The chat area contains
+   connection status, a participant list/count, the message log, validation or
+   connection feedback, and the composer.
+6. Update presence from `user_joined` and `user_left`. Append an accepted message
+   only when `message_sent` arrives, including messages sent by this client; do
+   not optimistically create a second local copy.
+7. Keep the message draft on connection loss, disable sending, announce the
+   reconnecting state, and retry with capped exponential backoff plus jitter. Do
+   not queue and automatically replay chat messages: the protocol has no delivery
+   acknowledgement or idempotency key.
+8. After reconnecting, send a new `join_room`. Replace room state from the new
+   snapshot, accept the new `self_id`, and deduplicate snapshot/live overlap by
+   `message_id`. Reconnection is a new presence, not session restoration.
+9. Show recoverable errors next to the relevant form while keeping the socket
+   usable. For a non-recoverable error, stop the joined UI and offer an explicit
+   retry or return to the username form as appropriate.
+
+Chat history is in memory and can disappear after a backend restart. The UI must
+not promise persistence.
+
+## Responsive layout
+
+Use semantic HTML for controls, status, participants, and chat. Canvas pixels are
+not a substitute for accessible DOM content.
+
+- Desktop (`>= 768px`): fill `100dvh` with two columns. Chat is a fixed-width
+  right rail (initial token: `22rem`); the canvas region takes the remaining
+  width with `minmax(0, 1fr)`.
+- Mobile (`< 768px`): use two rows. The canvas remains on top and chat becomes a
+  bottom panel sized to leave both regions useful. Use dynamic viewport units so
+  browser chrome and the software keyboard do not hide the composer.
+- The chat log scrolls independently. Keep the composer visible at the bottom of
+  its panel and preserve a sensible canvas minimum size.
+- Verify at 320, 768, 1024, and 1440 CSS pixels, in portrait and landscape.
+- Respect safe-area insets on devices with notches or home indicators.
+
+The initial `22rem` rail and `768px` layout breakpoint are working defaults, not
+backend constraints. Keep them as named CSS custom properties so the design can
+change without touching application logic.
+
+## Frontend/backend contract
+
+The source of truth is the backend
+[MVP specification](../pixel_scribe_backend/docs/mvp-backend-spec.md). It is
+approved, but its exact connection-state behavior remains subject to the backend
+codec and state-machine tasks. Keep frontend codecs and contract tests aligned
+with it.
+
+### HTTP
+
+| Request | Contract |
+| --- | --- |
+| `GET /` | Compiled frontend entry document |
+| `GET /ws` | Same-origin WebSocket upgrade |
+| `GET /healthz` | Backend process health; not application state |
+| Static asset path | File from the backend's configured `priv/public` tree |
+| Unknown path | `404` |
+
+Use `wss:` when the page uses HTTPS and `ws:` otherwise. Production allows only
+the application's own origin. The frontend and socket are served from the same
+origin in production.
+
+### Wire format
+
+- Each frame is one UTF-8 JSON object with a string `type` discriminator.
+- Event and field names are `snake_case`.
+- Every room-scoped event has top-level `room_id`.
+- Client events must be text frames no larger than 8 KiB. Do not send binary.
+- Unknown client fields are ignored for forward compatibility.
+- Treat IDs as opaque strings and timestamps as server-generated RFC 3339 UTC.
+- Decode server data at the boundary. Tolerate additive optional fields and
+  safely ignore unknown future server event types.
+
+### Client to server
+
+The first and only successful join on a socket is:
+
+```json
+{"type":"join_room","room_id":"default","username":"Ada"}
+```
+
+After `room_state`, send chat with:
+
+```json
+{"type":"send_message","room_id":"default","text":"Hello!"}
+```
+
+The `room_id` must always be `default` in the MVP and must match the joined room.
+The username cannot be changed without opening a new connection.
+
+### Server to client
+
+```text
+Presence    = { connection_id: String, username: String }
+ChatMessage = {
+  message_id: String,
+  sender_id: String,
+  username: String,
+  text: String,
+  sent_at: RFC3339 String
+}
+```
+
+| Event | Required fields | Frontend effect |
+| --- | --- | --- |
+| `room_state` | `room_id`, `self_id`, `users[]`, `messages[]` | Enter joined state and replace the room snapshot |
+| `user_joined` | `room_id`, `user` | Add the presence by `connection_id` |
+| `user_left` | `room_id`, `connection_id` | Remove only that connection ID |
+| `message_sent` | `room_id`, `message` | Append once by `message_id`; the sender also receives it |
+| `error` | `room_id` (`String` or `null`), `code`, `message`, `recoverable` | Present safe feedback and follow recoverability |
+
+Usernames are not unique. Never key participants or ownership by username; use
+`connection_id` and compare authorship with `self_id`.
+
+### Validation and limits
+
+| Value | Rule |
+| --- | --- |
+| Username | Trim; 1–32 Unicode grapheme clusters; no controls or line breaks; duplicates, spaces, and emoji allowed |
+| Room ID | `[a-z0-9][a-z0-9_-]{0,63}`; only `default` is supported |
+| Message | Trim; 1–500 Unicode characters; plain text only |
+| Event | One JSON text frame, at most 8,192 bytes |
+| Room capacity | 50 simultaneous presences |
+| Snapshot history | Latest 50 accepted messages |
+| Chat rate | Burst of 5, then refill 1 message per second per connection |
+
+Client validation improves feedback but never replaces server validation. Render
+all usernames, messages, and error text as text, never as HTML.
+
+### Error handling
+
+| Code | Recoverable | Expected UX |
+| --- | --- | --- |
+| `invalid_event` | No | Stop the connection and report a protocol failure |
+| `join_required` | Yes | Keep the socket; prevent chat until joined |
+| `already_joined` | Yes | Keep the current joined identity; do not join again |
+| `invalid_room_id` | Yes | Return to/focus the room choice when that UI exists |
+| `room_not_found` | Yes | Explain that the selected office is unavailable |
+| `room_mismatch` | Yes | Treat as a client defect; retain the joined room |
+| `room_unavailable` | No | Reconnect to resolve the restarted room |
+| `invalid_username` | Yes | Show the message at the username field |
+| `invalid_message` | Yes | Show the message at the composer |
+| `rate_limited` | Yes | Keep the draft usable and briefly throttle sending |
+| `room_full` | No | Return to a blocked join state with retry available |
+
+The backend currently closes after `invalid_event`, `room_full`, and
+`room_unavailable`; the exact close sequence and resulting connection phase are
+still being finalized. Drive behavior from `recoverable`, but contract-test the
+documented code-specific cases so changes are visible.
+
+## Technology direction
+
+### Lustre client-side SPA
+
+`gleam.toml` targets JavaScript. Build one client-side SPA with
+`lustre.application(init, update, view)` and mount it onto `#app` with
+`lustre.start`. Use the full application constructor rather than `lustre.simple`
+because the app requires long-lived WebSocket, timer, cookie, DOM-measurement,
+and canvas effects.
+
+Follow Lustre's Model–View–Update structure:
+
+- `Model` owns the connection phase, joined identity, participants, messages,
+  draft, errors, and renderer-facing scene state.
+- `Msg` represents user actions, decoded server events, socket lifecycle events,
+  reconnect timers, and relevant browser/renderer events.
+- `update` performs deterministic state transitions and returns
+  `#(Model, Effect(Msg))`.
+- `view` renders the join screen, status, participants, chat, composer, and the
+  canvas element as accessible HTML.
+- Lustre effects own WebSocket setup and cleanup, cookies, timers, focus or DOM
+  measurements, and canvas renderer commands.
+
+Prefer ordinary view functions. Do not introduce stateful Lustre components
+unless a genuinely complex widget needs its own isolated update loop.
+
+The planned runtime dependencies are `lustre` and `gleam_json`. Use the official
+`lustre_dev_tools` as a development dependency for the local server, HTML entry
+generation, asset copying, and production bundle. Let `gleam add` resolve
+compatible versions and commit the resulting manifest.
+
+### WebSocket and browser effects
+
+Implement the contracted JSON connection as a custom Lustre effect over the
+browser's native WebSocket API. The effect dispatches typed lifecycle and payload
+messages into `update`; protocol code decodes each server frame before it can
+enter the model. Keep reconnect policy in application state so the client never
+automatically replays offline chat.
+
+Use small JavaScript externals only where browser bindings are required, such as
+WebSocket, cookies, `ResizeObserver`, `requestAnimationFrame`, and Canvas 2D.
+Keep externals behind narrow typed Gleam modules and test each boundary. Lustre,
+not handwritten DOM mutation, owns the application HTML.
+
+### Canvas 2D first; WebAssembly only after profiling
+
+Start with Canvas 2D driven by Gleam-compiled JavaScript. Gleam currently compiles
+to Erlang or JavaScript, not WebAssembly, and generated JavaScript is not a useful
+drop-in input for conversion to Wasm. WebAssembly also cannot remove the
+JavaScript/browser boundary needed to call Canvas and DOM APIs.
+
+Create a small renderer interface now (`init`, `resize`, `render`, `dispose`) so
+its implementation can change later. In the JavaScript implementation:
+
+- use `requestAnimationFrame` only while a redraw is needed;
+- render at device-pixel-ratio-aware dimensions and resize with the container;
+- disable image smoothing and use integer coordinates for crisp pixel art;
+- cache sprites/static layers, avoid allocations in the frame loop, and redraw
+  only dirty layers when practical;
+- keep scene/state calculation separate from Canvas calls so it can be profiled.
+
+Consider a Wasm module only when measurements on representative desktop and
+mobile devices show a CPU-bound hot path, such as procedural generation, large
+pixel filters, pathfinding, or simulation. Implement that isolated core in a
+language with a supported Wasm target and call it from the existing JavaScript
+renderer bridge. Canvas call overhead itself is unlikely to improve by moving
+only the surrounding loop to Wasm.
+
+References:
+
+- [Lustre client application API](https://lustre.hexdocs.pm/lustre.html)
+- [Lustre managed effects](https://lustre.hexdocs.pm/lustre/effect.html)
+- [Lustre development tools](https://hexdocs.pm/lustre_dev_tools/)
+- [Gleam compiler targets](https://gleam.run/command-line-reference/)
+- [Gleam JavaScript externals](https://gleam.run/documentation/externals/)
+- [MDN Canvas optimization guide](https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API/Tutorial/Optimizing_canvas)
+- [MDN WebAssembly concepts](https://developer.mozilla.org/en-US/docs/WebAssembly/Guides/Concepts)
+
+## Proposed package structure
+
+```text
+pixel_scribe_frontend/
+├── src/
+│   ├── pixel_scribe_frontend.gleam      Browser entry point
+│   └── pixel_scribe_frontend/
+│       ├── model.gleam                  Application and connection state
+│       ├── update.gleam                 Pure state transitions and effects
+│       ├── protocol.gleam               JSON wire types and codecs
+│       ├── socket.gleam                 WebSocket Lustre effects
+│       ├── socket_ffi.mjs               Native WebSocket boundary
+│       ├── view.gleam                   Lustre HTML view functions
+│       ├── canvas.gleam                 Canvas Lustre effects
+│       ├── canvas_ffi.mjs               Canvas renderer boundary
+│       └── browser_ffi.mjs              Cookies and small browser bindings
+├── assets/
+│   ├── styles.css
+│   └── pixel-art/                       Source sprites and scene assets
+├── test/
+│   └── pixel_scribe_frontend/
+├── README.md
+└── AGENTS.md
+```
+
+The official Lustre development tools generate the HTML entry and browser bundle,
+copy `assets/`, and write to `dist/` by default. The reproducible integration step
+from that output into backend `priv/public` is not configured yet.
+
+Once source and tests exist, the minimum Gleam checks are expected to be:
+
+```sh
+gleam format --check src test
+gleam build
+gleam test
+gleam run -m lustre/dev build
+```
+
+Run `gleam run -m lustre/dev start` for the local frontend development server.
+When frontend and backend use different development origins, point the WebSocket
+effect at the explicitly configured backend URL and allow the frontend origin in
+the backend development configuration. Production continues to use `/ws` on the
+page's origin.
+
+Also add browser-level checks for keyboard use, reconnect behavior, WebSocket
+contract fixtures, and responsive layouts before calling the frontend MVP done.
+
+## Open decisions
+
+- Visual direction, palette, typography, and source pixel-art assets.
+- Logical canvas resolution, sprite/tile dimensions, and whether the scene is
+  static or animated in the first slice.
+- Username cookie name and retention period.
+- Reproducible copy step from the Lustre build into backend `priv/public`.
+- Whether a later measured renderer hot path justifies WebAssembly.
