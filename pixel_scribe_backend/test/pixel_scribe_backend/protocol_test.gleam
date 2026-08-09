@@ -98,7 +98,7 @@ pub fn event_size_limit_accepts_8_kib_and_rejects_more_test() {
 pub fn room_state_event_encodes_exactly_test() {
   let connection_id = domain.new_connection_id()
   let assert Ok(username) = domain.new_username("Ada")
-  let presence = domain.new_presence(connection_id, username)
+  let presence = domain.Presence(connection_id, username)
   let event =
     protocol.RoomState(domain.default_room_id, connection_id, [presence], [])
   let connection_id_string = domain.connection_id_to_string(connection_id)
@@ -114,7 +114,7 @@ pub fn room_state_event_encodes_exactly_test() {
 pub fn user_joined_event_encodes_exactly_test() {
   let connection_id = domain.new_connection_id()
   let assert Ok(username) = domain.new_username("Grace")
-  let presence = domain.new_presence(connection_id, username)
+  let presence = domain.Presence(connection_id, username)
   let event = protocol.UserJoined(domain.default_room_id, presence)
   let connection_id_string = domain.connection_id_to_string(connection_id)
 
@@ -142,7 +142,7 @@ pub fn message_sent_event_encodes_exactly_test() {
   let assert Ok(text) = domain.new_message_text("Hello!")
   let sent_at = domain.new_sent_at()
   let message =
-    domain.new_chat_message(message_id, connection_id, username, text, sent_at)
+    domain.ChatMessage(message_id, connection_id, username, text, sent_at)
   let event = protocol.MessageSent(domain.default_room_id, message)
   let message_id_string = domain.message_id_to_string(message_id)
   let connection_id_string = domain.connection_id_to_string(connection_id)
@@ -164,7 +164,7 @@ pub fn server_event_encoder_escapes_user_text_test() {
   let assert Ok(username) = domain.new_username("Ada \"Ace\"")
   let assert Ok(text) = domain.new_message_text("say \"hello\" \\ now")
   let message =
-    domain.new_chat_message(
+    domain.ChatMessage(
       message_id,
       connection_id,
       username,

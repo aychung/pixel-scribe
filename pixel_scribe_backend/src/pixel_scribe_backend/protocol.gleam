@@ -263,15 +263,13 @@ fn presence_to_json(presence: domain.Presence) -> json.Json {
   json.object([
     #(
       "connection_id",
-      presence
-        |> domain.presence_connection_id
+      presence.connection_id
         |> domain.connection_id_to_string
         |> json.string,
     ),
     #(
       "username",
-      presence
-        |> domain.presence_username
+      presence.username
         |> domain.username_to_string
         |> json.string,
     ),
@@ -282,36 +280,31 @@ fn message_to_json(message: domain.ChatMessage) -> json.Json {
   json.object([
     #(
       "message_id",
-      message
-        |> domain.chat_message_message_id
+      message.message_id
         |> domain.message_id_to_string
         |> json.string,
     ),
     #(
       "sender_id",
-      message
-        |> domain.chat_message_sender_id
+      message.sender_id
         |> domain.connection_id_to_string
         |> json.string,
     ),
     #(
       "username",
-      message
-        |> domain.chat_message_username
+      message.username
         |> domain.username_to_string
         |> json.string,
     ),
     #(
       "text",
-      message
-        |> domain.chat_message_text
+      message.text
         |> domain.message_text_to_string
         |> json.string,
     ),
     #(
       "sent_at",
-      message
-        |> domain.chat_message_sent_at
+      message.sent_at
         |> domain.sent_at_to_rfc3339
         |> json.string,
     ),

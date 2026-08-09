@@ -43,15 +43,15 @@ pub fn presence_and_chat_message_hold_validated_domain_values_test() {
   let connection_id = domain.new_connection_id()
   let message_id = domain.new_message_id()
   let sent_at = domain.new_sent_at()
-  let presence = domain.new_presence(connection_id, username)
+  let presence = domain.Presence(connection_id, username)
   let message =
-    domain.new_chat_message(message_id, connection_id, username, text, sent_at)
+    domain.ChatMessage(message_id, connection_id, username, text, sent_at)
 
-  assert domain.presence_connection_id(presence) == connection_id
-  assert domain.presence_username(presence) == username
-  assert domain.chat_message_message_id(message) == message_id
-  assert domain.chat_message_sender_id(message) == connection_id
-  assert domain.chat_message_username(message) == username
-  assert domain.chat_message_text(message) == text
-  assert domain.chat_message_sent_at(message) == sent_at
+  assert presence.connection_id == connection_id
+  assert presence.username == username
+  assert message.message_id == message_id
+  assert message.sender_id == connection_id
+  assert message.username == username
+  assert message.text == text
+  assert message.sent_at == sent_at
 }

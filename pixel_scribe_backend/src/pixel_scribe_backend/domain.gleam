@@ -106,50 +106,5 @@ pub fn sent_at_to_rfc3339(sent_at: SentAt) -> String {
   timestamp.to_rfc3339(value, calendar.utc_offset)
 }
 
-pub fn new_presence(
-  connection_id: ConnectionId,
-  username: Username,
-) -> Presence {
-  Presence(connection_id, username)
-}
-
-pub fn presence_connection_id(presence: Presence) -> ConnectionId {
-  presence.connection_id
-}
-
-pub fn presence_username(presence: Presence) -> Username {
-  presence.username
-}
-
-pub fn new_chat_message(
-  message_id: MessageId,
-  sender_id: ConnectionId,
-  username: Username,
-  text: MessageText,
-  sent_at: SentAt,
-) -> ChatMessage {
-  ChatMessage(message_id, sender_id, username, text, sent_at)
-}
-
-pub fn chat_message_message_id(message: ChatMessage) -> MessageId {
-  message.message_id
-}
-
-pub fn chat_message_sender_id(message: ChatMessage) -> ConnectionId {
-  message.sender_id
-}
-
-pub fn chat_message_username(message: ChatMessage) -> Username {
-  message.username
-}
-
-pub fn chat_message_text(message: ChatMessage) -> MessageText {
-  message.text
-}
-
-pub fn chat_message_sent_at(message: ChatMessage) -> SentAt {
-  message.sent_at
-}
-
 @external(erlang, "erlang", "unique_integer")
 fn unique_integer() -> Int

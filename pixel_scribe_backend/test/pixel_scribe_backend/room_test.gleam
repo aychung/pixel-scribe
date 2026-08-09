@@ -20,8 +20,8 @@ pub fn join_returns_snapshot_and_notifies_existing_connections_test() {
   assert domain.room_id_to_string(room_id) == "default"
   assert list.length(first_users) == 1
   let assert Ok(first_user) = list.first(first_users)
-  assert domain.presence_connection_id(first_user) == first_id
-  assert domain.presence_username(first_user) == ada
+  assert first_user.connection_id == first_id
+  assert first_user.username == ada
   assert first_messages == []
 
   room.join(room_actor, grace, second_connection)
@@ -30,8 +30,8 @@ pub fn join_returns_snapshot_and_notifies_existing_connections_test() {
     receive_event(second_subject)
 
   assert second_id != first_id
-  assert domain.presence_connection_id(joined_user) == second_id
-  assert domain.presence_username(joined_user) == grace
+  assert joined_user.connection_id == second_id
+  assert joined_user.username == grace
   assert list.length(second_users) == 2
   assert second_messages == []
 }
@@ -50,7 +50,7 @@ pub fn duplicate_usernames_have_distinct_connection_ids_test() {
   let assert room.Joined(_, second_id, users, _) = receive_event(second_subject)
 
   assert first_id != second_id
-  assert domain.presence_username(joined_user) == username
+  assert joined_user.username == username
   assert list.length(users) == 2
 }
 
@@ -110,19 +110,15 @@ pub fn messages_are_ordered_and_history_evicts_oldest_test() {
   let messages = receive_messages(subject, 51, [])
   let assert Ok(first_message) = list.first(messages)
   let assert Ok(last_message) = list.last(messages)
-  assert domain.message_id_to_string(domain.chat_message_message_id(
-      first_message,
-    ))
+  assert domain.message_id_to_string(first_message.message_id)
     |> string.starts_with("message-")
-  let first_sent_at = domain.chat_message_sent_at(first_message)
+  let first_sent_at = first_message.sent_at
   let assert Ok(_) =
     first_sent_at
     |> domain.sent_at_to_rfc3339
     |> timestamp.parse_rfc3339
-  assert domain.message_text_to_string(domain.chat_message_text(first_message))
-    == "message-1"
-  assert domain.message_text_to_string(domain.chat_message_text(last_message))
-    == "message-51"
+  assert domain.message_text_to_string(first_message.text) == "message-1"
+  assert domain.message_text_to_string(last_message.text) == "message-51"
 
   let #(second_connection, second_subject) = new_connection()
   room.join(room_actor, username("Grace"), second_connection)
@@ -132,13 +128,9 @@ pub fn messages_are_ordered_and_history_evicts_oldest_test() {
   assert list.length(history) == 50
   let assert Ok(first_history_message) = list.first(history)
   let assert Ok(last_history_message) = list.last(history)
-  assert domain.message_text_to_string(domain.chat_message_text(
-      first_history_message,
-    ))
+  assert domain.message_text_to_string(first_history_message.text)
     == "message-2"
-  assert domain.message_text_to_string(domain.chat_message_text(
-      last_history_message,
-    ))
+  assert domain.message_text_to_string(last_history_message.text)
     == "message-51"
 }
 

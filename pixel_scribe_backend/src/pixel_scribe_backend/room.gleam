@@ -151,10 +151,7 @@ fn handle_join(
           )
           broadcast(
             state.connections,
-            UserJoined(
-              state.room_id,
-              domain.new_presence(connection_id, username),
-            ),
+            UserJoined(state.room_id, domain.Presence(connection_id, username)),
           )
 
           actor.continue(State(state.room_id, connections, state.messages))
@@ -177,7 +174,7 @@ fn handle_send_message(
     Error(Nil) -> actor.continue(state)
     Ok(connection) -> {
       let message =
-        domain.new_chat_message(
+        domain.ChatMessage(
           domain.new_message_id(),
           connection_id,
           connection.username,
@@ -223,7 +220,7 @@ fn broadcast(connections: List(Connection), event: RoomEvent) -> Nil {
 }
 
 fn connection_to_presence(connection: Connection) -> domain.Presence {
-  domain.new_presence(connection.connection_id, connection.username)
+  domain.Presence(connection.connection_id, connection.username)
 }
 
 fn remove_matching_connections(
