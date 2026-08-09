@@ -71,7 +71,7 @@ Wisp/Mist baseline + JSON codecs + room supervision
   baseline.
 - [ ] Task 1: Prove the Wisp/Mist platform baseline.
 - [x] Task 2: Define validated domain types.
-- [ ] Task 3: Implement the typed WebSocket protocol codecs.
+- [x] Task 3: Implement the typed WebSocket protocol codecs.
 
 ### Checkpoint: Contract foundation
 

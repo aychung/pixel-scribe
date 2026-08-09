@@ -292,23 +292,23 @@ trusted actor messages.
 
 **Acceptance criteria:**
 
-- [ ] `join_room` and `send_message` decode only valid `snake_case` payloads with
+- [x] `join_room` and `send_message` decode only valid `snake_case` payloads with
   explicit `room_id`.
-- [ ] All server events and error codes in the specification encode exactly as
+- [x] All server events and error codes in the specification encode exactly as
   documented, including nullable error room context.
-- [ ] Unknown, malformed, binary, and oversized inputs produce stable failures and
+- [x] Unknown, malformed, binary, and oversized inputs produce stable failures and
   never crash a decoder.
-- [ ] The current error inventory and codec-level behavior are written back to the
+- [x] The current error inventory and codec-level behavior are written back to the
   specification and covered by tests; connection-phase and close behavior may be
   refined when Task 7 implements the state machine.
 
 **Verification:**
 
-- [ ] Every event variant has golden or round-trip tests.
-- [ ] Malformed-shape and size-boundary tests pass.
-- [ ] `gleam format --check src test`
-- [ ] `gleam build`
-- [ ] `gleam test`
+- [x] Every event variant has golden or round-trip tests.
+- [x] Malformed-shape and size-boundary tests pass.
+- [x] `gleam format --check src test`
+- [x] `gleam build`
+- [x] `gleam test`
 
 **Dependencies:** Task 2.
 

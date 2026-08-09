@@ -204,6 +204,31 @@ must match the joined room; a mismatch is rejected without mutating either room.
 The MVP accepts only `default`. Future multiple-office support adds accepted room
 IDs while preserving these event shapes and the one-room-per-connection rule.
 
+### Codec behavior
+
+The protocol codec accepts either a WebSocket text frame or binary frame. Binary
+frames are rejected as `invalid_event`, even when their bytes happen to contain
+valid JSON. Text frames must contain one UTF-8 JSON object no larger than 8 KiB
+(8,192 bytes is accepted; 8,193 bytes is rejected). The decoder requires the
+`type` discriminator and the fields shown above, uses the documented
+`snake_case` names, and ignores unknown fields so additive optional fields remain
+forward-compatible.
+
+Client decoding returns trusted `join_room` or `send_message` values only after
+constructing the validated domain types. Its stable failures map as follows:
+
+| Input failure | Codec failure | Public error code |
+|---|---|---|
+| Binary frame or payload larger than 8 KiB | `BinaryPayload` or `PayloadTooLarge` | `invalid_event` |
+| Malformed JSON, unknown type, or missing/wrong-shaped required field | `MalformedEvent` | `invalid_event` |
+| Invalid room-ID shape | `InvalidRoomIdValue` | `invalid_room_id` |
+| Invalid username | `InvalidUsernameValue` | `invalid_username` |
+| Invalid message text | `InvalidMessageTextValue` | `invalid_message` |
+
+The codec does not expose `gleam_json` parser details. A connection may include a
+validated room ID in an error response when it can recover one; otherwise the
+error's `room_id` is `null`.
+
 ### Server to client
 
 ```json
@@ -267,10 +292,29 @@ be recovered from the input. Initial error codes:
 - `rate_limited`: the connection is sending chat faster than allowed.
 - `room_full`: 50 presences are already joined to the requested room.
 
+The encoder owns the stable public message and recoverability metadata for every
+error code:
+
+| Code | Message | Recoverable |
+|---|---|---|
+| `invalid_event` | `Invalid event.` | No |
+| `join_required` | `Join a room before sending messages.` | Yes |
+| `already_joined` | `This connection has already joined a room.` | Yes |
+| `invalid_room_id` | `Room ID is invalid.` | Yes |
+| `room_not_found` | `Room not found.` | Yes |
+| `room_mismatch` | `Room ID does not match the joined room.` | Yes |
+| `room_unavailable` | `Room is unavailable. Reconnect to continue.` | No |
+| `invalid_username` | `Username must contain between 1 and 32 characters.` | Yes |
+| `invalid_message` | `Message must contain between 1 and 500 characters.` | Yes |
+| `rate_limited` | `You are sending messages too quickly.` | Yes |
+| `room_full` | `Room is full.` | No |
+
 Client input errors return the same structured error shape. Internal details and
-stack traces are never sent to clients. Fatal protocol errors, `room_full`, and
-`room_unavailable` close the WebSocket after the error is sent; recoverable
-validation errors leave it open.
+stack traces are never sent to clients. The non-recoverable codes
+`invalid_event`, `room_full`, and `room_unavailable` close the WebSocket after the
+error is sent; recoverable validation errors leave it open. The connection phase
+after each error and the exact close sequence are finalized with the connection
+state machine in Task 7.
 
 The error inventory and exact behavior may be refined while the protocol codecs
 and connection state machine are implemented. Before Tasks 3 and 7 are complete,
