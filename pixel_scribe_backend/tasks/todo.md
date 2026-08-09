@@ -6,45 +6,130 @@ because it already exists.
 
 ## Task 0: Clean the exploratory baseline and add foundation dependencies
 
-**Description:** Complete Tasks 0A-0C in order. Each subtask is one review-sized
+**Description:** Complete Tasks 0A-0F in order. Each subtask is one review-sized
 `jj` revision: implement exactly one subtask, run its verification, and stop for
 human review before starting the next revision. Together they remove the
-superseded starter implementation, establish the test runner, and add the two
-approved foundation dependencies.
+superseded starter implementation in dependency-safe slices, establish the test
+runner, and add the two approved foundation dependencies.
 
-### Task 0A: Replace the exploratory source with a buildable skeleton
+### Task 0A: Detach and remove the broken runtime chain
 
-**Description:** The current room, registry, supervisor, configuration, and raw
-Mist server modules describe an abandoned architecture and currently fail to
-compile. Replace the application entry point with the smallest valid Gleam
-skeleton and delete the superseded modules under `src/pixel_scribe_backend/`.
-Do not change dependencies, task documents, or `priv/public` in this revision.
+**Description:** Replace the application entry point with the smallest valid Gleam
+`main`, then delete the three-module dependency chain that currently prevents the
+package from compiling. This four-file closure is the smallest cleanup slice that
+avoids temporarily repairing code that subsequent tasks would delete. Do not
+touch any other source, dependencies, tests, task documents, or static assets.
 
 **Acceptance criteria:**
 
 - [ ] `src/pixel_scribe_backend.gleam` contains a minimal valid `main` entry point.
-- [ ] The superseded modules under `src/pixel_scribe_backend/` are removed rather
-  than patched or refactored for behavior that later tasks will replace.
-- [ ] The revision contains only the entry-point replacement and source deletions.
+- [ ] `supervisor.gleam`, `web/server.gleam`, and `chat/room.gleam` are deleted
+  without porting or repairing their abandoned behavior.
+- [ ] The revision contains exactly the one entry-point edit and three deletions.
 
 **Verification:**
 
 - [ ] `gleam format --check src`
 - [ ] `gleam build`
-- [ ] Review `jj diff --summary` and `jj diff`; confirm there are no dependency,
-  test, documentation, or static-asset changes.
+- [ ] Review `jj diff --summary` and confirm exactly four source files changed.
 
 **Dependencies:** None.
 
 **Files likely touched:**
 
 - `src/pixel_scribe_backend.gleam`
-- Superseded modules under `src/pixel_scribe_backend/` (deletions only)
+- `src/pixel_scribe_backend/supervisor.gleam` (delete)
+- `src/pixel_scribe_backend/web/server.gleam` (delete)
+- `src/pixel_scribe_backend/chat/room.gleam` (delete)
 
-**Estimated scope:** Small decision surface; one tiny replacement plus mechanical
-deletions.
+**Estimated scope:** Medium by file count, but mechanically narrow: 1 tiny edit and
+3 whole-file deletions.
 
-### Task 0B: Add the minimal Gleam test runner
+### Task 0B: Delete the orphaned configuration module
+
+**Description:** Delete the now-unreferenced exploratory environment configuration
+module. Do not replace it; production configuration belongs to Task 10.
+
+**Acceptance criteria:**
+
+- [ ] `src/pixel_scribe_backend/config.gleam` is deleted.
+- [ ] No other file changes are included.
+- [ ] The package remains buildable.
+
+**Verification:**
+
+- [ ] `gleam format --check src`
+- [ ] `gleam build`
+- [ ] Review `jj diff --summary` and confirm this revision deletes one file only.
+
+**Dependencies:** Task 0A, approved by the human reviewer.
+
+**Files likely touched:**
+
+- `src/pixel_scribe_backend/config.gleam` (delete)
+
+**Estimated scope:** Extra small, 1 deletion.
+
+### Task 0C: Delete the orphaned user registry
+
+**Description:** Delete the now-unreferenced username registry from the abandoned
+prototype. Do not preserve its global username uniqueness or raw WebSocket state;
+the approved room model replaces both in later tasks.
+
+**Acceptance criteria:**
+
+- [ ] `src/pixel_scribe_backend/user_registry.gleam` is deleted.
+- [ ] No other file changes are included.
+- [ ] The package remains buildable.
+
+**Verification:**
+
+- [ ] `gleam format --check src`
+- [ ] `gleam build`
+- [ ] Review `jj diff --summary` and confirm this revision deletes one file only.
+
+**Dependencies:** Task 0B, approved by the human reviewer.
+
+**Files likely touched:**
+
+- `src/pixel_scribe_backend/user_registry.gleam` (delete)
+
+**Estimated scope:** Extra small, 1 deletion.
+
+### Review checkpoint: Tasks 0A-0C
+
+- [ ] Each task is a separate reviewed `jj` revision.
+- [ ] `gleam format --check src` passes.
+- [ ] `gleam build` passes.
+
+### Task 0D: Remove the remaining chat placeholders
+
+**Description:** Delete the incomplete chat supervisor and empty chat registry.
+They have no callers after Task 0A and no role in the approved room architecture.
+
+**Acceptance criteria:**
+
+- [ ] `chat/supervisor.gleam` and `chat/registry.gleam` are deleted.
+- [ ] No other file changes are included.
+- [ ] No `todo` remains in the production source tree.
+
+**Verification:**
+
+- [ ] `gleam format --check src`
+- [ ] `gleam build`
+- [ ] `rg -n "todo" src` returns no matches.
+- [ ] Review `jj diff --summary` and confirm exactly two files were deleted.
+
+**Dependencies:** Task 0C and its review checkpoint.
+
+**Files likely touched:**
+
+- `src/pixel_scribe_backend/chat/supervisor.gleam` (delete)
+- `src/pixel_scribe_backend/chat/registry.gleam` (delete)
+
+**Estimated scope:** Extra small, 2 tiny deletions.
+
+### Task 0E: Add the minimal Gleam test runner
 
 **Description:** Add only the standard Gleeunit test entry point needed for the
 repository-wide test command. Do not introduce domain behavior or placeholder
@@ -63,7 +148,7 @@ application APIs merely to manufacture a test case.
 - [ ] `gleam test`
 - [ ] Review `jj diff --summary` and confirm this revision adds one test file only.
 
-**Dependencies:** Task 0A, approved by the human reviewer.
+**Dependencies:** Task 0D, approved by the human reviewer.
 
 **Files likely touched:**
 
@@ -71,7 +156,7 @@ application APIs merely to manufacture a test case.
 
 **Estimated scope:** Extra small, 1 file.
 
-### Task 0C: Add the approved foundation dependencies
+### Task 0F: Add the approved foundation dependencies
 
 **Description:** Run `gleam add wisp gleam_json` from the backend package directory
 and review the resolver-generated configuration and lockfile diff. Do not hand-edit
@@ -91,7 +176,7 @@ and review the resolver-generated configuration and lockfile diff. Do not hand-e
 - [ ] `gleam build`
 - [ ] `gleam test`
 
-**Dependencies:** Task 0B, approved by the human reviewer.
+**Dependencies:** Task 0E, approved by the human reviewer.
 
 **Files likely touched:**
 
@@ -102,7 +187,7 @@ and review the resolver-generated configuration and lockfile diff. Do not hand-e
 
 ### Task 0 checkpoint
 
-Do not mark Task 0 complete until Tasks 0A-0C have each been reviewed as separate
+Do not mark Task 0 complete until Tasks 0A-0F have each been reviewed as separate
 revisions and the cumulative repository state satisfies the following criteria.
 
 **Acceptance criteria:**
@@ -121,7 +206,7 @@ revisions and the cumulative repository state satisfies the following criteria.
 - [ ] `gleam build`
 - [ ] `gleam test`
 
-**Dependencies:** Tasks 0A-0C. The Wisp and `gleam_json` additions are explicitly
+**Dependencies:** Tasks 0A-0F. The Wisp and `gleam_json` additions are explicitly
 approved by the MVP plan and do not require a second dependency-approval step.
 
 **Files likely touched:**
@@ -133,8 +218,8 @@ approved by the MVP plan and do not require a second dependency-approval step.
 - Stale placeholder assets under `priv/public/`, only if they obstruct the clean
   baseline
 
-**Estimated scope:** Three small, sequential revisions with a human review gate
-after each one.
+**Estimated scope:** Six sequential XS/S revisions, except Task 0A's smallest
+build-preserving four-file dependency closure, with a human review gate after each.
 
 ## Task 1: Prove the Wisp/Mist platform baseline
 

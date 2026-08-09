@@ -58,13 +58,17 @@ Wisp/Mist baseline + JSON codecs + room supervision
 
 ### Phase 1: Contract and platform foundation
 
-- [ ] Task 0A: Replace the exploratory source with a buildable skeleton, then stop
-  for review.
-- [ ] Task 0B: Add the minimal Gleam test runner, then stop for review.
-- [ ] Task 0C: Add Wisp and `gleam_json` through Gleam tooling, then stop for
+- [ ] Task 0A: Detach and delete the broken four-file runtime chain, then stop for
   review.
-- [ ] Task 0 checkpoint: Approve the three separate revisions and the cumulative
-  green baseline.
+- [ ] Task 0B: Delete the orphaned configuration module, then stop for review.
+- [ ] Task 0C: Delete the orphaned user registry, then stop for review.
+- [ ] Review checkpoint: Approve Tasks 0A-0C and confirm the package builds.
+- [ ] Task 0D: Delete the two remaining chat placeholders, then stop for review.
+- [ ] Task 0E: Add the minimal Gleam test runner, then stop for review.
+- [ ] Task 0F: Add Wisp and `gleam_json` through Gleam tooling, then stop for
+  review.
+- [ ] Task 0 checkpoint: Approve all six revisions and the cumulative green
+  baseline.
 - [ ] Task 1: Prove the Wisp/Mist platform baseline.
 - [ ] Task 2: Define validated domain types.
 - [ ] Task 3: Implement the typed WebSocket protocol codecs.
@@ -131,7 +135,7 @@ checkpoint adds a running-server smoke test with two independent clients.
 
 ## Parallelization Opportunities
 
-- Tasks 0A-0C must run sequentially, with a human review between revisions. The
+- Tasks 0A-0F must run sequentially, with a human review between revisions. The
   Task 0 checkpoint must finish before any later task starts so all feature work
   begins from a clean, buildable baseline with Wisp and `gleam_json` declared
   directly.
