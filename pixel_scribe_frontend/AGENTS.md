@@ -9,6 +9,11 @@
 - The MVP has one room, `default`. Auth, multiple active rooms, movement,
   persistence, offline delivery, and media are out of scope.
 
+## Repository
+
+- This project uses Jujutsu (`jj`) for version control.
+- The `jj` repository is rooted in the parent folder, `pixel_scribe`.
+
 ## Required behavior
 
 1. Prefill a frontend-owned username preference, connect to `/ws`, and send one
@@ -57,3 +62,7 @@ gleam build
 gleam test
 gleam run -m lustre/dev build
 ```
+
+- Keep each reviewable set of changes in its own Jujutsu revision. After verifying
+  a change set, run `jj describe -m "<type>: <short reason>"`, then run `jj new`
+  before starting the next change set.

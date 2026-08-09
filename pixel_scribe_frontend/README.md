@@ -46,6 +46,8 @@ drives objects or coordinates on it.
 5. Once joined, show the office canvas and chat workspace. The chat area contains
    connection status, a participant list/count, the message log, validation or
    connection feedback, and the composer.
+   Use a multiline composer: Enter sends, Shift+Enter inserts a line break, and
+   an Enter key event must not send while an input-method composition is active.
 6. Update presence from `user_joined` and `user_left`. Append an accepted message
    only when `message_sent` arrives, including messages sent by this client; do
    not optimistically create a second local copy.
@@ -163,7 +165,7 @@ Usernames are not unique. Never key participants or ownership by username; use
 | --- | --- |
 | Username | Trim; 1–32 Unicode grapheme clusters; no controls or line breaks; duplicates, spaces, and emoji allowed |
 | Room ID | `[a-z0-9][a-z0-9_-]{0,63}`; only `default` is supported |
-| Message | Trim; 1–500 Unicode characters; plain text only |
+| Message | Normalize CRLF, CR, `U+2028`, and `U+2029` to LF; reject every other C0/C1 control and DEL; trim; 1–500 Unicode grapheme clusters including LF; at most 8 lines; plain text only |
 | Event | One JSON text frame, at most 8,192 bytes |
 | Room capacity | 50 simultaneous presences |
 | Snapshot history | Latest 50 accepted messages |
@@ -171,6 +173,15 @@ Usernames are not unique. Never key participants or ownership by username; use
 
 Client validation improves feedback but never replaces server validation. Render
 all usernames, messages, and error text as text, never as HTML.
+
+LF (`U+000A`) is the only control character retained in a normalized message.
+CRLF, bare CR, Unicode line separator (`U+2028`), and Unicode paragraph separator
+(`U+2029`) are accepted only as input spellings of a line break and normalize to
+LF before trimming and length checks. A normalized message may contain at most
+seven LF characters (eight lines). Tabs, NUL, escape, backspace, DEL, and all
+other C0/C1 controls are invalid. Preserve accepted line breaks in the DOM chat
+log. Canvas bubbles may visually truncate to three lines without changing the
+full DOM message.
 
 ### Error handling
 
@@ -318,11 +329,12 @@ page's origin.
 Also add browser-level checks for keyboard use, reconnect behavior, WebSocket
 contract fixtures, and responsive layouts before calling the frontend MVP done.
 
-## Open decisions
+## Remaining checkpoint decisions
 
-- Visual direction, palette, typography, and source pixel-art assets.
-- Logical canvas resolution, sprite/tile dimensions, and whether the scene is
-  static or animated in the first slice.
-- Username cookie name and retention period.
-- Reproducible copy step from the Lustre build into backend `priv/public`.
-- Whether a later measured renderer hot path justifies WebAssembly.
+- Task 6 adopts the backend's finalized error room context, close order, and
+  post-error connection phase after backend Task 7 updates the canonical spec.
+- Task 11 requires human approval of the visual direction, palette, typography,
+  source pixel-art assets, and asset provenance.
+- Task 14 coordinates the reproducible frontend staging and container-delivery
+  policy with the backend. Generated output remains uncommitted unless separately
+  approved.
