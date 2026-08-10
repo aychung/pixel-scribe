@@ -430,6 +430,9 @@ the unit names the package-manager command that produces them.
   - [x] 0B: Resolve browser-test dependencies and scripts.
   - [ ] 0C: Configure Lustre output and artifact ignores.
 - [ ] Task 1 (1A-1C): Bootstrap the explicit Lustre SPA shell.
+  - [x] 1A: Create the explicit MVU skeleton.
+  - [ ] 1B: Render the semantic username form.
+  - [ ] 1C: Style the responsive shell.
 - [ ] Task 2 (2A-2C): Establish the Gleam and Playwright test harnesses.
 - [ ] Task 3 (3A-3D): Implement trusted values, validation, and protocol codecs.
 - [ ] Task 4 (4A-4F): Implement the deterministic state machine and backoff.

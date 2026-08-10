@@ -146,14 +146,14 @@ but do not connect a socket or render a canvas scene yet.
 
 ### Work units
 
-- [ ] **Task 1A — Create the explicit MVU skeleton.**
+- [x] **Task 1A — Create the explicit MVU skeleton.**
   - **Done when:** the entry point mounts one `lustre.application` on `#app`, and
     explicit initial `Model`, `Msg`, and no-op/local `update` compile without any
     socket, cookie, DOM, or canvas FFI.
   - **Files:** `src/pixel_scribe_frontend.gleam`,
     `src/pixel_scribe_frontend/model.gleam`,
     `src/pixel_scribe_frontend/update.gleam`.
-  - **Verify:** `gleam format --check src`; `gleam build`.
+  - **Verify:** `gleam format --check src`; `gleam build` — passed 2026-08-09.
   - **Depends:** Task 0C.
 - [ ] **Task 1B — Render the semantic username form.**
   - **Done when:** the view has one heading, a real labeled nickname field, native
