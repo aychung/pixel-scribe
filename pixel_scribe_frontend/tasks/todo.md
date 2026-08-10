@@ -314,21 +314,25 @@ forward-compatible; malformed known events are not.
   - **Depends:** Task 0C.
 - [ ] **Task 3B — Implement username and multiline-message validation.**
   - **Done when:** username fixtures match the canonical contract and messages
-    follow the exact newline normalization, control rejection, trimming,
-    1-500-grapheme, and eight-line rules in `plan.md`.
+    follow the exact LF allowance, control rejection, trimming, and
+    1-500-grapheme rules in `plan.md`.
   - **Files:** `src/pixel_scribe_frontend/validation.gleam`,
     `test/pixel_scribe_frontend/validation_test.gleam`.
-  - **Verify:** first add failing boundary fixtures for CRLF/CR/`U+2028`/`U+2029`,
-    LF, ninth line, tabs, C0/C1, DEL, emoji, and combining text; then run format,
-    build, and `gleam test`.
+  - **Verify:** first add failing boundary fixtures for rejected
+    CRLF/CR/`U+2028`/`U+2029`, accepted LF, tabs, C0/C1, DEL, emoji, and combining
+    text; then run format, build, and `gleam test`.
   - **Depends:** Task 3A and the updated canonical backend message contract.
 - [ ] **Task 3C — Encode canonical client events.**
   - **Done when:** join and send encoders emit only the exact snake-case JSON
-    fields for room `default`, using already trusted username/message values.
+    fields for room `default`, using already trusted username/message values; each
+    encoder measures its complete final UTF-8 JSON text frame and accepts 8,192
+    bytes but rejects 8,193 bytes (or larger) before a send command can be emitted.
   - **Files:** `src/pixel_scribe_frontend/protocol.gleam`,
     `test/pixel_scribe_frontend/protocol_test.gleam`.
-  - **Verify:** exact-string/golden tests for both events; format, build, and
-    `gleam test`.
+  - **Verify:** exact-string/golden tests for both events, including byte-heavy
+    UTF-8/escaped values at 8,192 (accepted) and 8,193 (rejected) for both
+    `join_room` and `send_message`; assert oversized results are not sendable;
+    format, build, and `gleam test`.
   - **Depends:** Tasks 3A-3B.
 - [ ] **Task 3D — Decode and reject server frames.**
   - **Done when:** every documented server event and nullable error room decodes;
@@ -350,26 +354,30 @@ forward-compatible; malformed known events are not.
 2. Encode exactly:
    `join_room(room_id="default", username)` and
    `send_message(room_id="default", text)` with snake-case fields and text JSON.
+   Serialize the complete JSON text, encode it as UTF-8, and measure those bytes;
+   accept frames up to 8,192 bytes, reject 8,193-byte frames, and return a local
+   size failure so the caller can prevent the socket send while leaving the
+   username/draft for inline feedback.
 3. Decode `room_state`, `user_joined`, `user_left`, `message_sent`, and `error`.
    Require documented fields/types, allow `error.room_id` string or null, ignore
    additive fields, and return a distinct safely ignored value for unknown `type`.
-4. For messages, normalize CRLF, bare CR, `U+2028`, and `U+2029` to LF; reject
-   every remaining C0/C1 control and DEL; trim; then enforce `1-500` Unicode
-   grapheme clusters including LF and at most seven LF characters/eight lines.
-   Mirror the backend's normalization order and fixtures. Do not add a Unicode
-   package without review.
+4. For messages, allow LF; reject CR, `U+2028`, `U+2029`, every other C0/C1
+   control, and DEL; trim; then enforce `1-500` Unicode grapheme clusters,
+   counting each retained LF. Mirror the backend's validation order and fixtures.
+   Do not add a Unicode package without review.
 5. Cover XSS-like strings as ordinary text data. No decoder failure may include
    raw payload content in an application-visible/loggable value.
 
 **Acceptance criteria:**
 
 - [ ] Every documented event has a passing exact fixture, and client encoders
-  produce the canonical JSON shape for `default`.
+  produce the canonical JSON shape for `default` and never emit an oversized
+  final UTF-8 frame for either client event.
 - [ ] Missing/wrong fields, malformed JSON, invalid nullability, and malformed
   known events fail safely; additive fields and unknown event types do not.
 - [ ] Username/message validation matches backend fixtures at empty, maximum,
-  over-limit, combining-character, emoji, whitespace, CRLF/CR/`U+2028`/`U+2029`
-  normalization, LF, eight-line, tab, C0/C1, and DEL boundaries.
+  over-limit, combining-character, emoji, whitespace, rejected
+  CRLF/CR/`U+2028`/`U+2029`, accepted LF, tab, C0/C1, and DEL boundaries.
 
 **Verification:**
 
@@ -646,6 +654,7 @@ joined UI enablement. Reconcile the final backend error/close contract first.
   - **Depends:** Task 6B.
 - [ ] **Task 6D — Prove the join-to-snapshot browser slice.**
   - **Done when:** routed `/ws` observes exactly one canonical join after open,
+    an oversized final join frame shows inline feedback without opening a socket,
     chat stays disabled before a matching snapshot, room state enables joined UI,
     and `ws:` behavior has no console/page errors.
   - **Files:** `e2e/join.spec.ts`, `src/pixel_scribe_frontend/update.gleam` only if
@@ -807,8 +816,9 @@ and manage useful scrolling.
 
 - [ ] **Task 8A — Implement the multiline composer interaction.**
   - **Done when:** textarea input is controlled, validation uses Task 3B, Enter
-    submits, Shift+Enter inserts LF, IME composition never submits, and invalid
-    input remains with inline feedback.
+    submits, Shift+Enter inserts LF, IME composition never submits, invalid input
+    remains with inline feedback, and an oversized final `send_message` frame is
+    rejected locally without a socket send.
   - **Files:** `src/pixel_scribe_frontend/view.gleam`,
     `src/pixel_scribe_frontend/update.gleam`,
     `test/pixel_scribe_frontend/view_test.gleam`.
@@ -852,9 +862,9 @@ and manage useful scrolling.
 **Implementation notes:**
 
 1. Normalize and validate on submit using Task 3's trusted message constructor.
-   Invalid input stays in the composer with inline text; valid input sends
-   canonical JSON, remains visible, and disables repeat submit while one send is
-   in flight.
+   Invalid input or an oversized final frame stays in the composer with inline
+   text and emits no frame; otherwise valid input sends canonical JSON, remains
+   visible, and disables repeat submit while one send is in flight.
 2. Do not append on submit. On a unique `message_sent`, append/bound by message ID.
    If `sender_id == self_id` and its text matches the in-flight draft, clear the
    draft/in-flight marker; otherwise treat unexpected self ordering explicitly.
@@ -874,7 +884,7 @@ and manage useful scrolling.
 
 - [ ] No message appears before `message_sent`; accepted self/peer events append
   once by ID, stay in server order, and the visible log remains latest-50 bounded.
-- [ ] Empty, over-limit, ninth-line, invalid-control, server invalid-message,
+- [ ] Empty, over-limit, invalid-control, server invalid-message,
   rate-limit, duplicate event, disconnect-while-pending, and safe-text cases all
   preserve the right draft/UI.
 - [ ] Enter, Shift+Enter, and IME composition follow the approved multiline
@@ -1279,8 +1289,8 @@ to JavaScript.
 3. Pure text layout splits accepted LF first, then wraps each explicit line to a
    fixed logical width, caps the result at three visual lines, appends a visual
    ellipsis when truncated, anchors above the avatar, and clamps the bubble
-   rectangle within the current camera viewport. The full eight-line-capable text
-   remains in the DOM.
+   rectangle within the current camera viewport. The full accepted text remains
+   in the DOM.
 4. Schedule only the next required expiry/fade frame. Newer bubble invalidates the
    old timer by identity. Reduced-motion keeps the bubble then removes it at
    expiry without opacity animation.
@@ -1553,10 +1563,10 @@ deterministic edge coverage.
   - **Verify:** focused real-backend two-client test.
   - **Depends:** Task 15A.
 - [ ] **Task 15C — Prove validation, rate, capacity, and recovery.**
-  - **Done when:** invalid username/message, newline normalization, eight-line
-    limit, rate limiting, room capacity where practical, unexpected disconnect,
-    reconnect/new identity, snapshot replacement, draft preservation, and no
-    replay match the canonical contract.
+  - **Done when:** invalid username/message, accepted LF and rejected newline/
+    control cases, encoded-frame limits, rate limiting, room capacity where
+    practical, unexpected disconnect, reconnect/new identity, snapshot
+    replacement, draft preservation, and no replay match the canonical contract.
   - **Files:** `e2e/mvp_backend.spec.ts`; destructive/failure injection remains in
     backend-owned approved fixtures.
   - **Verify:** focused real-backend validation/recovery tests without routed WS.

@@ -65,11 +65,15 @@ protocol, are never sent to the backend, and may differ between clients.
   participant's current bubble. The working lifetime is `6,000ms`, with opacity
   fading only during the final `1,000ms`. Bubble text is clamped and visually
   truncated to three lines; the full message always remains in the DOM chat log.
-- Support multiline chat with a textarea. Normalize CRLF, bare CR, `U+2028`, and
-  `U+2029` to LF; reject every remaining C0/C1 control and DEL; trim; then require
-  `1-500` Unicode grapheme clusters, counting each LF, and at most eight lines.
-  LF is the only control retained in the trusted message value. Enter sends,
-  Shift+Enter inserts LF, and Enter never sends during IME composition.
+- Support multiline chat with a textarea. Allow LF; reject CR, `U+2028`,
+  `U+2029`, every other C0/C1 control, and DEL; trim; then require `1-500`
+  Unicode grapheme clusters, counting each LF. LF is the only control retained
+  in the trusted message value. Enter sends, Shift+Enter inserts LF, and Enter
+  never sends during IME composition.
+- Before sending either `join_room` or `send_message`, serialize the complete
+  JSON object and measure the final UTF-8 text frame. Accept `8,192` bytes and
+  reject `8,193` bytes (or larger) locally; keep the username/draft with inline
+  feedback and emit no frame, preventing the backend's terminal `invalid_event`.
 - Store the username preference in a frontend-written
   `pixel_scribe_username` cookie for `180` days with `Path=/`,
   `SameSite=Strict`, no `Domain`, and `Secure` when the page is HTTPS. It cannot
@@ -182,8 +186,10 @@ JavaScript callbacks.
 
 ### Join and live-event invariants
 
-1. Submitting a valid username stores the normalized preference, opens one new
-   socket generation, and enters `Connecting`.
+1. Submitting a valid username preflights the final `join_room` frame. If it is
+   oversized, keep the username with inline feedback and open no socket;
+   otherwise store the normalized preference, open one new socket generation,
+   and enter `Connecting`.
 2. `SocketOpened` sends exactly one `join_room` for `default` for that generation
    and enters `AwaitingRoomState`.
 3. Chat remains disabled until a valid matching `room_state` supplies `self_id`.
@@ -207,6 +213,7 @@ JavaScript callbacks.
 | --- | --- |
 | `invalid_username` | Keep socket open, return to/focus the username field, show inline feedback, allow another join only if the finalized backend phase permits it. |
 | `invalid_message` | Keep socket and joined state, keep draft, clear in-flight state, show composer feedback. |
+| Oversized final client frame | Keep the username or draft, show inline feedback, and emit no `join_room`/`send_message` frame; this is a local validation failure, not a backend `invalid_event`. |
 | `rate_limited` | Keep draft/socket, clear in-flight state, disable send for one second, announce feedback. |
 | `join_required` | Keep socket unjoined and chat disabled; show protocol feedback without an automatic send loop. |
 | `already_joined` | Preserve the current joined identity and snapshot; report the anomaly without another join. |
@@ -291,8 +298,8 @@ join can still fail; only `room_state` proves recovery.
 ### Gleam tests
 
 - Protocol fixtures for every server event and error plus malformed, missing,
-  wrong-type, additive-field, unknown-event, Unicode, newline-normalization,
-  control-character, grapheme-limit, and eight-line-limit cases.
+  wrong-type, additive-field, unknown-event, Unicode, LF, rejected newline/control,
+  and grapheme-limit cases.
 - Pure transition tests for every connection phase, generation race, error path,
   draft/in-flight behavior, deduplication, snapshot replacement, and reconnect
   timer command.
@@ -310,8 +317,9 @@ join can still fail; only `room_state` proves recovery.
 - Cover join, initial snapshot, duplicate names, presence changes, accepted/self
   chat, validation/rate errors, terminal errors, disconnect/reconnect, stale
   generations, new `self_id`, draft preservation, no offline replay, cookie
-  prefill, keyboard/focus, responsive layout, resize/DPR, self-centered camera,
-  bubbles, and no console errors.
+  prefill, oversized final-frame rejection without a socket send, keyboard/focus,
+  responsive layout, resize/DPR, self-centered camera, bubbles, and no console
+  errors.
 - Use fixed placement/random values, Playwright's controllable clock, reduced
   motion, and fixed `deviceScaleFactor` for deterministic timing/screenshots.
 - Run axe WCAG A/AA scans in username, joined, reconnecting, and terminal states;
@@ -540,13 +548,12 @@ deliberately resolved at named checkpoints:
 
 ## Resolved Message Contract
 
-Approved on 2026-08-09: chat is multiline. At the untrusted boundary, normalize
-CRLF, bare CR, Unicode line separator (`U+2028`), and Unicode paragraph separator
-(`U+2029`) to LF. Reject every other C0/C1 control and DEL, then trim leading and
-trailing whitespace. Require `1-500` Unicode grapheme clusters after
-normalization and trimming, with every LF counting toward the limit, and allow at
-most seven LF characters (eight lines). The trusted message value therefore
-retains LF (`U+000A`) as its only control character.
+Approved on 2026-08-09: chat is multiline. At the untrusted boundary, allow LF
+and reject CR, Unicode line separator (`U+2028`), Unicode paragraph separator
+(`U+2029`), every other C0/C1 control, and DEL. Then trim leading and trailing
+whitespace and require `1-500` Unicode grapheme clusters, with every retained LF
+counting toward the limit. The trusted message value therefore retains LF
+(`U+000A`) as its only control character.
 
 The composer is a multiline textarea: Enter sends, Shift+Enter inserts LF, and
 Enter must not send while IME composition is active. The DOM chat log preserves

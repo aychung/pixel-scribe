@@ -131,7 +131,8 @@ Message rules:
 - Allow LF (`\n`) characters inside messages for multiline text.
 - Reject other control characters, including CR (`\r`) and Unicode line
   separators.
-- Require 1–500 Unicode characters after trimming.
+- Require 1–500 Unicode grapheme clusters after trimming, counting each LF as
+  one grapheme cluster.
 - Reject oversized, malformed, binary, or unknown events.
 - Limit each decoded WebSocket event to 8 KiB in addition to the character limit.
 

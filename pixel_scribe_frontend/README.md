@@ -37,6 +37,7 @@ drives objects or coordinates on it.
    the browser cookie, but do not treat it as identity.
 2. Trim and validate the username using the same visible limits as the backend:
    1–32 Unicode grapheme clusters, with no control characters or line breaks.
+   Preflight the complete `join_room` JSON text frame before opening a socket.
 3. On submit, persist the preference, open the same-origin `GET /ws` WebSocket,
    and show a clear connecting state. When the socket opens, immediately send
    one `join_room` event for `default`; the server requires a join within 10
@@ -112,7 +113,10 @@ origin in production.
 - Each frame is one UTF-8 JSON object with a string `type` discriminator.
 - Event and field names are `snake_case`.
 - Every room-scoped event has top-level `room_id`.
-- Client events must be text frames no larger than 8 KiB. Do not send binary.
+- Before sending either `join_room` or `send_message`, serialize the complete
+  JSON object and measure the resulting UTF-8 JSON text frame. Accept exactly
+  `8,192` bytes or fewer; reject `8,193` bytes before sending. Client events are
+  text frames only; do not send binary.
 - Unknown client fields are ignored for forward compatibility.
 - Treat IDs as opaque strings and timestamps as server-generated RFC 3339 UTC.
 - Decode server data at the boundary. Tolerate additive optional fields and
@@ -165,23 +169,24 @@ Usernames are not unique. Never key participants or ownership by username; use
 | --- | --- |
 | Username | Trim; 1–32 Unicode grapheme clusters; no controls or line breaks; duplicates, spaces, and emoji allowed |
 | Room ID | `[a-z0-9][a-z0-9_-]{0,63}`; only `default` is supported |
-| Message | Normalize CRLF, CR, `U+2028`, and `U+2029` to LF; reject every other C0/C1 control and DEL; trim; 1–500 Unicode grapheme clusters including LF; at most 8 lines; plain text only |
-| Event | One JSON text frame, at most 8,192 bytes |
+| Message | Allow LF; reject CR, `U+2028`, `U+2029`, every other C0/C1 control, and DEL; trim; 1–500 Unicode grapheme clusters including LF; plain text only |
+| Client event frame | The final UTF-8 JSON text frame for both `join_room` and `send_message` is at most 8,192 bytes; 8,192 is accepted and 8,193 is rejected |
 | Room capacity | 50 simultaneous presences |
 | Snapshot history | Latest 50 accepted messages |
 | Chat rate | Burst of 5, then refill 1 message per second per connection |
 
-Client validation improves feedback but never replaces server validation. Render
-all usernames, messages, and error text as text, never as HTML.
+Client validation improves feedback but never replaces server validation. If the
+final encoded `join_room` or `send_message` frame exceeds 8,192 bytes, keep the
+username or draft, show inline feedback, and emit no frame. This local rejection
+prevents the backend's terminal `invalid_event` response. Render all usernames,
+messages, and error text as text, never as HTML.
 
 LF (`U+000A`) is the only control character retained in a normalized message.
-CRLF, bare CR, Unicode line separator (`U+2028`), and Unicode paragraph separator
-(`U+2029`) are accepted only as input spellings of a line break and normalize to
-LF before trimming and length checks. A normalized message may contain at most
-seven LF characters (eight lines). Tabs, NUL, escape, backspace, DEL, and all
-other C0/C1 controls are invalid. Preserve accepted line breaks in the DOM chat
-log. Canvas bubbles may visually truncate to three lines without changing the
-full DOM message.
+CRLF, bare CR, Unicode line separator (`U+2028`), Unicode paragraph separator
+(`U+2029`), tabs, NUL, escape, backspace, DEL, and all other C0/C1 controls are
+invalid. Each accepted LF counts toward the 500-grapheme limit. Preserve accepted
+line breaks in the DOM chat log. Canvas bubbles may visually truncate to three
+lines without changing the full DOM message.
 
 ### Error handling
 
