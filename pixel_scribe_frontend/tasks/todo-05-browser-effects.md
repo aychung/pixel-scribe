@@ -6,7 +6,7 @@ initial preference loading without granting JavaScript ownership of app state.
 
 ### Work units
 
-- [ ] **Task 5A — Implement the pure cookie contract.**
+- [x] **Task 5A — Implement the pure cookie contract.**
   - **Done when:** only `pixel_scribe_username` is parsed/serialized; valid Unicode
     round-trips through percent encoding; invalid/missing values become no
     preference; and attributes exactly match the HTTPS/non-HTTPS policy.
@@ -14,7 +14,7 @@ initial preference loading without granting JavaScript ownership of app state.
     `test/pixel_scribe_frontend/browser_test.gleam`.
   - **Verify:** focused cookie policy tests plus format, build, and `gleam test`.
   - **Depends:** Tasks 3B and 4F.
-- [ ] **Task 5B — Add cookie and secure-seed browser externals.**
+- [x] **Task 5B — Add cookie and secure-seed browser externals.**
   - **Done when:** narrow typed externals read/write only the named cookie and use
     `crypto.getRandomValues` for a page seed, with no logging or production test
     global.
@@ -23,7 +23,7 @@ initial preference loading without granting JavaScript ownership of app state.
   - **Verify:** `gleam format --check src test`; `gleam build`; review the complete
     FFI export list and failure paths.
   - **Depends:** Task 5A.
-- [ ] **Task 5C — Add typed timer effects and cleanup.**
+- [x] **Task 5C — Add typed timer effects and cleanup.**
   - **Done when:** schedule/cancel effects dispatch timer identity and generation,
     remove fired/cancelled handles, and stale callbacks cannot affect replacement
     state.
@@ -32,7 +32,7 @@ initial preference loading without granting JavaScript ownership of app state.
   - **Verify:** focused timer boundary tests where possible; format, build, and
     `gleam test`; inspect cleanup branches.
   - **Depends:** Task 5B.
-- [ ] **Task 5D — Add fixed-target focus and chat-scroll effects.**
+- [x] **Task 5D — Add fixed-target focus and chat-scroll effects.**
   - **Done when:** focus and scroll commands target only fixed application-owned
     IDs, report only typed facts needed by update, and safely no-op after removal.
   - **Files:** `src/pixel_scribe_frontend/browser.gleam`,
@@ -40,7 +40,7 @@ initial preference loading without granting JavaScript ownership of app state.
   - **Verify:** format, build, and `gleam test`; review that no arbitrary selector,
     text, cookie, or DOM snapshot crosses the FFI.
   - **Depends:** Task 5C.
-- [ ] **Task 5E — Wire startup preference and browser behavior.**
+- [x] **Task 5E — Wire startup preference and browser behavior.**
   - **Done when:** init loads a validated preference and seed through effects,
     valid submit writes the cookie, validation failure focuses the username field,
     and Playwright proves Unicode prefill plus exact cookie attributes.
@@ -67,22 +67,22 @@ initial preference loading without granting JavaScript ownership of app state.
 
 **Acceptance criteria:**
 
-- [ ] A valid saved username is prefilled, invalid cookie data is ignored, and a
+- [x] A valid saved username is prefilled, invalid cookie data is ignored, and a
   valid submit writes the exact Strict 180-day preference attributes.
-- [ ] Timer/focus/scroll callbacks are typed and stale-safe, with cleanup paths
+- [x] Timer/focus/scroll callbacks are typed and stale-safe, with cleanup paths
   that cannot affect a replacement generation.
-- [ ] Browser FFI owns handles only; cookie parsing/serialization and policy are
+- [x] Browser FFI owns handles only; cookie parsing/serialization and policy are
   independently unit-tested.
 
 **Verification:**
 
-- [ ] `gleam format --check src test`
-- [ ] `gleam build`
-- [ ] `gleam test`
-- [ ] Add Playwright checks for prefill, encoded Unicode, Strict/Path/Max-Age,
+- [x] `gleam format --check src test`
+- [x] `gleam build`
+- [x] `gleam test`
+- [x] Add Playwright checks for prefill, encoded Unicode, Strict/Path/Max-Age,
   and keyboard focus after validation failure; unit-test HTTPS-conditional Secure
   serialization.
-- [ ] `bunx playwright test --project=chromium --reporter=line --workers=1`
+- [x] `bunx playwright test --project=chromium --reporter=line --workers=1`
 
 **Dependencies:** Tasks 2 and 4.
 
@@ -95,4 +95,3 @@ initial preference loading without granting JavaScript ownership of app state.
 - `test/pixel_scribe_frontend/browser_test.gleam`
 
 **Estimated scope:** Medium, 5 files.
-

@@ -16,7 +16,7 @@ a later task merely because a nearby file is already open.
 - [x] [Task 2 — Test harnesses](todo-02-test-harness.md)
 - [x] [Task 3 — Protocol domain values and codecs](todo-03-protocol.md)
 - [x] [Task 4 — Connection state machine and backoff](todo-04-connection-state.md)
-- [ ] [Task 5 — Browser preferences and DOM effects](todo-05-browser-effects.md)
+- [x] [Task 5 — Browser preferences and DOM effects](todo-05-browser-effects.md)
 - [ ] [Foundation checkpoint](todo-checkpoint-foundation.md)
 
 ## Real-time UI
