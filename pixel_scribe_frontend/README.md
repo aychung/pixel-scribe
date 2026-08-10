@@ -83,8 +83,8 @@ not a substitute for accessible DOM content.
 - Respect safe-area insets on devices with notches or home indicators.
 
 The initial `22rem` rail and `768px` layout breakpoint are working defaults, not
-backend constraints. Keep them as named CSS custom properties so the design can
-change without touching application logic.
+backend constraints. Keep the rail width as a named CSS custom property; the
+native media query is the single source of truth for the layout breakpoint.
 
 ## Frontend/backend contract
 

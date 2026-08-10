@@ -2,8 +2,9 @@
 
 ## Status
 
-Approved on 2026-08-09. This document plans the frontend implementation only.
-The final same-origin acceptance task remains gated on backend Tasks 7-10.
+Approved on 2026-08-09. Task 0 and Task 1 are complete as of 2026-08-10.
+This document plans the remaining frontend implementation only. The final
+same-origin acceptance task remains gated on backend Tasks 7-10.
 
 ## Source of Truth and Precedence
 
@@ -277,8 +278,8 @@ join can still fail; only `room_state` proves recovery.
 ### Responsive and accessible DOM
 
 - Mobile first. Under `768px`, use canvas then chat as rows; at/above `768px`,
-  use `minmax(0, 1fr)` plus a `22rem` chat rail. Keep both values as CSS custom
-  properties.
+  use `minmax(0, 1fr)` plus a `22rem` chat rail. Keep the rail width as a CSS
+  custom property and use the native media query for the breakpoint.
 - Use `100dvh`, safe-area insets, independent chat scrolling, and a composer that
   remains visible with mobile browser chrome/software keyboard.
 - Username and composer use real labels and native controls. Status uses a
@@ -437,10 +438,10 @@ the unit names the package-manager command that produces them.
   - [x] 0A: Resolve Gleam dependencies.
   - [x] 0B: Resolve browser-test dependencies and scripts.
   - [x] 0C: Configure Lustre output and artifact ignores.
-- [ ] Task 1 (1A-1C): Bootstrap the explicit Lustre SPA shell.
+- [x] Task 1 (1A-1C): Bootstrap the explicit Lustre SPA shell.
   - [x] 1A: Create the explicit MVU skeleton.
-  - [ ] 1B: Render the semantic username form.
-  - [ ] 1C: Style the responsive shell.
+  - [x] 1B: Render the semantic username form.
+  - [x] 1C: Style the responsive shell.
 - [ ] Task 2 (2A-2C): Establish the Gleam and Playwright test harnesses.
 - [ ] Task 3 (3A-3D): Implement trusted values, validation, and protocol codecs.
 - [ ] Task 4 (4A-4F): Implement the deterministic state machine and backoff.
