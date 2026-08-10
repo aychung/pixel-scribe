@@ -14,7 +14,7 @@ a later task merely because a nearby file is already open.
 - [x] [Task 0 — Toolchain and artifact policy](todo-00-toolchain.md)
 - [x] [Task 1 — Lustre SPA shell](todo-01-shell.md)
 - [x] [Task 2 — Test harnesses](todo-02-test-harness.md)
-- [ ] [Task 3 — Protocol domain values and codecs](todo-03-protocol.md)
+- [x] [Task 3 — Protocol domain values and codecs](todo-03-protocol.md)
 - [ ] [Task 4 — Connection state machine and backoff](todo-04-connection-state.md)
 - [ ] [Task 5 — Browser preferences and DOM effects](todo-05-browser-effects.md)
 - [ ] [Foundation checkpoint](todo-checkpoint-foundation.md)
