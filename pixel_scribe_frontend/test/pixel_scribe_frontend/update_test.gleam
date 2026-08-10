@@ -66,8 +66,8 @@ pub fn every_message_variant_is_a_trusted_constructor_test() {
     update.DraftInput("Hello"),
     update.SubmitMessage,
     update.SocketOpened(1),
-    update.SocketClosed(1, True),
-    update.SocketError(1),
+    update.SocketClosed(1, True, 0.5),
+    update.SocketError(1, 0.5),
     update.ServerEvent(1, 0, domain.UnknownEvent),
     update.RateLimitTimerFired(1, 1000),
     update.ReconnectTimerFired(1, 8),
@@ -747,7 +747,7 @@ pub fn submit_message_requires_matching_joined_snapshot_test() {
   )
 }
 
-pub fn matching_disconnect_clears_only_in_flight_and_marks_snapshot_stale_test() {
+pub fn matching_disconnect_enters_reconnect_and_preserves_draft_test() {
   let self_id = domain.connection_id_from_string("self")
   let joined = joined_model(15, self_id, [])
   let sending =
@@ -758,13 +758,14 @@ pub fn matching_disconnect_clears_only_in_flight_and_marks_snapshot_stale_test()
     )
 
   let #(updated, commands) =
-    update.transition(sending, update.SocketClosed(15, False))
+    update.transition(sending, update.SocketClosed(15, False, 0.5))
 
-  assert updated.phase == model.Joined(15, self_id)
+  assert updated.phase == model.WaitingToReconnect(16, 1, 500)
+  assert updated.socket_generation == 16
   assert updated.draft == "keep me"
   assert updated.send_in_flight == None
   assert snapshot_is_stale(updated)
-  assert commands == []
+  assert commands == [update.ScheduleReconnect(16, 16, 500)]
 }
 
 pub fn stale_disconnect_does_not_clear_replacement_send_test() {
@@ -777,7 +778,7 @@ pub fn stale_disconnect_does_not_clear_replacement_send_test() {
     )
 
   let #(updated, commands) =
-    update.transition(joined, update.SocketClosed(15, False))
+    update.transition(joined, update.SocketClosed(15, False, 0.5))
 
   assert updated == joined
   assert commands == []
@@ -927,9 +928,13 @@ pub fn rate_limit_deadline_is_generation_and_deadline_safe_test() {
   assert available_commands == []
 
   let #(closed, close_commands) =
-    update.transition(limited, update.SocketClosed(20, False))
+    update.transition(limited, update.SocketClosed(20, False, 0.5))
   assert closed.rate_limit_until == None
-  assert close_commands == [update.CancelRateLimit(20, 5000)]
+  assert close_commands
+    == [
+      update.CancelRateLimit(20, 5000),
+      update.ScheduleReconnect(21, 21, 500),
+    ]
 }
 
 pub fn terminal_error_close_callbacks_are_no_ops_test() {
@@ -955,7 +960,7 @@ pub fn terminal_error_close_callbacks_are_no_ops_test() {
     == [update.CloseSocket(21), update.CancelRateLimit(21, 5000)]
 
   let #(after_close, callbacks) =
-    update.transition(blocked, update.SocketClosed(21, False))
+    update.transition(blocked, update.SocketClosed(21, False, 0.5))
   assert after_close == blocked
   assert callbacks == []
 }
@@ -1299,8 +1304,8 @@ fn msg_kind(message: update.Msg) -> Int {
     update.DraftInput(_) -> 2
     update.SubmitMessage -> 3
     update.SocketOpened(_) -> 4
-    update.SocketClosed(_, _) -> 5
-    update.SocketError(_) -> 6
+    update.SocketClosed(_, _, _) -> 5
+    update.SocketError(_, _) -> 6
     update.ServerEvent(_, _, _) -> 7
     update.RateLimitTimerFired(_, _) -> 8
     update.ReconnectTimerFired(_, _) -> 9

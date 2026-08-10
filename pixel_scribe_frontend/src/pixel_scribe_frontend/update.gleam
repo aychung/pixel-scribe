@@ -4,6 +4,7 @@ import lustre/effect.{type Effect}
 import pixel_scribe_frontend/domain
 import pixel_scribe_frontend/model.{type Model}
 import pixel_scribe_frontend/protocol
+import pixel_scribe_frontend/reconnect
 import pixel_scribe_frontend/validation
 
 /// Trusted application inputs and decoded server events. Raw browser payloads
@@ -14,8 +15,8 @@ pub type Msg {
   DraftInput(value: String)
   SubmitMessage
   SocketOpened(generation: Int)
-  SocketClosed(generation: Int, deliberate: Bool)
-  SocketError(generation: Int)
+  SocketClosed(generation: Int, deliberate: Bool, random_unit: Float)
+  SocketError(generation: Int, random_unit: Float)
   ServerEvent(generation: Int, received_at_ms: Int, event: domain.ServerEvent)
   ReconnectTimerFired(generation: Int, timer_id: Int)
   RateLimitTimerFired(generation: Int, deadline_ms: Int)
@@ -56,12 +57,18 @@ pub fn transition(model: Model, message: Msg) -> #(Model, List(Command)) {
     SubmitUsername -> submit_username(model)
     SubmitMessage -> submit_message(model)
     SocketOpened(generation) -> socket_opened(model, generation)
-    SocketClosed(generation, _) -> socket_closed(model, generation)
+    SocketClosed(generation, deliberate, random_unit) ->
+      socket_closed(model, generation, deliberate, random_unit)
+    SocketError(generation, random_unit) ->
+      socket_error(model, generation, random_unit)
     ServerEvent(generation, received_at_ms, event) ->
       server_event(model, generation, received_at_ms, event)
     RateLimitTimerFired(generation, deadline_ms) ->
       rate_limit_timer_fired(model, generation, deadline_ms)
-    _ -> #(model, [])
+    ReconnectTimerFired(generation, timer_id) ->
+      reconnect_timer_fired(model, generation, timer_id)
+    RetryRequested -> retry_requested(model)
+    ReturnToUsername -> return_to_username(model)
   }
 }
 
@@ -216,9 +223,10 @@ fn server_event(
               phase: model.Joined(generation, self_id),
               room_snapshot: Some(snapshot),
               reconnect_attempt: 0,
+              reconnect_timer: None,
               connection_feedback: None,
             ),
-            [],
+            cancel_reconnect(model),
           )
         }
         _ -> #(model, [])
@@ -638,19 +646,212 @@ fn latest_50(messages: List(domain.ChatMessage)) -> List(domain.ChatMessage) {
   }
 }
 
-fn socket_closed(model: Model, generation: Int) -> #(Model, List(Command)) {
+fn socket_closed(
+  model: Model,
+  generation: Int,
+  deliberate: Bool,
+  random_unit: Float,
+) -> #(Model, List(Command)) {
   case is_current_generation(model.phase, generation) {
     False -> #(model, [])
-    True -> {
-      let updated =
-        model.Model(
-          ..model,
-          room_snapshot: mark_snapshot_stale(model.room_snapshot),
-          send_in_flight: None,
-          rate_limit_until: None,
-        )
-      #(updated, cancel_rate_limit(model, generation))
-    }
+    True ->
+      case deliberate {
+        True -> cleanup_closed_socket(model, generation)
+        False -> schedule_reconnect(model, generation, random_unit)
+      }
+  }
+}
+
+fn socket_error(
+  model: Model,
+  generation: Int,
+  random_unit: Float,
+) -> #(Model, List(Command)) {
+  case is_current_generation(model.phase, generation) {
+    False -> #(model, [])
+    True -> schedule_reconnect(model, generation, random_unit)
+  }
+}
+
+fn cleanup_closed_socket(
+  model: Model,
+  generation: Int,
+) -> #(Model, List(Command)) {
+  let updated =
+    model.Model(
+      ..model,
+      room_snapshot: mark_snapshot_stale(model.room_snapshot),
+      send_in_flight: None,
+      rate_limit_until: None,
+    )
+  #(updated, cancel_rate_limit(model, generation))
+}
+
+fn schedule_reconnect(
+  model: Model,
+  generation: Int,
+  random_unit: Float,
+) -> #(Model, List(Command)) {
+  let next_generation = model.socket_generation + 1
+  let next_attempt = model.reconnect_attempt + 1
+  let delay_ms = reconnect.delay_ms(model.reconnect_attempt, random_unit)
+  let timer_id = next_generation
+  let updated =
+    model.Model(
+      ..model,
+      phase: model.WaitingToReconnect(next_generation, next_attempt, delay_ms),
+      socket_generation: next_generation,
+      reconnect_attempt: next_attempt,
+      reconnect_timer: Some(model.ReconnectTimer(next_generation, timer_id)),
+      room_snapshot: mark_snapshot_stale(model.room_snapshot),
+      send_in_flight: None,
+      rate_limit_until: None,
+    )
+  let commands = cancel_rate_limit(model, generation)
+  #(
+    updated,
+    list.append(commands, [
+      ScheduleReconnect(next_generation, timer_id, delay_ms),
+    ]),
+  )
+}
+
+fn reconnect_timer_fired(
+  model: Model,
+  generation: Int,
+  timer_id: Int,
+) -> #(Model, List(Command)) {
+  case model.phase, model.reconnect_timer {
+    model.WaitingToReconnect(next_generation, attempt, _),
+      Some(model.ReconnectTimer(expected_generation, expected_timer_id))
+      if generation == expected_generation
+      && timer_id == expected_timer_id
+      && next_generation == expected_generation
+    -> #(
+      model.Model(
+        ..model,
+        phase: model.Connecting(next_generation, attempt),
+        reconnect_timer: None,
+      ),
+      [OpenSocket(next_generation)],
+    )
+    _, _ -> #(model, [])
+  }
+}
+
+fn retry_requested(model: Model) -> #(Model, List(Command)) {
+  case model.phase, model.reconnect_timer {
+    model.WaitingToReconnect(next_generation, attempt, _), Some(timer) ->
+      manual_retry(model, next_generation, attempt, timer)
+    model.Connecting(generation, _), _ -> manual_retry_active(model, generation)
+    model.AwaitingRoomState(generation, _), _ ->
+      manual_retry_active(model, generation)
+    model.Joined(generation, _), _ -> manual_retry_active(model, generation)
+    model.Blocked(_), _ -> manual_retry_without_timer(model)
+    _, _ -> #(model, [])
+  }
+}
+
+fn manual_retry(
+  model: Model,
+  next_generation: Int,
+  attempt: Int,
+  timer: model.ReconnectTimer,
+) -> #(Model, List(Command)) {
+  let updated =
+    model.Model(
+      ..model,
+      phase: model.Connecting(next_generation, attempt),
+      socket_generation: next_generation,
+      reconnect_timer: None,
+      feedback: None,
+      connection_feedback: None,
+    )
+  #(updated, [
+    CancelReconnect(timer.generation, timer.timer_id),
+    OpenSocket(next_generation),
+  ])
+}
+
+fn manual_retry_active(
+  model: Model,
+  generation: Int,
+) -> #(Model, List(Command)) {
+  let next_generation = model.socket_generation + 1
+  let updated =
+    model.Model(
+      ..model,
+      phase: model.Connecting(next_generation, model.reconnect_attempt),
+      socket_generation: next_generation,
+      reconnect_timer: None,
+      room_snapshot: mark_snapshot_stale(model.room_snapshot),
+      send_in_flight: None,
+      rate_limit_until: None,
+      feedback: None,
+      connection_feedback: None,
+    )
+  let commands =
+    cancel_reconnect(model)
+    |> list.append(cancel_rate_limit_for_model(model))
+    |> list.append([CloseSocket(generation), OpenSocket(next_generation)])
+  #(updated, commands)
+}
+
+fn manual_retry_without_timer(model: Model) -> #(Model, List(Command)) {
+  let generation = model.socket_generation + 1
+  let updated =
+    model.Model(
+      ..model,
+      phase: model.Connecting(generation, model.reconnect_attempt),
+      socket_generation: generation,
+      reconnect_timer: None,
+      feedback: None,
+      connection_feedback: None,
+    )
+  #(updated, [OpenSocket(generation)])
+}
+
+fn return_to_username(model: Model) -> #(Model, List(Command)) {
+  let updated =
+    model.Model(
+      ..model,
+      phase: model.ChoosingUsername,
+      room_snapshot: None,
+      send_in_flight: None,
+      reconnect_timer: None,
+      rate_limit_until: None,
+      feedback: None,
+      connection_feedback: None,
+    )
+  let commands = case model.phase {
+    model.Connecting(generation, _)
+    | model.AwaitingRoomState(generation, _)
+    | model.Joined(generation, _) -> [CloseSocket(generation)]
+    _ -> []
+  }
+  let commands =
+    cancel_reconnect(model)
+    |> list.append(commands)
+    |> list.append(cancel_rate_limit_for_model(model))
+    |> list.append([FocusUsername])
+  #(updated, commands)
+}
+
+fn cancel_reconnect(model: Model) -> List(Command) {
+  case model.reconnect_timer {
+    Some(timer) -> [CancelReconnect(timer.generation, timer.timer_id)]
+    None -> []
+  }
+}
+
+fn cancel_rate_limit_for_model(model: Model) -> List(Command) {
+  case model.rate_limit_until {
+    Some(deadline_ms) ->
+      case current_phase_generation(model.phase) {
+        Some(generation) -> [CancelRateLimit(generation, deadline_ms)]
+        None -> []
+      }
+    None -> []
   }
 }
 

@@ -62,7 +62,8 @@ not open a real WebSocket; it proves behavior before browser effects are wired.
     explicit, and only room state resets attempts.
   - **Files:** `src/pixel_scribe_frontend/reconnect.gleam`,
     `test/pixel_scribe_frontend/reconnect_test.gleam`,
-    `src/pixel_scribe_frontend/update.gleam`.
+    `src/pixel_scribe_frontend/update.gleam`,
+    `test/pixel_scribe_frontend/update_test.gleam`.
   - **Verify:** exact-bound and timer-transition tests plus format, build, and
     `gleam test`.
   - **Depends:** Task 4E.
