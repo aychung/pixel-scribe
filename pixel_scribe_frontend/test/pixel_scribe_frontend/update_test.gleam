@@ -69,13 +69,15 @@ pub fn every_message_variant_is_a_trusted_constructor_test() {
     update.SocketClosed(1, True, 0.5),
     update.SocketError(1, 0.5),
     update.ServerEvent(1, 0, domain.UnknownEvent),
+    update.ServerDecodeFailed(1),
     update.RateLimitTimerFired(1, 1000),
     update.ReconnectTimerFired(1, 8),
     update.RetryRequested,
     update.ReturnToUsername,
   ]
 
-  assert list.map(messages, msg_kind) == [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+  assert list.map(messages, msg_kind)
+    == [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 }
 
 pub fn every_external_command_is_a_closed_trusted_value_test() {
@@ -1276,6 +1278,84 @@ pub fn active_wrong_generation_errors_are_ignored_test() {
   })
 }
 
+pub fn malformed_server_data_fails_closed_only_for_active_generation_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let active =
+    model.Model(
+      ..joined_model(26, self_id, []),
+      draft: "preserve me",
+      send_in_flight: Some(model.SendInFlight(26, "preserve me")),
+      rate_limit_until: Some(5000),
+    )
+
+  let #(blocked, commands) =
+    update.transition(active, update.ServerDecodeFailed(26))
+  assert blocked.phase == model.Blocked(model.ProtocolFailure)
+  assert snapshot_is_stale(blocked)
+  assert blocked.draft == "preserve me"
+  assert blocked.send_in_flight == None
+  assert blocked.rate_limit_until == None
+  assert blocked.connection_feedback == Some("Protocol error.")
+  assert commands == [update.CloseSocket(26), update.CancelRateLimit(26, 5000)]
+
+  let #(stale, stale_commands) =
+    update.transition(active, update.ServerDecodeFailed(25))
+  assert stale == active
+  assert stale_commands == []
+
+  let inactive_phases = [
+    model.ChoosingUsername,
+    model.WaitingToReconnect(27, 1, 500),
+    model.Blocked(model.ProtocolFailure),
+  ]
+  list.each(inactive_phases, fn(phase) {
+    let inactive = model_for_phase(phase)
+    let #(ignored, ignored_commands) =
+      update.transition(inactive, update.ServerDecodeFailed(26))
+    assert ignored == inactive
+    assert ignored_commands == []
+  })
+
+  let #(unknown, unknown_commands) =
+    update.transition(active, update.ServerEvent(26, 4000, domain.UnknownEvent))
+  assert unknown == active
+  assert unknown_commands == []
+}
+
+pub fn current_generation_wrong_room_structured_error_fails_closed_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let other_room = domain.room_id_from_string("other")
+  let active =
+    model.Model(
+      ..joined_model(27, self_id, []),
+      draft: "preserve me",
+      send_in_flight: Some(model.SendInFlight(27, "preserve me")),
+      rate_limit_until: Some(5000),
+    )
+  let event =
+    domain.ServerError(domain.ErrorEvent(
+      Some(other_room),
+      domain.InvalidMessage,
+      "server feedback",
+      True,
+    ))
+
+  let #(blocked, commands) =
+    update.transition(active, update.ServerEvent(27, 4000, event))
+  assert blocked.phase == model.Blocked(model.ProtocolFailure)
+  assert snapshot_is_stale(blocked)
+  assert blocked.draft == "preserve me"
+  assert blocked.send_in_flight == None
+  assert blocked.rate_limit_until == None
+  assert blocked.connection_feedback == Some("Protocol error.")
+  assert commands == [update.CloseSocket(27), update.CancelRateLimit(27, 5000)]
+
+  let #(stale, stale_commands) =
+    update.transition(active, update.ServerEvent(26, 4000, event))
+  assert stale == active
+  assert stale_commands == []
+}
+
 fn option_present(value: Option(a)) -> Bool {
   case value {
     Some(_) -> True
@@ -1422,10 +1502,11 @@ fn msg_kind(message: update.Msg) -> Int {
     update.SocketClosed(_, _, _) -> 5
     update.SocketError(_, _) -> 6
     update.ServerEvent(_, _, _) -> 7
-    update.RateLimitTimerFired(_, _) -> 8
-    update.ReconnectTimerFired(_, _) -> 9
-    update.RetryRequested -> 10
-    update.ReturnToUsername -> 11
+    update.ServerDecodeFailed(_) -> 8
+    update.RateLimitTimerFired(_, _) -> 9
+    update.ReconnectTimerFired(_, _) -> 10
+    update.RetryRequested -> 11
+    update.ReturnToUsername -> 12
   }
 }
 

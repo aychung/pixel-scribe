@@ -18,6 +18,7 @@ pub type Msg {
   SocketClosed(generation: Int, deliberate: Bool, random_unit: Float)
   SocketError(generation: Int, random_unit: Float)
   ServerEvent(generation: Int, received_at_ms: Int, event: domain.ServerEvent)
+  ServerDecodeFailed(generation: Int)
   ReconnectTimerFired(generation: Int, timer_id: Int)
   RateLimitTimerFired(generation: Int, deadline_ms: Int)
   RetryRequested
@@ -63,6 +64,7 @@ pub fn transition(model: Model, message: Msg) -> #(Model, List(Command)) {
       socket_error(model, generation, random_unit)
     ServerEvent(generation, received_at_ms, event) ->
       server_event(model, generation, received_at_ms, event)
+    ServerDecodeFailed(generation) -> server_decode_failed(model, generation)
     RateLimitTimerFired(generation, deadline_ms) ->
       rate_limit_timer_fired(model, generation, deadline_ms)
     ReconnectTimerFired(generation, timer_id) ->
@@ -210,12 +212,23 @@ fn server_event(
   }
 }
 
+fn server_decode_failed(
+  model: Model,
+  generation: Int,
+) -> #(Model, List(Command)) {
+  case is_current_generation(model.phase, generation) {
+    True -> protocol_failure(model, generation)
+    False -> #(model, [])
+  }
+}
+
 fn room_id_for_event(event: domain.ServerEvent) -> Option(domain.RoomId) {
   case event {
     domain.RoomState(room_id, _, _, _)
     | domain.UserJoined(room_id, _)
     | domain.UserLeft(room_id, _)
     | domain.MessageSent(room_id, _) -> Some(room_id)
+    domain.ServerError(error) -> error.room_id
     _ -> None
   }
 }
