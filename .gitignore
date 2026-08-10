@@ -2,5 +2,6 @@
 *.ez
 /pixel_scribe_frontend/build
 /pixel_scribe_backend/build
+/pixel_scribe_frontend/node_modules/
 erl_crash.dump
 .obsidian/
