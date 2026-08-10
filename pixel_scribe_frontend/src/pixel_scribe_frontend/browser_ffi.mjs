@@ -1,5 +1,94 @@
 const USERNAME_COOKIE_PREFIX = "pixel_scribe_username=";
 
+// A timer is owned by its kind and opaque identity. Its generation is retained
+// on the entry for cancellation checks and callback dispatch. Keeping the
+// entry object in the map lets a callback prove it is still the currently
+// registered timer even if clearTimeout cannot prevent an already queued
+// callback.
+const timerHandles = new Map();
+
+function timerKey(timerKind, timerId) {
+  return `${timerKind}:${timerId}`;
+}
+
+function validTimerArguments(timerKind, generation, timerId) {
+  return (
+    Number.isSafeInteger(timerKind) &&
+    timerKind >= 0 &&
+    timerKind <= 2 &&
+    Number.isSafeInteger(generation) &&
+    Number.isSafeInteger(timerId)
+  );
+}
+
+export function schedule_timer(timerKind, generation, timerId, delayMs, callback) {
+  if (
+    !validTimerArguments(timerKind, generation, timerId) ||
+    !Number.isSafeInteger(delayMs) ||
+    delayMs < 0 ||
+    typeof callback !== "function" ||
+    typeof globalThis.setTimeout !== "function"
+  ) {
+    return undefined;
+  }
+
+  const key = timerKey(timerKind, timerId);
+  const previous = timerHandles.get(key);
+  if (previous !== undefined) {
+    try {
+      globalThis.clearTimeout(previous.handle);
+    } catch (_error) {
+      // A missing or replaced browser timer is already safe to discard.
+    }
+    timerHandles.delete(key);
+  }
+
+  const entry = { generation, handle: undefined };
+  timerHandles.set(key, entry);
+
+  try {
+    entry.handle = globalThis.setTimeout(() => {
+      if (timerHandles.get(key) !== entry) {
+        return;
+      }
+
+      // Remove before dispatching so a callback that triggers cleanup cannot
+      // accidentally cancel or retain an already-fired handle.
+      timerHandles.delete(key);
+      callback(generation, timerId);
+    }, delayMs);
+  } catch (_error) {
+    timerHandles.delete(key);
+  }
+
+  return undefined;
+}
+
+export function cancel_timer(timerKind, generation, timerId) {
+  if (
+    !validTimerArguments(timerKind, generation, timerId)
+  ) {
+    return undefined;
+  }
+
+  const key = timerKey(timerKind, timerId);
+  const entry = timerHandles.get(key);
+  if (entry === undefined || entry.generation !== generation) {
+    return undefined;
+  }
+
+  timerHandles.delete(key);
+  if (typeof globalThis.clearTimeout === "function") {
+    try {
+      globalThis.clearTimeout(entry.handle);
+    } catch (_error) {
+      // Cleanup is idempotent even if the browser rejects an old handle.
+    }
+  }
+
+  return undefined;
+}
+
 export function read_document_cookie() {
   try {
     if (typeof document === "undefined") {

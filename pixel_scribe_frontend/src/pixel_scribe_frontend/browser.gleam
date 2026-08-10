@@ -2,6 +2,7 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/string
 import gleam/uri
+import lustre/effect.{type Effect}
 import pixel_scribe_frontend/validation
 
 const username_cookie_name = "pixel_scribe_username"
@@ -19,6 +20,27 @@ fn is_https() -> Bool
 
 @external(javascript, "./browser_ffi.mjs", "generate_page_seed")
 fn generate_page_seed() -> Int
+
+@external(javascript, "./browser_ffi.mjs", "schedule_timer")
+fn schedule_timer_ffi(
+  timer_kind: Int,
+  generation: Int,
+  timer_id: Int,
+  delay_ms: Int,
+  callback: fn(Int, Int) -> Nil,
+) -> Nil
+
+@external(javascript, "./browser_ffi.mjs", "cancel_timer")
+fn cancel_timer_ffi(timer_kind: Int, generation: Int, timer_id: Int) -> Nil
+
+/// Namespaces for timers owned by separate application concerns. A timer ID
+/// is opaque within its namespace, so reconnect cleanup cannot cancel a
+/// rate-limit timer that happens to use the same integer.
+pub type TimerKind {
+  Reconnect
+  RateLimit
+  Bubble
+}
 
 /// Reads and validates the frontend-owned username preference.
 ///
@@ -54,6 +76,51 @@ pub fn page_seed() -> Int {
 /// Injects a deterministic seed source for pure callers and tests.
 pub fn page_seed_with(source: fn() -> Int) -> Int {
   source()
+}
+
+/// Schedules a browser timer that sends its typed identity back through the
+/// supplied Lustre message constructor. The generation is deliberately part
+/// of the callback, so the state machine can ignore a callback from a stale
+/// socket lifetime even when a cancellation races with the browser timer.
+pub fn schedule_timer(
+  kind: TimerKind,
+  generation: Int,
+  timer_id: Int,
+  delay_ms: Int,
+  message: fn(Int, Int) -> a,
+) -> Effect(a) {
+  effect.from(fn(dispatch) {
+    schedule_timer_ffi(
+      timer_kind_code(kind),
+      generation,
+      timer_id,
+      delay_ms,
+      fn(fired_generation, fired_timer_id) {
+        dispatch(message(fired_generation, fired_timer_id))
+      },
+    )
+  })
+}
+
+/// Cancels one timer by its namespace, generation, and identity. Cancellation
+/// is idempotent, so cleanup paths can safely run after a timer has fired or
+/// after an older generation has already been replaced.
+pub fn cancel_timer(
+  kind: TimerKind,
+  generation: Int,
+  timer_id: Int,
+) -> Effect(a) {
+  effect.from(fn(_dispatch) {
+    cancel_timer_ffi(timer_kind_code(kind), generation, timer_id)
+  })
+}
+
+fn timer_kind_code(kind: TimerKind) -> Int {
+  case kind {
+    Reconnect -> 0
+    RateLimit -> 1
+    Bubble -> 2
+  }
 }
 
 /// Selects and validates the frontend-owned username preference from a cookie
