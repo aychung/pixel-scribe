@@ -161,10 +161,13 @@ pub fn room_crash_notifies_clients_and_restarts_clean_state_test() {
 
       process.kill(old_room_pid)
 
-      let assert Ok(#(error_payload, _client)) = read_frame(client, 1000)
+      let assert Ok(#(error_payload, client)) = read_frame(client, 1000)
       let assert Ok(error) = decode_error(error_payload)
       assert error.code == "room_unavailable"
       assert !error.recoverable
+
+      let assert Ok(#(websocket.Normal(_), _client)) =
+        read_close_frame(client, 1000)
 
       let assert Ok(replacement) =
         wait_for_room_replacement(server.directory, old_room_pid, 1000)
@@ -276,27 +279,24 @@ fn wait_for_room_replacement(
   old_pid: process.Pid,
   retries_remaining: Int,
 ) -> Result(room.Room, Nil) {
-  case room_directory.resolve(directory, domain.default_room_id) {
+  let replacement = case
+    room_directory.resolve(directory, domain.default_room_id)
+  {
     Ok(room_handle) ->
       case room.pid(room_handle) != old_pid {
         True -> Ok(room_handle)
-        False -> retry_room_replacement(directory, old_pid, retries_remaining)
+        False -> Error(Nil)
       }
-    Error(_) -> retry_room_replacement(directory, old_pid, retries_remaining)
+    Error(_) -> Error(Nil)
   }
-}
 
-fn retry_room_replacement(
-  directory: room_directory.RoomDirectory,
-  old_pid: process.Pid,
-  retries_remaining: Int,
-) -> Result(room.Room, Nil) {
-  case retries_remaining {
-    0 -> Error(Nil)
-    _ -> {
+  case replacement, retries_remaining {
+    Ok(room_handle), _ -> Ok(room_handle)
+    Error(_), retries_remaining if retries_remaining > 0 -> {
       process.sleep(1)
       wait_for_room_replacement(directory, old_pid, retries_remaining - 1)
     }
+    Error(_), _ -> Error(Nil)
   }
 }
 
@@ -370,35 +370,57 @@ fn close_client(client: Client) -> Nil {
 }
 
 fn read_frame(client: Client, timeout: Int) -> Result(#(String, Client), Nil) {
+  case read_websocket_frame(client, timeout) {
+    Ok(#(websocket.Data(websocket.TextFrame(payload)), client)) ->
+      case bit_array.to_string(payload) {
+        Ok(payload) -> Ok(#(payload, client))
+        Error(Nil) -> Error(Nil)
+      }
+    _ -> Error(Nil)
+  }
+}
+
+fn read_close_frame(
+  client: Client,
+  timeout: Int,
+) -> Result(#(websocket.CloseReason, Client), Nil) {
+  case read_websocket_frame(client, timeout) {
+    Ok(#(websocket.Control(websocket.CloseFrame(reason)), client)) ->
+      Ok(#(reason, client))
+    _ -> Error(Nil)
+  }
+}
+
+fn read_websocket_frame(
+  client: Client,
+  timeout: Int,
+) -> Result(#(websocket.Frame, Client), Nil) {
   let Client(socket, buffer) = client
   case bit_array.byte_size(buffer) {
-    0 -> receive_more(socket, buffer, timeout)
+    0 -> receive_websocket_frame(socket, buffer, timeout)
     _ ->
       case websocket.decode_frame(buffer, None) {
         Error(websocket.NeedMoreData(_)) ->
-          receive_more(socket, buffer, timeout)
+          receive_websocket_frame(socket, buffer, timeout)
         Error(websocket.InvalidFrame) -> Error(Nil)
-        Ok(#(
-          websocket.Complete(websocket.Data(websocket.TextFrame(payload))),
-          rest,
-        )) ->
-          case bit_array.to_string(payload) {
-            Ok(payload) -> Ok(#(payload, Client(socket, rest)))
-            Error(Nil) -> Error(Nil)
-          }
+        Ok(#(websocket.Complete(frame), rest)) ->
+          Ok(#(frame, Client(socket, rest)))
         Ok(_) -> Error(Nil)
       }
   }
 }
 
-fn receive_more(
+fn receive_websocket_frame(
   socket: Socket,
   buffer: BitArray,
   timeout: Int,
-) -> Result(#(String, Client), Nil) {
+) -> Result(#(websocket.Frame, Client), Nil) {
   case tcp.receive_timeout(socket, 0, timeout) {
     Ok(chunk) ->
-      read_frame(Client(socket, bit_array.append(buffer, chunk)), timeout)
+      read_websocket_frame(
+        Client(socket, bit_array.append(buffer, chunk)),
+        timeout,
+      )
     Error(_) -> Error(Nil)
   }
 }

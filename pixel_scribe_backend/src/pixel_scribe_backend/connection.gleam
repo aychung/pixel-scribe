@@ -9,6 +9,7 @@ import pixel_scribe_backend/rate_limit
 import pixel_scribe_backend/room
 import pixel_scribe_backend/room_directory
 
+@internal
 pub const join_deadline_ms = 10_000
 
 pub type Phase {
