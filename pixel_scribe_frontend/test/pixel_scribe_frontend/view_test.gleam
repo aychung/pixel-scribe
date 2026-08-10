@@ -13,3 +13,10 @@ pub fn username_input_allows_32_graphemes_without_utf16_maxlength_test() {
   assert string.contains(rendered, username)
   assert !string.contains(rendered, "maxlength")
 }
+
+pub fn username_view_connects_the_label_to_the_native_input_test() {
+  let rendered = element.to_string(view.view(model.initial()))
+
+  assert string.contains(rendered, "for=\"username\"")
+  assert string.contains(rendered, "id=\"username\"")
+}
