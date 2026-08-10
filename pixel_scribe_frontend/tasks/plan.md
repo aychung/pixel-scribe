@@ -448,13 +448,13 @@ the unit names the package-manager command that produces them.
 - [x] Task 2 (2A-2C): Establish the Gleam and Playwright test harnesses.
 - [x] Task 3 (3A-3D): Implement trusted values, validation, and protocol codecs.
 - [x] Task 4 (4A-4F): Implement the deterministic state machine and backoff.
-- [ ] Task 5 (5A-5E): Add browser preference and small DOM effects.
+- [x] Task 5 (5A-5E): Add browser preference and small DOM effects.
 
 ### Checkpoint: Foundation
 
-- [ ] Format, Gleam build/tests, production bundle, and shell Playwright test pass.
-- [ ] Protocol fixtures match the canonical backend specification.
-- [ ] No browser handle or untrusted dynamic value enters the application model.
+- [x] Format, Gleam build/tests, production bundle, and shell Playwright test pass.
+- [x] Protocol fixtures match the canonical backend specification.
+- [x] No browser handle or untrusted dynamic value enters the application model.
 - [ ] Human reviews the state/error tables before network integration.
 
 ### Phase 2: Real-time vertical slices
