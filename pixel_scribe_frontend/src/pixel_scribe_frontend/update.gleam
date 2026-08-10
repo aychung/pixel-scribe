@@ -202,6 +202,30 @@ fn server_event(
   received_at_ms: Int,
   event: domain.ServerEvent,
 ) -> #(Model, List(Command)) {
+  case room_id_for_event(event), current_phase_generation(model.phase) {
+    Some(room_id), Some(expected_generation)
+      if expected_generation == generation && room_id != domain.default_room_id
+    -> protocol_failure(model, generation)
+    _, _ -> dispatch_server_event(model, generation, received_at_ms, event)
+  }
+}
+
+fn room_id_for_event(event: domain.ServerEvent) -> Option(domain.RoomId) {
+  case event {
+    domain.RoomState(room_id, _, _, _)
+    | domain.UserJoined(room_id, _)
+    | domain.UserLeft(room_id, _)
+    | domain.MessageSent(room_id, _) -> Some(room_id)
+    _ -> None
+  }
+}
+
+fn dispatch_server_event(
+  model: Model,
+  generation: Int,
+  received_at_ms: Int,
+  event: domain.ServerEvent,
+) -> #(Model, List(Command)) {
   case event {
     domain.RoomState(room_id, self_id, users, messages) ->
       case model.phase {

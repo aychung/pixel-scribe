@@ -237,8 +237,10 @@ pub fn only_matching_default_room_snapshot_enters_joined_test() {
         domain.RoomState(other_room, self_id, [participant], [message]),
       ),
     )
-  assert wrong_room == waiting
-  assert wrong_room_commands == []
+  assert wrong_room.phase == model.Blocked(model.ProtocolFailure)
+  assert wrong_room.room_snapshot == waiting.room_snapshot
+  assert wrong_room.send_in_flight == None
+  assert wrong_room_commands == [update.CloseSocket(1)]
 
   let #(joined, commands) =
     update.transition(
@@ -388,11 +390,100 @@ pub fn duplicate_usernames_remain_distinct_during_presence_deltas_test() {
   assert snapshot_participants(removed) == [second]
 }
 
+pub fn current_generation_wrong_room_live_events_fail_closed_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let peer_id = domain.connection_id_from_string("peer")
+  let peer = domain.Presence(peer_id, "Peer")
+  let other_room = domain.room_id_from_string("other")
+  let incoming = message("incoming", peer_id, "from another room")
+  let events = [
+    domain.UserJoined(other_room, peer),
+    domain.UserLeft(other_room, peer_id),
+    domain.MessageSent(other_room, incoming),
+  ]
+
+  list.each(events, fn(event) {
+    let joined =
+      model.Model(
+        ..joined_model(6, self_id, [peer]),
+        draft: "preserve me",
+        send_in_flight: Some(model.SendInFlight(6, "preserve me")),
+      )
+    let #(blocked, commands) =
+      update.transition(joined, update.ServerEvent(6, 0, event))
+
+    assert blocked.phase == model.Blocked(model.ProtocolFailure)
+    assert snapshot_is_stale(blocked)
+    assert blocked.draft == "preserve me"
+    assert blocked.send_in_flight == None
+    assert blocked.connection_feedback == Some("Protocol error.")
+    assert commands == [update.CloseSocket(6)]
+  })
+}
+
+pub fn current_generation_wrong_room_detection_is_phase_independent_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let peer_id = domain.connection_id_from_string("peer")
+  let peer = domain.Presence(peer_id, "Peer")
+  let other_room = domain.room_id_from_string("other")
+  let joined =
+    model.Model(
+      ..joined_model(7, self_id, [peer]),
+      draft: "preserve me",
+      send_in_flight: Some(model.SendInFlight(7, "preserve me")),
+    )
+
+  let #(blocked_snapshot, snapshot_commands) =
+    update.transition(
+      joined,
+      update.ServerEvent(
+        7,
+        0,
+        domain.RoomState(other_room, self_id, [peer], []),
+      ),
+    )
+  assert blocked_snapshot.phase == model.Blocked(model.ProtocolFailure)
+  assert snapshot_is_stale(blocked_snapshot)
+  assert blocked_snapshot.send_in_flight == None
+  assert snapshot_commands == [update.CloseSocket(7)]
+
+  let awaiting =
+    model.Model(
+      ..model.initial(),
+      phase: model.AwaitingRoomState(8, 0),
+      socket_generation: 8,
+      room_snapshot: Some(model.RoomSnapshot(
+        domain.default_room_id,
+        self_id,
+        [peer],
+        [],
+        False,
+      )),
+      draft: "preserve me",
+      send_in_flight: Some(model.SendInFlight(8, "preserve me")),
+    )
+  let events = [
+    domain.UserJoined(other_room, peer),
+    domain.UserLeft(other_room, peer_id),
+    domain.MessageSent(other_room, message("incoming", peer_id, "elsewhere")),
+  ]
+
+  list.each(events, fn(event) {
+    let #(blocked, commands) =
+      update.transition(awaiting, update.ServerEvent(8, 0, event))
+    assert blocked.phase == model.Blocked(model.ProtocolFailure)
+    assert snapshot_is_stale(blocked)
+    assert blocked.send_in_flight == None
+    assert commands == [update.CloseSocket(8)]
+  })
+}
+
 pub fn wrong_generation_presence_and_snapshot_callbacks_are_ignored_test() {
   let self_id = domain.connection_id_from_string("self")
   let peer_id = domain.connection_id_from_string("peer")
   let peer = domain.Presence(peer_id, "Peer")
   let joined = joined_model(6, self_id, [peer])
+  let other_room = domain.room_id_from_string("other")
 
   let callbacks = [
     update.ServerEvent(
@@ -413,6 +504,30 @@ pub fn wrong_generation_presence_and_snapshot_callbacks_are_ignored_test() {
         [],
         [],
       ),
+    ),
+    update.ServerEvent(
+      5,
+      0,
+      domain.RoomState(
+        other_room,
+        domain.connection_id_from_string("replacement-self"),
+        [],
+        [],
+      ),
+    ),
+    update.ServerEvent(
+      5,
+      0,
+      domain.UserJoined(
+        other_room,
+        domain.Presence(domain.connection_id_from_string("late-other"), "Late"),
+      ),
+    ),
+    update.ServerEvent(5, 0, domain.UserLeft(other_room, peer_id)),
+    update.ServerEvent(
+      5,
+      0,
+      domain.MessageSent(other_room, message("late-message", peer_id, "late")),
     ),
   ]
 
