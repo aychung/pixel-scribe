@@ -1,3 +1,4 @@
+import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
@@ -397,6 +398,359 @@ pub fn wrong_generation_presence_and_snapshot_callbacks_are_ignored_test() {
   })
 }
 
+pub fn draft_input_is_a_pure_controlled_value_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let joined = joined_model(7, self_id, [])
+
+  let #(updated, commands) =
+    update.transition(joined, update.DraftInput("  Keep this draft  "))
+
+  assert updated.draft == "  Keep this draft  "
+  assert updated.phase == model.Joined(7, self_id)
+  assert commands == []
+}
+
+pub fn submit_message_sends_once_without_optimistic_append_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let joined = joined_model(8, self_id, [])
+  let assert #(with_draft, []) =
+    update.transition(joined, update.DraftInput("  Hello  "))
+
+  let #(submitted, commands) =
+    update.transition(with_draft, update.SubmitMessage)
+
+  assert submitted.draft == "Hello"
+  assert submitted.send_in_flight == Some(model.SendInFlight(8, "Hello"))
+  assert snapshot_messages(submitted) == []
+  assert commands
+    == [
+      update.SendSocketFrame(
+        8,
+        "{\"type\":\"send_message\",\"room_id\":\"default\",\"text\":\"Hello\"}",
+      ),
+    ]
+}
+
+pub fn repeated_submit_while_send_is_in_flight_is_ignored_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let joined = joined_model(9, self_id, [])
+  let assert #(with_draft, []) =
+    update.transition(joined, update.DraftInput("Hello"))
+  let #(submitted, first_commands) =
+    update.transition(with_draft, update.SubmitMessage)
+
+  let #(repeated, repeated_commands) =
+    update.transition(submitted, update.SubmitMessage)
+
+  assert first_commands != []
+  assert repeated == submitted
+  assert repeated_commands == []
+}
+
+pub fn invalid_submit_stays_local_without_a_send_command_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let joined = joined_model(10, self_id, [])
+  let invalid = "\t"
+  let assert #(with_draft, []) =
+    update.transition(joined, update.DraftInput(invalid))
+
+  let #(submitted, commands) =
+    update.transition(with_draft, update.SubmitMessage)
+
+  assert submitted.draft == invalid
+  assert submitted.send_in_flight == None
+  assert submitted.phase == model.Joined(10, self_id)
+  assert submitted.feedback != None
+  assert commands == []
+}
+
+pub fn peer_echo_appends_but_keeps_draft_and_pending_send_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let joined = joined_model(11, self_id, [])
+  let sending =
+    model.Model(
+      ..joined,
+      draft: "mine",
+      send_in_flight: Some(model.SendInFlight(11, "mine")),
+    )
+  let peer_id = domain.connection_id_from_string("peer")
+  let peer_message = message("peer-message", peer_id, "from peer")
+
+  let #(updated, commands) =
+    update.transition(
+      sending,
+      update.ServerEvent(
+        11,
+        domain.MessageSent(domain.default_room_id, peer_message),
+      ),
+    )
+
+  assert snapshot_messages(updated) == [peer_message]
+  assert updated.draft == "mine"
+  assert updated.send_in_flight == Some(model.SendInFlight(11, "mine"))
+  assert commands == []
+}
+
+pub fn matching_self_echo_appends_and_clears_only_matching_draft_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let joined = joined_model(12, self_id, [])
+  let sending =
+    model.Model(
+      ..joined,
+      draft: "mine",
+      send_in_flight: Some(model.SendInFlight(12, "mine")),
+    )
+  let accepted = message("self-message", self_id, "mine")
+
+  let #(updated, commands) =
+    update.transition(
+      sending,
+      update.ServerEvent(
+        12,
+        domain.MessageSent(domain.default_room_id, accepted),
+      ),
+    )
+
+  assert snapshot_messages(updated) == [accepted]
+  assert updated.draft == ""
+  assert updated.send_in_flight == None
+  assert commands == []
+}
+
+pub fn self_echo_keeps_a_newer_current_draft_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let joined = joined_model(13, self_id, [])
+  let sending =
+    model.Model(
+      ..joined,
+      draft: "first",
+      send_in_flight: Some(model.SendInFlight(13, "first")),
+    )
+  let assert #(edited, []) =
+    update.transition(sending, update.DraftInput("second"))
+  let accepted = message("self-message-2", self_id, "first")
+
+  let #(updated, commands) =
+    update.transition(
+      edited,
+      update.ServerEvent(
+        13,
+        domain.MessageSent(domain.default_room_id, accepted),
+      ),
+    )
+
+  assert snapshot_messages(updated) == [accepted]
+  assert updated.draft == "second"
+  assert updated.send_in_flight == None
+  assert commands == []
+}
+
+pub fn duplicate_message_ids_are_no_op_and_snapshot_history_is_latest_50_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let initial_messages = numbered_messages(1, 50, self_id)
+  let joined =
+    model.Model(
+      ..joined_model(14, self_id, []),
+      room_snapshot: Some(model.RoomSnapshot(
+        domain.default_room_id,
+        self_id,
+        [],
+        initial_messages,
+        False,
+      )),
+    )
+  let new_message = message("message-51", self_id, "newest")
+  let assert #(with_new, []) =
+    update.transition(
+      joined,
+      update.ServerEvent(
+        14,
+        domain.MessageSent(domain.default_room_id, new_message),
+      ),
+    )
+
+  assert list.length(snapshot_messages(with_new)) == 50
+  assert list.first(snapshot_messages(with_new))
+    == Ok(message("message-2", self_id, "message 2"))
+  assert list.last(snapshot_messages(with_new)) == Ok(new_message)
+
+  let duplicate = message("message-51", self_id, "different body")
+  let #(unchanged, commands) =
+    update.transition(
+      with_new,
+      update.ServerEvent(
+        14,
+        domain.MessageSent(domain.default_room_id, duplicate),
+      ),
+    )
+
+  assert unchanged == with_new
+  assert commands == []
+}
+
+pub fn room_state_snapshot_deduplicates_before_latest_50_bound_test() {
+  let self_id = domain.connection_id_from_string("snapshot-self")
+  let awaiting =
+    model.Model(
+      ..model.initial(),
+      phase: model.AwaitingRoomState(17, 0),
+      socket_generation: 17,
+    )
+  let messages_with_duplicate =
+    list.append(numbered_messages(1, 51, self_id), [
+      message("message-1", self_id, "duplicate after original"),
+    ])
+
+  let #(joined, commands) =
+    update.transition(
+      awaiting,
+      update.ServerEvent(
+        17,
+        domain.RoomState(
+          domain.default_room_id,
+          self_id,
+          [],
+          messages_with_duplicate,
+        ),
+      ),
+    )
+
+  assert list.length(snapshot_messages(joined)) == 50
+  assert list.first(snapshot_messages(joined))
+    == Ok(message("message-2", self_id, "message 2"))
+  assert list.last(snapshot_messages(joined))
+    == Ok(message("message-51", self_id, "message 51"))
+  assert commands == []
+}
+
+pub fn stale_generation_and_nonmatching_self_echo_do_not_clear_pending_send_test() {
+  let self_id = domain.connection_id_from_string("echo-self")
+  let joined = joined_model(18, self_id, [])
+  let sending =
+    model.Model(
+      ..joined,
+      draft: "mine",
+      send_in_flight: Some(model.SendInFlight(18, "mine")),
+    )
+  let stale_message = message("stale-message", self_id, "mine")
+  let #(after_stale, stale_commands) =
+    update.transition(
+      sending,
+      update.ServerEvent(
+        17,
+        domain.MessageSent(domain.default_room_id, stale_message),
+      ),
+    )
+
+  assert after_stale == sending
+  assert stale_commands == []
+
+  let nonmatching_message =
+    message("different-self-message", self_id, "not mine")
+  let #(after_nonmatching, nonmatching_commands) =
+    update.transition(
+      sending,
+      update.ServerEvent(
+        18,
+        domain.MessageSent(domain.default_room_id, nonmatching_message),
+      ),
+    )
+
+  assert snapshot_messages(after_nonmatching) == [nonmatching_message]
+  assert after_nonmatching.draft == "mine"
+  assert after_nonmatching.send_in_flight
+    == Some(model.SendInFlight(18, "mine"))
+  assert nonmatching_commands == []
+}
+
+pub fn submit_message_requires_matching_joined_snapshot_test() {
+  let self_id = domain.connection_id_from_string("joined-self")
+  let missing_snapshot =
+    model.Model(
+      ..model.initial(),
+      phase: model.Joined(19, self_id),
+      socket_generation: 19,
+      draft: "Hello",
+    )
+  let wrong_room =
+    model.Model(
+      ..missing_snapshot,
+      room_snapshot: Some(model.RoomSnapshot(
+        domain.room_id_from_string("other"),
+        self_id,
+        [],
+        [],
+        False,
+      )),
+    )
+  let wrong_self =
+    model.Model(
+      ..missing_snapshot,
+      room_snapshot: Some(model.RoomSnapshot(
+        domain.default_room_id,
+        domain.connection_id_from_string("different-self"),
+        [],
+        [],
+        False,
+      )),
+    )
+  let stale_snapshot =
+    model.Model(
+      ..missing_snapshot,
+      room_snapshot: Some(model.RoomSnapshot(
+        domain.default_room_id,
+        self_id,
+        [],
+        [],
+        True,
+      )),
+    )
+
+  assert list.all(
+    [missing_snapshot, wrong_room, wrong_self, stale_snapshot],
+    fn(state) {
+      let #(updated, commands) = update.transition(state, update.SubmitMessage)
+      updated == state && commands == []
+    },
+  )
+}
+
+pub fn matching_disconnect_clears_only_in_flight_and_marks_snapshot_stale_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let joined = joined_model(15, self_id, [])
+  let sending =
+    model.Model(
+      ..joined,
+      draft: "keep me",
+      send_in_flight: Some(model.SendInFlight(15, "keep me")),
+    )
+
+  let #(updated, commands) =
+    update.transition(sending, update.SocketClosed(15, False))
+
+  assert updated.phase == model.Joined(15, self_id)
+  assert updated.draft == "keep me"
+  assert updated.send_in_flight == None
+  assert snapshot_is_stale(updated)
+  assert commands == []
+}
+
+pub fn stale_disconnect_does_not_clear_replacement_send_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let joined =
+    model.Model(
+      ..joined_model(16, self_id, []),
+      draft: "keep replacement",
+      send_in_flight: Some(model.SendInFlight(16, "keep replacement")),
+    )
+
+  let #(updated, commands) =
+    update.transition(joined, update.SocketClosed(15, False))
+
+  assert updated == joined
+  assert commands == []
+}
+
 fn joined_model(
   generation: Int,
   self_id: domain.ConnectionId,
@@ -415,6 +769,52 @@ fn joined_model(
       False,
     )),
   )
+}
+
+fn snapshot_messages(state: model.Model) -> List(domain.ChatMessage) {
+  case state.room_snapshot {
+    Some(snapshot) -> snapshot.messages
+    None -> []
+  }
+}
+
+fn snapshot_is_stale(state: model.Model) -> Bool {
+  case state.room_snapshot {
+    Some(snapshot) -> snapshot.stale
+    None -> False
+  }
+}
+
+fn message(
+  message_id: String,
+  sender_id: domain.ConnectionId,
+  text: String,
+) -> domain.ChatMessage {
+  domain.ChatMessage(
+    domain.message_id_from_string(message_id),
+    sender_id,
+    "Ada",
+    text,
+    "2026-08-10T12:00:00Z",
+  )
+}
+
+fn numbered_messages(
+  current: Int,
+  last: Int,
+  sender_id: domain.ConnectionId,
+) -> List(domain.ChatMessage) {
+  case current > last {
+    True -> []
+    False -> [
+      message(
+        "message-" <> int.to_string(current),
+        sender_id,
+        "message " <> int.to_string(current),
+      ),
+      ..numbered_messages(current + 1, last, sender_id)
+    ]
+  }
 }
 
 fn snapshot_participants(state: model.Model) -> List(domain.Presence) {
