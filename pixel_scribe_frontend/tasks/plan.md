@@ -447,7 +447,7 @@ the unit names the package-manager command that produces them.
   - [x] 1C: Style the responsive shell.
 - [x] Task 2 (2A-2C): Establish the Gleam and Playwright test harnesses.
 - [x] Task 3 (3A-3D): Implement trusted values, validation, and protocol codecs.
-- [ ] Task 4 (4A-4F): Implement the deterministic state machine and backoff.
+- [x] Task 4 (4A-4F): Implement the deterministic state machine and backoff.
 - [ ] Task 5 (5A-5E): Add browser preference and small DOM effects.
 
 ### Checkpoint: Foundation
