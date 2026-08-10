@@ -425,10 +425,10 @@ the unit names the package-manager command that produces them.
 
 ### Phase 1: Reproducible foundation
 
-- [ ] Task 0 (0A-0C): Lock the frontend toolchain and artifact policy.
+- [x] Task 0 (0A-0C): Lock the frontend toolchain and artifact policy.
   - [x] 0A: Resolve Gleam dependencies.
   - [x] 0B: Resolve browser-test dependencies and scripts.
-  - [ ] 0C: Configure Lustre output and artifact ignores.
+  - [x] 0C: Configure Lustre output and artifact ignores.
 - [ ] Task 1 (1A-1C): Bootstrap the explicit Lustre SPA shell.
   - [x] 1A: Create the explicit MVU skeleton.
   - [ ] 1B: Render the semantic username form.

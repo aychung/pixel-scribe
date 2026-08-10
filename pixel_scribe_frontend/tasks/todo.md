@@ -82,13 +82,13 @@ artifacts. This task creates a deterministic foundation but no product behavior.
   - **Verify:** `bun install --frozen-lockfile`; `bunx playwright --version`;
     inspect dependency scripts and the complete lockfile diff.
   - **Depends:** Task 0A.
-- [ ] **Task 0C — Configure Lustre output and artifact ignores.**
+- [x] **Task 0C — Configure Lustre output and artifact ignores.**
   - **Done when:** Lustre uses system Bun, builds a minified `dist/` app with the
     approved HTML metadata and stylesheet, Tailwind processing is disabled, and
     every generated path in the parent acceptance criteria is ignored.
   - **Files:** `gleam.toml`, `../.gitignore`.
   - **Verify:** `gleam build`; `gleam run -m lustre/dev build`; inspect `dist/` and
-    `jj diff --summary` without adding generated output.
+    `jj diff --summary` without adding generated output — passed 2026-08-09.
   - **Depends:** Tasks 0A-0B.
 
 **Implementation notes:**
@@ -108,22 +108,22 @@ artifacts. This task creates a deterministic foundation but no product behavior.
 
 **Acceptance criteria:**
 
-- [ ] Gleam resolves `lustre`, `gleam_json`, and `lustre_dev_tools` through its
+- [x] Gleam resolves `lustre`, `gleam_json`, and `lustre_dev_tools` through its
   tooling; Bun resolves only the approved browser-test dependencies.
-- [ ] `gleam.toml`, `manifest.toml`, `package.json`, and `bun.lock` form a
+- [x] `gleam.toml`, `manifest.toml`, `package.json`, and `bun.lock` form a
   deterministic, reviewed dependency/build contract.
-- [ ] Generated bundles, caches, browser binaries, traces, screenshots, and
+- [x] Generated bundles, caches, browser binaries, traces, screenshots, and
   staged backend assets are ignored; source and lockfiles remain tracked.
 
 **Verification:**
 
-- [ ] Review the complete dependency and lockfile diffs; no unrelated package is
+- [x] Review the complete dependency and lockfile diffs; no unrelated package is
   direct and no generated lockfile was hand-edited.
-- [ ] `gleam deps download`
-- [ ] `gleam build`
-- [ ] `bun install --frozen-lockfile`
-- [ ] `bunx playwright --version`
-- [ ] `jj diff --summary`
+- [x] `gleam deps download`
+- [x] `gleam build`
+- [x] `bun install --frozen-lockfile`
+- [x] `bunx playwright --version`
+- [x] `jj diff --summary`
 
 **Dependencies:** Approved plan.
 
