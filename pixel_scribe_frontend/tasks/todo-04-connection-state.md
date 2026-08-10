@@ -12,6 +12,7 @@ not open a real WebSocket; it proves behavior before browser effects are wired.
     handles or decoded-untrusted values.
   - **Files:** `src/pixel_scribe_frontend/model.gleam`,
     `src/pixel_scribe_frontend/update.gleam`,
+    `test/pixel_scribe_frontend/model_test.gleam`,
     `test/pixel_scribe_frontend/update_test.gleam`.
   - **Verify:** construction/exhaustiveness tests; format, build, and `gleam test`;
     inspect imports for FFI/browser modules.
@@ -107,4 +108,3 @@ not open a real WebSocket; it proves behavior before browser effects are wired.
 - `test/pixel_scribe_frontend/reconnect_test.gleam`
 
 **Estimated scope:** Medium, 5 files.
-
