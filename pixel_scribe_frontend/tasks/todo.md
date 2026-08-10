@@ -66,7 +66,7 @@ artifacts. This task creates a deterministic foundation but no product behavior.
 
 ### Work units
 
-- [ ] **Task 0A — Resolve Gleam dependencies.**
+- [x] **Task 0A — Resolve Gleam dependencies.**
   - **Done when:** `lustre` and `gleam_json` are direct dependencies,
     `lustre_dev_tools` remains development-only, and the generated manifest diff
     contains no unexplained direct package.
@@ -74,7 +74,7 @@ artifacts. This task creates a deterministic foundation but no product behavior.
   - **Verify:** `gleam deps download`; `gleam build`; inspect the complete lockfile
     diff.
   - **Depends:** approved plan.
-- [ ] **Task 0B — Resolve browser-test dependencies and scripts.**
+- [x] **Task 0B — Resolve browser-test dependencies and scripts.**
   - **Done when:** Bun is pinned in `packageManager`, only Playwright and axe are
     direct development dependencies, and scripts expose the documented headless
     test commands without installing browsers.

@@ -1,7 +1,14 @@
 *.beam
 *.ez
 /pixel_scribe_frontend/build
+/pixel_scribe_frontend/dist/
+/pixel_scribe_frontend/.lustre/
 /pixel_scribe_backend/build
 /pixel_scribe_frontend/node_modules/
+/pixel_scribe_frontend/playwright-report/
+/pixel_scribe_frontend/test-results/
+/pixel_scribe_frontend/.cache/
+/pixel_scribe_frontend/.playwright/
+/pixel_scribe_backend/priv/public/*
 erl_crash.dump
 .obsidian/
