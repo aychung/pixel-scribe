@@ -1,6 +1,9 @@
+import gleam/option.{None, Some}
 import lustre/effect.{type Effect}
 import pixel_scribe_frontend/domain
 import pixel_scribe_frontend/model.{type Model}
+import pixel_scribe_frontend/protocol
+import pixel_scribe_frontend/validation
 
 /// Trusted application inputs and decoded server events. Raw browser payloads
 /// are intentionally absent: protocol decoding happens before ServerEvent.
@@ -34,11 +37,123 @@ pub type Command {
   RenderScene
 }
 
-/// The pure transition seam used by state-machine work. Task 4A only adds the
-/// local username-input transition; later units fill in connection behavior.
+/// The pure transition seam used by state-machine work. Browser effects are
+/// represented by commands and interpreted by the Lustre wrapper later.
 pub fn transition(model: Model, message: Msg) -> #(Model, List(Command)) {
   case message {
-    UsernameInput(value) -> #(model.Model(..model, username_input: value), [])
+    UsernameInput(value) -> #(
+      model.Model(..model, username_input: value, feedback: None),
+      [],
+    )
+    SubmitUsername -> submit_username(model)
+    SocketOpened(generation) -> socket_opened(model, generation)
+    ServerEvent(generation, event) -> server_event(model, generation, event)
+    _ -> #(model, [])
+  }
+}
+
+fn submit_username(model: Model) -> #(Model, List(Command)) {
+  case model.phase {
+    model.ChoosingUsername -> submit_choosing_username(model)
+    _ -> #(model, [])
+  }
+}
+
+fn submit_choosing_username(model: Model) -> #(Model, List(Command)) {
+  case validation.normalize_username(model.username_input) {
+    Error(reason) -> #(
+      model.Model(..model, feedback: Some(username_feedback(reason))),
+      [],
+    )
+    Ok(username) ->
+      case protocol.encode_join_room(username) {
+        Error(protocol.FrameTooLarge) -> #(
+          model.Model(
+            ..model,
+            username_input: username,
+            feedback: Some("Username is too large to send."),
+          ),
+          [],
+        )
+        Ok(_) -> {
+          let generation = model.socket_generation + 1
+          let updated =
+            model.Model(
+              ..model,
+              username_preference: username,
+              username_input: username,
+              phase: model.Connecting(generation, model.reconnect_attempt),
+              socket_generation: generation,
+              feedback: None,
+              connection_feedback: None,
+            )
+          #(updated, [
+            WriteUsernamePreference(username),
+            OpenSocket(generation),
+          ])
+        }
+      }
+  }
+}
+
+fn username_feedback(reason: validation.UsernameError) -> String {
+  case reason {
+    validation.UsernameEmpty -> "Enter a username."
+    validation.UsernameTooLong -> "Username must be 32 characters or fewer."
+    validation.UsernameContainsControlCharacter ->
+      "Username cannot contain control characters or line breaks."
+  }
+}
+
+fn socket_opened(model: Model, generation: Int) -> #(Model, List(Command)) {
+  case model.phase {
+    model.Connecting(expected_generation, attempt)
+      if expected_generation == generation
+    ->
+      case protocol.encode_join_room(model.username_preference) {
+        Ok(frame) -> #(
+          model.Model(
+            ..model,
+            phase: model.AwaitingRoomState(generation, attempt),
+          ),
+          [SendSocketFrame(generation, frame)],
+        )
+        Error(protocol.FrameTooLarge) -> #(
+          model.Model(..model, feedback: Some("Username is too large to send.")),
+          [],
+        )
+      }
+    _ -> #(model, [])
+  }
+}
+
+fn server_event(
+  model: Model,
+  generation: Int,
+  event: domain.ServerEvent,
+) -> #(Model, List(Command)) {
+  case event {
+    domain.RoomState(room_id, self_id, users, messages) ->
+      case model.phase {
+        model.AwaitingRoomState(expected_generation, _)
+          if expected_generation == generation
+          && room_id == domain.default_room_id
+        -> {
+          let snapshot =
+            model.RoomSnapshot(room_id, self_id, users, messages, False)
+          #(
+            model.Model(
+              ..model,
+              phase: model.Joined(generation, self_id),
+              room_snapshot: Some(snapshot),
+              reconnect_attempt: 0,
+              connection_feedback: None,
+            ),
+            [],
+          )
+        }
+        _ -> #(model, [])
+      }
     _ -> #(model, [])
   }
 }

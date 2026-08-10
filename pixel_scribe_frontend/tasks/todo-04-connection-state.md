@@ -22,6 +22,7 @@ not open a real WebSocket; it proves behavior before browser effects are wired.
     stays local, open sends one join command, and matching room state alone enters
     joined state and resets reconnect attempts.
   - **Files:** `src/pixel_scribe_frontend/update.gleam`,
+    `test/pixel_scribe_frontend/model_test.gleam`,
     `test/pixel_scribe_frontend/update_test.gleam`.
   - **Verify:** table-driven failing tests for each transition plus format, build,
     and `gleam test`.
@@ -31,7 +32,9 @@ not open a real WebSocket; it proves behavior before browser effects are wired.
     by connection ID, wrong-generation callbacks are ignored, and duplicate
     usernames never collide.
   - **Files:** `src/pixel_scribe_frontend/update.gleam`,
-    `test/pixel_scribe_frontend/update_test.gleam`.
+    `test/pixel_scribe_frontend/update_test.gleam`,
+    `test/pixel_scribe_frontend/model_test.gleam` (authorized correction of the
+    obsolete Task 4A empty-submit expectation).
   - **Verify:** focused snapshot/presence/generation tests plus format, build, and
     `gleam test`.
   - **Depends:** Task 4B.

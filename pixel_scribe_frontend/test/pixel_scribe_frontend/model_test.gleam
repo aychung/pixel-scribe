@@ -1,4 +1,4 @@
-import gleam/option.{None}
+import gleam/option.{None, Some}
 import pixel_scribe_frontend/model
 import pixel_scribe_frontend/update
 
@@ -46,9 +46,11 @@ pub fn username_input_updates_only_the_username_input_test() {
     )
 }
 
-pub fn submitting_username_preserves_the_current_model_test() {
+pub fn submitting_empty_username_stays_local_with_feedback_test() {
   let initial = model.initial()
   let #(updated, _effect) = update.update(initial, update.SubmitUsername)
 
-  assert updated == initial
+  assert updated.phase == model.ChoosingUsername
+  assert updated.socket_generation == initial.socket_generation
+  assert updated.feedback == Some("Enter a username.")
 }

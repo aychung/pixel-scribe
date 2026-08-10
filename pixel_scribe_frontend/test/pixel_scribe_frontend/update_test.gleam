@@ -1,5 +1,6 @@
 import gleam/list
-import gleam/option.{None}
+import gleam/option.{None, Some}
+import gleam/string
 import pixel_scribe_frontend/domain
 import pixel_scribe_frontend/model
 import pixel_scribe_frontend/update
@@ -99,6 +100,172 @@ pub fn local_input_remains_the_only_minimal_transition_test() {
 
   assert updated.username_input == "Ada"
   assert commands == []
+}
+
+pub fn invalid_username_submit_stays_local_without_commands_test() {
+  let invalid_inputs = ["", "   ", "Ada\n", string.repeat("a", 33)]
+
+  assert list.all(invalid_inputs, fn(input) {
+    let assert #(entered, []) =
+      update.transition(model.initial(), update.UsernameInput(input))
+    let #(submitted, commands) =
+      update.transition(entered, update.SubmitUsername)
+
+    submitted.phase == model.ChoosingUsername
+    && submitted.username_input == input
+    && submitted.feedback != None
+    && commands == []
+  })
+}
+
+pub fn valid_username_submit_normalizes_and_opens_one_generation_test() {
+  let initial = model.initial()
+  let initial =
+    model.Model(..initial, socket_generation: 7, reconnect_attempt: 3)
+  let assert #(entered, []) =
+    update.transition(initial, update.UsernameInput("  Ada  "))
+  let #(submitted, commands) = update.transition(entered, update.SubmitUsername)
+
+  assert submitted.username_input == "Ada"
+  assert submitted.username_preference == "Ada"
+  assert submitted.socket_generation == 8
+  assert submitted.phase == model.Connecting(8, 3)
+  assert commands
+    == [
+      update.WriteUsernamePreference("Ada"),
+      update.OpenSocket(8),
+    ]
+}
+
+pub fn repeated_username_submit_while_connecting_is_ignored_test() {
+  let assert #(entered, []) =
+    update.transition(model.initial(), update.UsernameInput("Ada"))
+  let #(connecting, first_commands) =
+    update.transition(entered, update.SubmitUsername)
+  let #(repeated, repeated_commands) =
+    update.transition(connecting, update.SubmitUsername)
+
+  assert first_commands
+    == [update.WriteUsernamePreference("Ada"), update.OpenSocket(1)]
+  assert repeated == connecting
+  assert repeated_commands == []
+}
+
+pub fn matching_open_sends_exactly_one_join_frame_test() {
+  let assert #(entered, []) =
+    update.transition(model.initial(), update.UsernameInput("Ada"))
+  let #(connecting, _) = update.transition(entered, update.SubmitUsername)
+  let #(awaiting, commands) =
+    update.transition(connecting, update.SocketOpened(1))
+
+  assert awaiting.phase == model.AwaitingRoomState(1, 0)
+  assert commands
+    == [
+      update.SendSocketFrame(
+        1,
+        "{\"type\":\"join_room\",\"room_id\":\"default\",\"username\":\"Ada\"}",
+      ),
+    ]
+
+  let #(repeated, repeated_commands) =
+    update.transition(awaiting, update.SocketOpened(1))
+  assert repeated == awaiting
+  assert repeated_commands == []
+}
+
+pub fn stale_or_wrong_phase_open_callbacks_are_ignored_test() {
+  let assert #(entered, []) =
+    update.transition(model.initial(), update.UsernameInput("Ada"))
+  let #(connecting, _) = update.transition(entered, update.SubmitUsername)
+  let #(stale, stale_commands) =
+    update.transition(connecting, update.SocketOpened(2))
+  assert stale == connecting
+  assert stale_commands == []
+
+  let #(wrong_phase, wrong_phase_commands) =
+    update.transition(model.initial(), update.SocketOpened(0))
+  assert wrong_phase == model.initial()
+  assert wrong_phase_commands == []
+}
+
+pub fn only_matching_default_room_snapshot_enters_joined_test() {
+  let self_id = domain.connection_id_from_string("self-1")
+  let participant =
+    domain.Presence(domain.connection_id_from_string("peer-1"), "Ada")
+  let message =
+    domain.ChatMessage(
+      domain.message_id_from_string("message-1"),
+      self_id,
+      "Ada",
+      "Hello",
+      "2026-08-10T12:00:00Z",
+    )
+
+  let assert #(entered, []) =
+    update.transition(model.initial(), update.UsernameInput("Ada"))
+  let #(connecting, _) = update.transition(entered, update.SubmitUsername)
+  let #(awaiting, _) = update.transition(connecting, update.SocketOpened(1))
+  let waiting =
+    model.Model(..awaiting, draft: "keep this draft", reconnect_attempt: 4)
+
+  let #(wrong_generation, wrong_generation_commands) =
+    update.transition(
+      waiting,
+      update.ServerEvent(
+        2,
+        domain.RoomState(domain.default_room_id, self_id, [participant], [
+          message,
+        ]),
+      ),
+    )
+  assert wrong_generation == waiting
+  assert wrong_generation_commands == []
+
+  let other_room = domain.room_id_from_string("other")
+  let #(wrong_room, wrong_room_commands) =
+    update.transition(
+      waiting,
+      update.ServerEvent(
+        1,
+        domain.RoomState(other_room, self_id, [participant], [message]),
+      ),
+    )
+  assert wrong_room == waiting
+  assert wrong_room_commands == []
+
+  let #(joined, commands) =
+    update.transition(
+      waiting,
+      update.ServerEvent(
+        1,
+        domain.RoomState(domain.default_room_id, self_id, [participant], [
+          message,
+        ]),
+      ),
+    )
+  assert joined.phase == model.Joined(1, self_id)
+  assert joined.reconnect_attempt == 0
+  assert joined.draft == "keep this draft"
+  assert joined.room_snapshot
+    == Some(model.RoomSnapshot(
+      domain.default_room_id,
+      self_id,
+      [participant],
+      [message],
+      False,
+    ))
+  assert commands == []
+
+  let #(ignored_after_join, ignored_commands) =
+    update.transition(
+      joined,
+      update.ServerEvent(
+        1,
+        domain.RoomState(domain.default_room_id, self_id, [], []),
+      ),
+    )
+  assert ignored_after_join == joined
+  assert ignored_commands == []
 }
 
 fn phase_kind(phase: model.ConnectionPhase) -> Int {
