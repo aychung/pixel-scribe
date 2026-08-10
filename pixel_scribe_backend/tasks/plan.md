@@ -96,14 +96,14 @@ Wisp/Mist baseline + JSON codecs + room supervision
 
 - [x] Task 7: Deliver WebSocket join and presence end to end.
 - [x] Task 8: Deliver chat, bounded history, and rate limiting end to end.
-- [ ] Task 9: Add connection liveness and supervised failure recovery.
+- [x] Task 9: Add connection liveness and supervised failure recovery.
 
 ### Checkpoint: Real-time MVP
 
-- [ ] Two clients can join, observe presence, and exchange ordered messages.
-- [ ] Reconnect, room failure, duplicate labels, and disconnect cleanup work.
-- [ ] The 51st join, invalid input, mismatched rooms, and spam are bounded.
-- [ ] Format, build, and tests pass.
+- [x] Two clients can join, observe presence, and exchange ordered messages.
+- [x] Reconnect, room failure, duplicate labels, and disconnect cleanup work.
+- [x] The 51st join, invalid input, mismatched rooms, and spam are bounded.
+- [x] Format, build, and tests pass.
 
 ### Phase 4: Delivery and acceptance
 

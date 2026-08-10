@@ -9,6 +9,8 @@ import pixel_scribe_backend/rate_limit
 import pixel_scribe_backend/room
 import pixel_scribe_backend/room_directory
 
+pub const join_deadline_ms = 10_000
+
 pub type Phase {
   AwaitingJoin
   Joining(room_id: domain.RoomId)
@@ -28,6 +30,7 @@ pub type Action {
     connection_id: domain.ConnectionId,
     text: domain.MessageText,
   )
+  Close
   Ignore
 }
 
@@ -38,6 +41,7 @@ pub type Transition {
 type ConnectionControl {
   FromRoom(event: room.RoomEvent)
   JoinedRoomDown(pid: Pid)
+  JoinDeadlineReached
 }
 
 type State {
@@ -47,6 +51,7 @@ type State {
     phase: Phase,
     room: Option(room.Room),
     rate_limit: rate_limit.Bucket,
+    join_deadline: Option(process.Timer),
   )
 }
 
@@ -97,6 +102,13 @@ pub fn handle_room_down(phase: Phase) -> Transition {
   }
 }
 
+pub fn handle_join_deadline(phase: Phase) -> Transition {
+  case phase {
+    AwaitingJoin | Joining(_) -> Transition(phase, Close)
+    Joined(_, _) -> Transition(phase, Ignore)
+  }
+}
+
 pub fn websocket(
   request: Request(mist.Connection),
   directory: room_directory.RoomDirectory,
@@ -105,13 +117,24 @@ pub fn websocket(
     request: request,
     on_init: fn(_connection) {
       let room_events = process.new_subject()
+      let control = process.new_subject()
+      let join_deadline =
+        process.send_after(control, join_deadline_ms, JoinDeadlineReached)
       let selector =
         process.new_selector()
         |> process.select_map(room_events, FromRoom)
+        |> process.select(control)
         |> process.select_monitors(down_to_control)
       let bucket = rate_limit.new(rate_limit.monotonic_time_ms())
       #(
-        State(directory, room_events, AwaitingJoin, None, bucket),
+        State(
+          directory,
+          room_events,
+          AwaitingJoin,
+          None,
+          bucket,
+          Some(join_deadline),
+        ),
         Some(selector),
       )
     },
@@ -165,6 +188,9 @@ fn handle_control(
           }
         None -> mist.continue(state)
       }
+    JoinDeadlineReached -> {
+      apply_transition(state, handle_join_deadline(state.phase), websocket)
+    }
   }
 }
 
@@ -174,7 +200,7 @@ fn apply_transition(
   websocket: mist.WebsocketConnection,
 ) -> mist.Next(State, ConnectionControl) {
   let Transition(phase, action) = transition
-  let state = State(..state, phase: phase)
+  let state = update_phase(state, phase)
 
   case action {
     ResolveRoom(room_id, username) ->
@@ -192,7 +218,19 @@ fn apply_transition(
     }
     SendMessage(room_id, connection_id, text) ->
       send_message(state, room_id, connection_id, text, websocket)
+    Close -> mist.stop()
     Ignore -> mist.continue(state)
+  }
+}
+
+fn update_phase(state: State, phase: Phase) -> State {
+  let state = State(..state, phase: phase)
+  case phase, state.join_deadline {
+    Joined(_, _), Some(timer) -> {
+      let _ = process.cancel_timer(timer)
+      State(..state, join_deadline: None)
+    }
+    _, _ -> state
   }
 }
 

@@ -182,3 +182,29 @@ pub fn joined_room_down_is_fatal_and_has_room_context_test() {
   ) = transition
   assert error_room_id == room_id
 }
+
+pub fn join_deadline_is_ten_seconds_test() {
+  assert connection.join_deadline_ms == 10_000
+}
+
+pub fn awaiting_join_deadline_closes_without_emitting_an_error_test() {
+  let assert connection.Transition(connection.AwaitingJoin, connection.Close) =
+    connection.handle_join_deadline(connection.AwaitingJoin)
+}
+
+pub fn joining_join_deadline_closes_without_emitting_an_error_test() {
+  let assert Ok(room_id) = domain.new_room_id("default")
+  let assert connection.Transition(
+    connection.Joining(current_room_id),
+    connection.Close,
+  ) = connection.handle_join_deadline(connection.Joining(room_id))
+  assert current_room_id == room_id
+}
+
+pub fn joined_join_deadline_is_ignored_after_join_test() {
+  let assert Ok(room_id) = domain.new_room_id("default")
+  let phase = connection.Joined(room_id, domain.new_connection_id())
+  let assert connection.Transition(current_phase, connection.Ignore) =
+    connection.handle_join_deadline(phase)
+  assert current_phase == phase
+}

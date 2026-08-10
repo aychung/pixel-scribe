@@ -20,6 +20,7 @@ import mist
 import pixel_scribe_backend/domain
 import pixel_scribe_backend/room
 import pixel_scribe_backend/room_directory
+import pixel_scribe_backend/room_factory
 import pixel_scribe_backend/web
 
 pub fn two_clients_join_and_disconnect_over_websocket_test() {
@@ -147,8 +148,52 @@ pub fn rate_limit_rejects_overflow_without_history_entry_test() {
   })
 }
 
+pub fn room_crash_notifies_clients_and_restarts_clean_state_test() {
+  let server = start_test_server()
+
+  exception.defer(fn() { stop_test_server(server) }, fn() {
+    let client = connect_websocket(server.port)
+    exception.defer(fn() { close_client(client) }, fn() {
+      send_join(client, "Ada")
+      let assert Ok(#(state_payload, client)) = read_frame(client, 1000)
+      let assert Ok(state) = decode_room_state(state_payload)
+      let old_room_pid = room.pid(server.room)
+
+      process.kill(old_room_pid)
+
+      let assert Ok(#(error_payload, _client)) = read_frame(client, 1000)
+      let assert Ok(error) = decode_error(error_payload)
+      assert error.code == "room_unavailable"
+      assert !error.recoverable
+
+      let assert Ok(replacement) =
+        wait_for_room_replacement(server.directory, old_room_pid, 1000)
+      assert room.pid(replacement) != old_room_pid
+      assert process.is_alive(room.pid(replacement))
+
+      let reconnect = connect_websocket(server.port)
+      exception.defer(fn() { close_client(reconnect) }, fn() {
+        send_join(reconnect, "Grace")
+        let assert Ok(#(replacement_payload, _reconnect)) =
+          read_frame(reconnect, 1000)
+        let assert Ok(replacement_state) =
+          decode_room_state(replacement_payload)
+        assert replacement_state.self_id != state.self_id
+        assert replacement_state.users
+          == [WirePresence(replacement_state.self_id, "Grace")]
+        assert replacement_state.messages == []
+      })
+    })
+  })
+}
+
 type TestServer {
-  TestServer(root: process.Pid, room: room.Room, port: Int)
+  TestServer(
+    root: process.Pid,
+    directory: room_directory.RoomDirectory,
+    room: room.Room,
+    port: Int,
+  )
 }
 
 type Client {
@@ -198,6 +243,7 @@ fn start_test_server() -> TestServer {
   let port_subject = process.new_subject()
   let directory_name = room_directory.new_name()
   let directory = room_directory.from_name(directory_name)
+  let factory_name = room_factory.new_name()
   let web_child =
     web.mist_handler(directory, "test-secret-key")
     |> mist.new
@@ -208,22 +254,50 @@ fn start_test_server() -> TestServer {
   let assert Ok(started) =
     static_supervisor.new(static_supervisor.RestForOne)
     |> static_supervisor.add(room_directory.supervised(directory_name))
+    |> static_supervisor.add(room_factory.supervised(directory, factory_name))
     |> static_supervisor.add(web_child)
     |> static_supervisor.start
   process.unlink(started.pid)
 
   let assert Ok(port) = process.receive(from: port_subject, within: 1000)
-  let assert Ok(room_handle) = room.start(domain.default_room_id)
-  process.unlink(room.pid(room_handle))
-  let assert Ok(Nil) = room_directory.register(directory, room_handle)
-  TestServer(started.pid, room_handle, port)
+  let assert Ok(room_handle) =
+    room_directory.resolve(directory, domain.default_room_id)
+  TestServer(started.pid, directory, room_handle, port)
 }
 
 fn stop_test_server(server: TestServer) -> Nil {
-  let TestServer(root, room_handle, _) = server
-  process.kill(room.pid(room_handle))
+  let TestServer(root, _, _, _) = server
   let _ = stop_supervisor(root)
   Nil
+}
+
+fn wait_for_room_replacement(
+  directory: room_directory.RoomDirectory,
+  old_pid: process.Pid,
+  retries_remaining: Int,
+) -> Result(room.Room, Nil) {
+  case room_directory.resolve(directory, domain.default_room_id) {
+    Ok(room_handle) ->
+      case room.pid(room_handle) != old_pid {
+        True -> Ok(room_handle)
+        False -> retry_room_replacement(directory, old_pid, retries_remaining)
+      }
+    Error(_) -> retry_room_replacement(directory, old_pid, retries_remaining)
+  }
+}
+
+fn retry_room_replacement(
+  directory: room_directory.RoomDirectory,
+  old_pid: process.Pid,
+  retries_remaining: Int,
+) -> Result(room.Room, Nil) {
+  case retries_remaining {
+    0 -> Error(Nil)
+    _ -> {
+      process.sleep(1)
+      wait_for_room_replacement(directory, old_pid, retries_remaining - 1)
+    }
+  }
 }
 
 fn connect_websocket(port: Int) -> Client {

@@ -496,20 +496,20 @@ connection, room, factory, and directory failures.
 
 **Acceptance criteria:**
 
-- [ ] An unjoined socket closes after 10 seconds, and dead connections do not leave
+- [x] An unjoined socket closes after 10 seconds, and dead connections do not leave
   stale presence.
-- [ ] A room crash emits `room_unavailable` when possible, closes attached sockets,
+- [x] A room crash emits `room_unavailable` when possible, closes attached sockets,
   and the factory registers a clean replacement.
-- [ ] Cleanup remains idempotent under close callbacks, monitor delivery, delayed
+- [x] Cleanup remains idempotent under close callbacks, monitor delivery, delayed
   notifications, and restart races.
 
 **Verification:**
 
-- [ ] Deterministic deadline and monitor-race tests pass.
-- [ ] Supervision integration tests prove the approved restart boundaries.
-- [ ] `gleam format --check src test`
-- [ ] `gleam build`
-- [ ] `gleam test`
+- [x] Deterministic deadline and monitor-race tests pass.
+- [x] Supervision integration tests prove the approved restart boundaries.
+- [x] `gleam format --check src test`
+- [x] `gleam build`
+- [x] `gleam test`
 
 **Dependencies:** Tasks 5–8.
 
