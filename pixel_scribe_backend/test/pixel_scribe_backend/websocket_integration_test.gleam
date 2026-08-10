@@ -5,11 +5,13 @@ import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
 import gleam/erlang/charlist
 import gleam/erlang/process
+import gleam/int
 import gleam/json
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/otp/static_supervisor
 import gleam/string
+import gleam/time/timestamp
 import glisten/socket.{type Socket, type SocketReason}
 import glisten/socket/options
 import glisten/tcp
@@ -67,6 +69,84 @@ pub fn two_clients_join_and_disconnect_over_websocket_test() {
   })
 }
 
+pub fn accepted_messages_are_broadcast_with_server_metadata_test() {
+  let server = start_test_server()
+
+  exception.defer(fn() { stop_test_server(server) }, fn() {
+    let first = connect_websocket(server.port)
+    exception.defer(fn() { close_client(first) }, fn() {
+      send_join(first, "Ada")
+      let assert Ok(#(first_state, first)) = read_frame(first, 1000)
+      let assert Ok(first_state) = decode_room_state(first_state)
+
+      let second = connect_websocket(server.port)
+      exception.defer(fn() { close_client(second) }, fn() {
+        send_join(second, "Grace")
+        let assert Ok(#(second_state, second)) = read_frame(second, 1000)
+        let assert Ok(second_state) = decode_room_state(second_state)
+        assert second_state.messages == []
+
+        let assert Ok(#(joined_event, first)) = read_frame(first, 1000)
+        let assert Ok(_) = decode_user_joined(joined_event)
+
+        send_message(first, "Hello from Ada")
+        let assert Ok(#(first_message, first)) = read_frame(first, 1000)
+        let assert Ok(#(second_message, second)) = read_frame(second, 1000)
+        let assert Ok(first_message) = decode_message_sent(first_message)
+        let assert Ok(second_message) = decode_message_sent(second_message)
+
+        assert first_message == second_message
+        assert first_message.room_id == "default"
+        assert first_message.message.sender_id == first_state.self_id
+        assert first_message.message.username == "Ada"
+        assert first_message.message.text == "Hello from Ada"
+        assert first_message.message.sent_at != ""
+        let assert Ok(_) =
+          timestamp.parse_rfc3339(first_message.message.sent_at)
+        assert second_state.self_id != first_state.self_id
+        assert read_frame(first, 50) == Error(Nil)
+        assert read_frame(second, 50) == Error(Nil)
+      })
+    })
+  })
+}
+
+pub fn rate_limit_rejects_overflow_without_history_entry_test() {
+  let server = start_test_server()
+
+  exception.defer(fn() { stop_test_server(server) }, fn() {
+    let first = connect_websocket(server.port)
+    exception.defer(fn() { close_client(first) }, fn() {
+      send_join(first, "Ada")
+      let assert Ok(#(state_payload, first)) = read_frame(first, 1000)
+      let assert Ok(state) = decode_room_state(state_payload)
+
+      send_messages(first, 1, 5)
+      let #(first, accepted) = read_message_events(first, 5, [])
+      assert list.length(accepted) == 5
+
+      send_message(first, "message-6")
+      let assert Ok(#(error_payload, _first)) = read_frame(first, 1000)
+      let assert Ok(error) = decode_error(error_payload)
+      assert error.code == "rate_limited"
+      assert error.recoverable
+
+      close_client(first)
+
+      let reconnect = connect_websocket(server.port)
+      exception.defer(fn() { close_client(reconnect) }, fn() {
+        send_join(reconnect, "Ada")
+        let assert Ok(#(reconnect_payload, _reconnect)) =
+          read_frame(reconnect, 1000)
+        let assert Ok(reconnect_state) = decode_room_state(reconnect_payload)
+        assert reconnect_state.self_id != state.self_id
+        assert list.map(reconnect_state.messages, fn(message) { message.text })
+          == ["message-1", "message-2", "message-3", "message-4", "message-5"]
+      })
+    })
+  })
+}
+
 type TestServer {
   TestServer(root: process.Pid, room: room.Room, port: Int)
 }
@@ -76,7 +156,12 @@ type Client {
 }
 
 type WireRoomState {
-  WireRoomState(room_id: String, self_id: String, users: List(WirePresence))
+  WireRoomState(
+    room_id: String,
+    self_id: String,
+    users: List(WirePresence),
+    messages: List(WireMessage),
+  )
 }
 
 type WirePresence {
@@ -89,6 +174,24 @@ type WireUserJoined {
 
 type WireUserLeft {
   WireUserLeft(room_id: String, connection_id: String)
+}
+
+type WireMessageEvent {
+  WireMessageEvent(room_id: String, message: WireMessage)
+}
+
+type WireMessage {
+  WireMessage(
+    message_id: String,
+    sender_id: String,
+    username: String,
+    text: String,
+    sent_at: String,
+  )
+}
+
+type WireError {
+  WireError(code: String, recoverable: Bool)
 }
 
 fn start_test_server() -> TestServer {
@@ -175,6 +278,17 @@ fn send_join(client: Client, username: String) -> Nil {
   Nil
 }
 
+fn send_message(client: Client, text: String) -> Nil {
+  let Client(socket, _) = client
+  let payload =
+    "{\"type\":\"send_message\",\"room_id\":\"default\",\"text\":\""
+    <> text
+    <> "\"}"
+  let frame = websocket.encode_text_frame(payload, None, Some(<<5, 6, 7, 8>>))
+  let assert Ok(Nil) = tcp.send(socket, frame)
+  Nil
+}
+
 fn close_client(client: Client) -> Nil {
   let Client(socket, _) = client
   let _ = tcp.close(socket)
@@ -230,6 +344,16 @@ fn decode_user_left(payload: String) -> Result(WireUserLeft, Nil) {
   |> result_replace_error()
 }
 
+fn decode_message_sent(payload: String) -> Result(WireMessageEvent, Nil) {
+  json.parse(payload, using: message_sent_decoder())
+  |> result_replace_error()
+}
+
+fn decode_error(payload: String) -> Result(WireError, Nil) {
+  json.parse(payload, using: error_decoder())
+  |> result_replace_error()
+}
+
 fn result_replace_error(value: Result(a, b)) -> Result(a, Nil) {
   case value {
     Ok(value) -> Ok(value)
@@ -242,16 +366,15 @@ fn room_state_decoder() -> decode.Decoder(WireRoomState) {
   use room_id <- decode.field("room_id", decode.string)
   use self_id <- decode.field("self_id", decode.string)
   use users <- decode.field("users", decode.list(of: presence_decoder()))
-  use messages <- decode.field("messages", decode.list(of: decode.dynamic))
-  case event_type, messages {
-    "room_state", [] -> decode.success(WireRoomState(room_id, self_id, users))
-    "room_state", _ ->
+  use messages <- decode.field("messages", decode.list(of: message_decoder()))
+  case event_type {
+    "room_state" ->
+      decode.success(WireRoomState(room_id, self_id, users, messages))
+    _ ->
       decode.failure(
-        WireRoomState("", "", []),
-        expected: "an empty message list",
+        WireRoomState("", "", [], []),
+        expected: "a room_state event",
       )
-    _, _ ->
-      decode.failure(WireRoomState("", "", []), expected: "a room_state event")
   }
 }
 
@@ -282,6 +405,64 @@ fn user_left_decoder() -> decode.Decoder(WireUserLeft) {
   case event_type {
     "user_left" -> decode.success(WireUserLeft(room_id, connection_id))
     _ -> decode.failure(WireUserLeft("", ""), expected: "a user_left event")
+  }
+}
+
+fn message_sent_decoder() -> decode.Decoder(WireMessageEvent) {
+  use event_type <- decode.field("type", decode.string)
+  use room_id <- decode.field("room_id", decode.string)
+  use message <- decode.field("message", message_decoder())
+  case event_type {
+    "message_sent" -> decode.success(WireMessageEvent(room_id, message))
+    _ ->
+      decode.failure(
+        WireMessageEvent("", WireMessage("", "", "", "", "")),
+        expected: "a message_sent event",
+      )
+  }
+}
+
+fn message_decoder() -> decode.Decoder(WireMessage) {
+  use message_id <- decode.field("message_id", decode.string)
+  use sender_id <- decode.field("sender_id", decode.string)
+  use username <- decode.field("username", decode.string)
+  use text <- decode.field("text", decode.string)
+  use sent_at <- decode.field("sent_at", decode.string)
+  decode.success(WireMessage(message_id, sender_id, username, text, sent_at))
+}
+
+fn error_decoder() -> decode.Decoder(WireError) {
+  use event_type <- decode.field("type", decode.string)
+  use code <- decode.field("code", decode.string)
+  use recoverable <- decode.field("recoverable", decode.bool)
+  case event_type {
+    "error" -> decode.success(WireError(code, recoverable))
+    _ -> decode.failure(WireError("", False), expected: "an error event")
+  }
+}
+
+fn send_messages(client: Client, next: Int, last: Int) -> Nil {
+  case next > last {
+    True -> Nil
+    False -> {
+      send_message(client, "message-" <> int.to_string(next))
+      send_messages(client, next + 1, last)
+    }
+  }
+}
+
+fn read_message_events(
+  client: Client,
+  remaining: Int,
+  messages: List(WireMessageEvent),
+) -> #(Client, List(WireMessageEvent)) {
+  case remaining {
+    0 -> #(client, list.reverse(messages))
+    _ -> {
+      let assert Ok(#(payload, client)) = read_frame(client, 1000)
+      let assert Ok(message) = decode_message_sent(payload)
+      read_message_events(client, remaining - 1, [message, ..messages])
+    }
   }
 }
 

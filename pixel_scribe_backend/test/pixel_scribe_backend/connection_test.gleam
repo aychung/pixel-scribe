@@ -81,7 +81,7 @@ pub fn mismatched_room_messages_are_rejected_without_sending_test() {
   assert requested_room_id == other_room_id
 }
 
-pub fn same_room_messages_are_ignored_until_rate_limiting_test() {
+pub fn same_room_messages_are_forwarded_to_the_room_test() {
   let assert Ok(room_id) = domain.new_room_id("default")
   let connection_id = domain.new_connection_id()
   let transition =
@@ -94,10 +94,13 @@ pub fn same_room_messages_are_ignored_until_rate_limiting_test() {
 
   let assert connection.Transition(
     connection.Joined(current_room_id, current_connection_id),
-    connection.Ignore,
+    connection.SendMessage(requested_room_id, requested_connection_id, text),
   ) = transition
   assert current_room_id == room_id
   assert current_connection_id == connection_id
+  assert requested_room_id == room_id
+  assert requested_connection_id == connection_id
+  assert domain.message_text_to_string(text) == "Hello"
 }
 
 pub fn invalid_event_closes_but_invalid_message_stays_open_test() {

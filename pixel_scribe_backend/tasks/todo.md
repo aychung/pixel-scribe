@@ -462,19 +462,19 @@ latest 50 messages in reconnect snapshots.
 
 **Acceptance criteria:**
 
-- [ ] Accepted messages carry server-issued ID, sender ID and label, text, and UTC
+- [x] Accepted messages carry server-issued ID, sender ID and label, text, and UTC
   timestamp and are broadcast once to every room member including the sender.
-- [ ] New joins receive the latest 50 messages in order and can deduplicate by ID.
-- [ ] A five-message burst is allowed, refill is one per second, and excess sends
+- [x] New joins receive the latest 50 messages in order and can deduplicate by ID.
+- [x] A five-message burst is allowed, refill is one per second, and excess sends
   receive recoverable `rate_limited` without entering room history.
 
 **Verification:**
 
-- [ ] Deterministic token-bucket tests use an injected clock.
-- [ ] Multi-client chat, reconnect-history, ordering, and overflow tests pass.
-- [ ] `gleam format --check src test`
-- [ ] `gleam build`
-- [ ] `gleam test`
+- [x] Deterministic token-bucket tests use an injected clock.
+- [x] Multi-client chat, reconnect-history, ordering, and overflow tests pass.
+- [x] `gleam format --check src test`
+- [x] `gleam build`
+- [x] `gleam test`
 
 **Dependencies:** Tasks 3, 4, and 7.
 

@@ -2,8 +2,7 @@
 
 ## Status
 
-Draft for review. The product specification is approved; implementation must not
-begin until this plan is approved.
+Implementation in progress. Tasks 0–8 are complete; Tasks 9–11 remain.
 
 ## Source of Truth
 
@@ -96,7 +95,7 @@ Wisp/Mist baseline + JSON codecs + room supervision
 ### Phase 3: Real-time user flows
 
 - [x] Task 7: Deliver WebSocket join and presence end to end.
-- [ ] Task 8: Deliver chat, bounded history, and rate limiting end to end.
+- [x] Task 8: Deliver chat, bounded history, and rate limiting end to end.
 - [ ] Task 9: Add connection liveness and supervised failure recovery.
 
 ### Checkpoint: Real-time MVP

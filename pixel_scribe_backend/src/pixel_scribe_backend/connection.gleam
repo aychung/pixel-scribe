@@ -5,6 +5,7 @@ import gleam/option.{type Option, None, Some}
 import mist
 import pixel_scribe_backend/domain
 import pixel_scribe_backend/protocol
+import pixel_scribe_backend/rate_limit
 import pixel_scribe_backend/room
 import pixel_scribe_backend/room_directory
 
@@ -21,6 +22,11 @@ pub type Action {
     room_id: Option(domain.RoomId),
     code: protocol.ErrorCode,
     close: Bool,
+  )
+  SendMessage(
+    room_id: domain.RoomId,
+    connection_id: domain.ConnectionId,
+    text: domain.MessageText,
   )
   Ignore
 }
@@ -40,6 +46,7 @@ type State {
     room_events: Subject(room.RoomEvent),
     phase: Phase,
     room: Option(room.Room),
+    rate_limit: rate_limit.Bucket,
   )
 }
 
@@ -102,7 +109,11 @@ pub fn websocket(
         process.new_selector()
         |> process.select_map(room_events, FromRoom)
         |> process.select_monitors(down_to_control)
-      #(State(directory, room_events, AwaitingJoin, None), Some(selector))
+      let bucket = rate_limit.new(rate_limit.monotonic_time_ms())
+      #(
+        State(directory, room_events, AwaitingJoin, None, bucket),
+        Some(selector),
+      )
     },
     handler: handle_websocket_message,
     on_close: close,
@@ -179,7 +190,41 @@ fn apply_transition(
         False -> mist.continue(state)
       }
     }
+    SendMessage(room_id, connection_id, text) ->
+      send_message(state, room_id, connection_id, text, websocket)
     Ignore -> mist.continue(state)
+  }
+}
+
+fn send_message(
+  state: State,
+  room_id: domain.RoomId,
+  connection_id: domain.ConnectionId,
+  text: domain.MessageText,
+  websocket: mist.WebsocketConnection,
+) -> mist.Next(State, ConnectionControl) {
+  case state.room {
+    None ->
+      apply_transition(
+        state,
+        error_transition(state.phase, Some(room_id), protocol.RoomUnavailable),
+        websocket,
+      )
+    Some(room_handle) ->
+      case
+        rate_limit.consume(state.rate_limit, rate_limit.monotonic_time_ms())
+      {
+        rate_limit.Allowed(bucket) -> {
+          room.send_message(room_handle, connection_id, text)
+          mist.continue(State(..state, rate_limit: bucket))
+        }
+        rate_limit.Rejected(bucket) ->
+          apply_transition(
+            State(..state, rate_limit: bucket),
+            error_transition(state.phase, Some(room_id), protocol.RateLimited),
+            websocket,
+          )
+      }
   }
 }
 
@@ -243,11 +288,11 @@ fn handle_client_event(
           Transition(Joining(room_id), ResolveRoom(room_id, username))
         _ -> error_transition(phase, Some(room_id), protocol.AlreadyJoined)
       }
-    protocol.SendMessage(room_id, _) ->
+    protocol.SendMessage(room_id, text) ->
       case phase {
-        Joined(joined_room_id, _) ->
+        Joined(joined_room_id, connection_id) ->
           case joined_room_id == room_id {
-            True -> Transition(phase, Ignore)
+            True -> Transition(phase, SendMessage(room_id, connection_id, text))
             False ->
               error_transition(phase, Some(room_id), protocol.RoomMismatch)
           }
