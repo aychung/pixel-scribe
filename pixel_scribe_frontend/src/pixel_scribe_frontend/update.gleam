@@ -1,6 +1,7 @@
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import lustre/effect.{type Effect}
+import pixel_scribe_frontend/browser
 import pixel_scribe_frontend/domain
 import pixel_scribe_frontend/model.{type Model}
 import pixel_scribe_frontend/protocol
@@ -72,6 +73,38 @@ pub fn transition(model: Model, message: Msg) -> #(Model, List(Command)) {
     RetryRequested -> retry_requested(model)
     ReturnToUsername -> return_to_username(model)
   }
+}
+
+/// Applies the one-time browser startup values without making them part of the
+/// public user-action message set. The browser boundary already validates the
+/// cookie, but validating again keeps this application-owned seam defensive.
+pub fn apply_browser_startup(
+  model: Model,
+  preference: Option(String),
+  seed: Int,
+) -> Model {
+  let validated_preference = case preference {
+    Some(value) ->
+      case validation.normalize_username(value) {
+        Ok(username) -> Some(username)
+        Error(_) -> None
+      }
+    None -> None
+  }
+  let username_preference = case validated_preference {
+    Some(value) -> value
+    None -> ""
+  }
+  let username_input = case model.username_input, validated_preference {
+    "", Some(value) -> value
+    _, _ -> model.username_input
+  }
+  model.Model(
+    ..model,
+    username_preference: username_preference,
+    username_input: username_input,
+    placement_seed: Some(seed),
+  )
 }
 
 fn submit_username(model: Model) -> #(Model, List(Command)) {
@@ -938,10 +971,45 @@ fn remove_presence(
   }
 }
 
-/// Lustre's application callback remains effect-shaped while the state machine
-/// is being introduced. Command interpretation is deliberately empty until the
-/// browser-effect units provide its boundary implementation.
+fn interpret_command(command: Command) -> Effect(Msg) {
+  case command {
+    WriteUsernamePreference(username) ->
+      effect.from(fn(_dispatch) { browser.write_username_preference(username) })
+    ScheduleReconnect(generation, timer_id, delay_ms) ->
+      browser.schedule_timer(
+        browser.Reconnect,
+        generation,
+        timer_id,
+        delay_ms,
+        ReconnectTimerFired,
+      )
+    CancelReconnect(generation, timer_id) ->
+      browser.cancel_timer(browser.Reconnect, generation, timer_id)
+    ScheduleRateLimit(generation, deadline_ms, delay_ms) ->
+      browser.schedule_timer(
+        browser.RateLimit,
+        generation,
+        deadline_ms,
+        delay_ms,
+        RateLimitTimerFired,
+      )
+    CancelRateLimit(generation, deadline_ms) ->
+      browser.cancel_timer(browser.RateLimit, generation, deadline_ms)
+    FocusUsername -> browser.focus_username()
+    FocusComposer -> browser.focus_composer()
+    ScrollChatToEnd -> browser.scroll_chat_to_end()
+    OpenSocket(_) | CloseSocket(_) | SendSocketFrame(_, _) | RenderScene ->
+      effect.none()
+  }
+}
+
+fn interpret_commands(commands: List(Command)) -> Effect(Msg) {
+  commands
+  |> list.map(interpret_command)
+  |> effect.batch
+}
+
 pub fn update(model: Model, message: Msg) -> #(Model, Effect(Msg)) {
-  let #(updated, _commands) = transition(model, message)
-  #(updated, effect.none())
+  let #(updated, commands) = transition(model, message)
+  #(updated, interpret_commands(commands))
 }
