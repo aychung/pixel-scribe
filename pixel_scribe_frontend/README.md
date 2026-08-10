@@ -209,6 +209,14 @@ The backend currently closes after `invalid_event`, `room_full`, and
 still being finalized. Drive behavior from `recoverable`, but contract-test the
 documented code-specific cases so changes are visible.
 
+Backend recoverability describes the server's phase and whether it closes the
+socket. The built-in-room-only frontend deliberately closes and resets after
+`invalid_username`, and deliberately closes into its unavailable-office state
+after `invalid_room_id` or `room_not_found`; these are client UX policies, not
+changes to the wire contract. For `room_unavailable`, the frontend accepts the
+backend's documented close and lets the reconnect state machine schedule
+backoff.
+
 ## Technology direction
 
 ### Lustre client-side SPA

@@ -16,8 +16,9 @@ pub type Msg {
   SocketOpened(generation: Int)
   SocketClosed(generation: Int, deliberate: Bool)
   SocketError(generation: Int)
-  ServerEvent(generation: Int, event: domain.ServerEvent)
+  ServerEvent(generation: Int, received_at_ms: Int, event: domain.ServerEvent)
   ReconnectTimerFired(generation: Int, timer_id: Int)
+  RateLimitTimerFired(generation: Int, deadline_ms: Int)
   RetryRequested
   ReturnToUsername
 }
@@ -32,6 +33,8 @@ pub type Command {
   WriteUsernamePreference(username: String)
   ScheduleReconnect(generation: Int, timer_id: Int, delay_ms: Int)
   CancelReconnect(generation: Int, timer_id: Int)
+  ScheduleRateLimit(generation: Int, deadline_ms: Int, delay_ms: Int)
+  CancelRateLimit(generation: Int, deadline_ms: Int)
   FocusUsername
   FocusComposer
   ScrollChatToEnd
@@ -54,7 +57,10 @@ pub fn transition(model: Model, message: Msg) -> #(Model, List(Command)) {
     SubmitMessage -> submit_message(model)
     SocketOpened(generation) -> socket_opened(model, generation)
     SocketClosed(generation, _) -> socket_closed(model, generation)
-    ServerEvent(generation, event) -> server_event(model, generation, event)
+    ServerEvent(generation, received_at_ms, event) ->
+      server_event(model, generation, received_at_ms, event)
+    RateLimitTimerFired(generation, deadline_ms) ->
+      rate_limit_timer_fired(model, generation, deadline_ms)
     _ -> #(model, [])
   }
 }
@@ -118,6 +124,7 @@ fn submit_message(model: Model) -> #(Model, List(Command)) {
       if snapshot.room_id == domain.default_room_id
       && snapshot.self_id == self_id
       && !snapshot.stale
+      && model.rate_limit_until == None
     -> submit_validated_message(model, generation)
     _, _, _ -> #(model, [])
   }
@@ -185,6 +192,7 @@ fn socket_opened(model: Model, generation: Int) -> #(Model, List(Command)) {
 fn server_event(
   model: Model,
   generation: Int,
+  received_at_ms: Int,
   event: domain.ServerEvent,
 ) -> #(Model, List(Command)) {
   case event {
@@ -252,7 +260,266 @@ fn server_event(
       }
     domain.MessageSent(room_id, message) ->
       accepted_message(model, generation, room_id, message)
-    _ -> #(model, [])
+    domain.ServerError(error) ->
+      server_error(model, generation, received_at_ms, error)
+    domain.UnknownEvent -> #(model, [])
+  }
+}
+
+fn server_error(
+  model: Model,
+  generation: Int,
+  received_at_ms: Int,
+  error: domain.ErrorEvent,
+) -> #(Model, List(Command)) {
+  case current_phase_generation(model.phase), recoverability_matches(error) {
+    Some(expected_generation), True if expected_generation == generation ->
+      apply_server_error(model, generation, received_at_ms, error)
+    Some(expected_generation), False if expected_generation == generation ->
+      protocol_failure(model, generation)
+    _, _ -> #(model, [])
+  }
+}
+
+fn apply_server_error(
+  model: Model,
+  generation: Int,
+  received_at_ms: Int,
+  error: domain.ErrorEvent,
+) -> #(Model, List(Command)) {
+  case error.code {
+    domain.InvalidUsername -> invalid_username_error(model, generation, error)
+    domain.InvalidMessage -> invalid_message_error(model, error)
+    domain.RateLimited ->
+      rate_limited_error(model, generation, received_at_ms, error)
+    domain.JoinRequired -> join_required_error(model, generation, error)
+    domain.AlreadyJoined -> connection_feedback(model, error)
+    domain.InvalidRoomId -> office_unavailable_error(model, generation, error)
+    domain.RoomNotFound -> office_unavailable_error(model, generation, error)
+    domain.RoomMismatch -> room_mismatch_error(model, error)
+    domain.InvalidEvent -> protocol_failure(model, generation)
+    domain.RoomFull -> room_full_error(model, generation, error)
+    domain.RoomUnavailable -> room_unavailable_error(model, generation, error)
+  }
+}
+
+fn recoverability_matches(error: domain.ErrorEvent) -> Bool {
+  let expected = case error.code {
+    domain.InvalidEvent -> False
+    domain.RoomUnavailable -> False
+    domain.RoomFull -> False
+    _ -> True
+  }
+  error.recoverable == expected
+}
+
+fn current_phase_generation(phase: model.ConnectionPhase) -> Option(Int) {
+  case phase {
+    model.Connecting(generation, _) -> Some(generation)
+    model.AwaitingRoomState(generation, _) -> Some(generation)
+    model.Joined(generation, _) -> Some(generation)
+    _ -> None
+  }
+}
+
+fn protocol_failure(model: Model, generation: Int) -> #(Model, List(Command)) {
+  let updated =
+    model.Model(
+      ..model,
+      phase: model.Blocked(model.ProtocolFailure),
+      room_snapshot: mark_snapshot_stale(model.room_snapshot),
+      send_in_flight: None,
+      rate_limit_until: None,
+      feedback: None,
+      connection_feedback: Some("Protocol error."),
+    )
+  #(updated, [CloseSocket(generation), ..cancel_rate_limit(model, generation)])
+}
+
+fn invalid_username_error(
+  model: Model,
+  generation: Int,
+  error: domain.ErrorEvent,
+) -> #(Model, List(Command)) {
+  let updated =
+    model.Model(
+      ..model,
+      phase: model.ChoosingUsername,
+      room_snapshot: None,
+      send_in_flight: None,
+      rate_limit_until: None,
+      feedback: Some(error.message),
+      connection_feedback: None,
+    )
+  let commands =
+    [CloseSocket(generation)]
+    |> list.append(cancel_rate_limit(model, generation))
+    |> list.append([FocusUsername])
+  #(updated, commands)
+}
+
+fn invalid_message_error(
+  model: Model,
+  error: domain.ErrorEvent,
+) -> #(Model, List(Command)) {
+  #(
+    model.Model(
+      ..model,
+      send_in_flight: None,
+      feedback: Some(error.message),
+      connection_feedback: None,
+    ),
+    [FocusComposer],
+  )
+}
+
+fn rate_limited_error(
+  model: Model,
+  generation: Int,
+  received_at_ms: Int,
+  error: domain.ErrorEvent,
+) -> #(Model, List(Command)) {
+  let deadline_ms = received_at_ms + 1000
+  let timer_commands = case model.rate_limit_until {
+    None -> [ScheduleRateLimit(generation, deadline_ms, 1000)]
+    Some(previous_deadline) if previous_deadline == deadline_ms -> []
+    Some(previous_deadline) -> [
+      CancelRateLimit(generation, previous_deadline),
+      ScheduleRateLimit(generation, deadline_ms, 1000),
+    ]
+  }
+  #(
+    model.Model(
+      ..model,
+      send_in_flight: None,
+      feedback: Some(error.message),
+      connection_feedback: None,
+      rate_limit_until: Some(deadline_ms),
+    ),
+    timer_commands,
+  )
+}
+
+fn join_required_error(
+  model: Model,
+  generation: Int,
+  error: domain.ErrorEvent,
+) -> #(Model, List(Command)) {
+  let snapshot = case model.phase {
+    model.Joined(_, _) -> mark_snapshot_stale(model.room_snapshot)
+    _ -> model.room_snapshot
+  }
+  let updated =
+    model.Model(
+      ..model,
+      room_snapshot: snapshot,
+      send_in_flight: None,
+      rate_limit_until: None,
+      feedback: None,
+      connection_feedback: Some(error.message),
+    )
+  #(updated, cancel_rate_limit(model, generation))
+}
+
+fn connection_feedback(
+  model: Model,
+  error: domain.ErrorEvent,
+) -> #(Model, List(Command)) {
+  #(
+    model.Model(
+      ..model,
+      feedback: None,
+      connection_feedback: Some(error.message),
+    ),
+    [],
+  )
+}
+
+fn room_mismatch_error(
+  model: Model,
+  error: domain.ErrorEvent,
+) -> #(Model, List(Command)) {
+  #(
+    model.Model(
+      ..model,
+      send_in_flight: None,
+      feedback: None,
+      connection_feedback: Some(error.message),
+    ),
+    [],
+  )
+}
+
+fn office_unavailable_error(
+  model: Model,
+  generation: Int,
+  error: domain.ErrorEvent,
+) -> #(Model, List(Command)) {
+  let updated =
+    model.Model(
+      ..model,
+      phase: model.Blocked(model.OfficeUnavailable),
+      room_snapshot: mark_snapshot_stale(model.room_snapshot),
+      send_in_flight: None,
+      rate_limit_until: None,
+      feedback: None,
+      connection_feedback: Some(error.message),
+    )
+  #(updated, [CloseSocket(generation), ..cancel_rate_limit(model, generation)])
+}
+
+fn room_full_error(
+  model: Model,
+  generation: Int,
+  error: domain.ErrorEvent,
+) -> #(Model, List(Command)) {
+  let updated =
+    model.Model(
+      ..model,
+      phase: model.Blocked(model.RoomFull),
+      room_snapshot: mark_snapshot_stale(model.room_snapshot),
+      send_in_flight: None,
+      rate_limit_until: None,
+      feedback: None,
+      connection_feedback: Some(error.message),
+    )
+  #(updated, [CloseSocket(generation), ..cancel_rate_limit(model, generation)])
+}
+
+fn room_unavailable_error(
+  model: Model,
+  generation: Int,
+  error: domain.ErrorEvent,
+) -> #(Model, List(Command)) {
+  let updated =
+    model.Model(
+      ..model,
+      room_snapshot: mark_snapshot_stale(model.room_snapshot),
+      send_in_flight: None,
+      rate_limit_until: None,
+      feedback: None,
+      connection_feedback: Some(error.message),
+    )
+  #(updated, cancel_rate_limit(model, generation))
+}
+
+fn cancel_rate_limit(model: Model, generation: Int) -> List(Command) {
+  case model.rate_limit_until {
+    Some(deadline_ms) -> [CancelRateLimit(generation, deadline_ms)]
+    None -> []
+  }
+}
+
+fn rate_limit_timer_fired(
+  model: Model,
+  generation: Int,
+  deadline_ms: Int,
+) -> #(Model, List(Command)) {
+  case current_phase_generation(model.phase), model.rate_limit_until {
+    Some(expected_generation), Some(expected_deadline)
+      if expected_generation == generation && expected_deadline == deadline_ms
+    -> #(model.Model(..model, rate_limit_until: None), [])
+    _, _ -> #(model, [])
   }
 }
 
@@ -374,14 +641,16 @@ fn latest_50(messages: List(domain.ChatMessage)) -> List(domain.ChatMessage) {
 fn socket_closed(model: Model, generation: Int) -> #(Model, List(Command)) {
   case is_current_generation(model.phase, generation) {
     False -> #(model, [])
-    True -> #(
-      model.Model(
-        ..model,
-        room_snapshot: mark_snapshot_stale(model.room_snapshot),
-        send_in_flight: None,
-      ),
-      [],
-    )
+    True -> {
+      let updated =
+        model.Model(
+          ..model,
+          room_snapshot: mark_snapshot_stale(model.room_snapshot),
+          send_in_flight: None,
+          rate_limit_until: None,
+        )
+      #(updated, cancel_rate_limit(model, generation))
+    }
   }
 }
 

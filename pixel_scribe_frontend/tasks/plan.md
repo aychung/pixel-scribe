@@ -212,21 +212,24 @@ JavaScript callbacks.
 
 | Error | Frontend behavior |
 | --- | --- |
-| `invalid_username` | Keep socket open, return to/focus the username field, show inline feedback, allow another join only if the finalized backend phase permits it. |
+| `invalid_username` | Deliberately close the current attempt, return to/focus the username field with the normalized preference retained, and show inline feedback. The backend leaves this error recoverable, but the frontend resets the socket because its state model does not keep an unjoined socket on the entry screen. |
 | `invalid_message` | Keep socket and joined state, keep draft, clear in-flight state, show composer feedback. |
 | Oversized final client frame | Keep the username or draft, show inline feedback, and emit no `join_room`/`send_message` frame; this is a local validation failure, not a backend `invalid_event`. |
 | `rate_limited` | Keep draft/socket, clear in-flight state, disable send for one second, announce feedback. |
 | `join_required` | Keep socket unjoined and chat disabled; show protocol feedback without an automatic send loop. |
 | `already_joined` | Preserve the current joined identity and snapshot; report the anomaly without another join. |
-| `invalid_room_id` / `room_not_found` | Since MVP has no room picker, stop this attempt and show the built-in office as unavailable with explicit retry. |
+| `invalid_room_id` / `room_not_found` | Since MVP has no room picker, deliberately close this attempt and show the built-in office as unavailable with explicit retry. The server-side phase remains recoverable; the close is a frontend policy for the built-in-room-only UI. |
 | `room_mismatch` | Keep joined state, reject the affected action, show client-defect feedback, never change rooms. |
 | `invalid_event` or malformed server data | Close deliberately, enter blocked protocol-failure UI, require explicit retry. |
 | `room_full` | Enter blocked join UI with username prefilled and an explicit retry that opens a new socket. |
-| `room_unavailable` | Close/accept server close and enter automatic reconnect; also expose an immediate retry control. |
+| `room_unavailable` | Mark the retained snapshot stale and accept the backend's documented close; that close enters Task 4F's automatic backoff path. Also expose an immediate retry control. |
 | Unexpected error/close | Enter automatic reconnect unless the user deliberately left or a terminal policy already owns the close. |
 
 Task 6 must compare this table with the backend's finalized Task 7 error/close
-matrix. Any difference is a documentation decision, not an implementation guess.
+matrix. Backend recoverability describes the server phase/socket behavior; the
+two deliberate frontend-close policies above are explicit client UX decisions,
+not changes to that public contract. Any other difference is a documentation
+decision, not an implementation guess.
 
 ### Reconnect calculation
 

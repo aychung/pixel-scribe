@@ -1,6 +1,6 @@
 import gleam/int
 import gleam/list
-import gleam/option.{None, Some}
+import gleam/option.{type Option, None, Some}
 import gleam/string
 import pixel_scribe_frontend/domain
 import pixel_scribe_frontend/model
@@ -68,13 +68,14 @@ pub fn every_message_variant_is_a_trusted_constructor_test() {
     update.SocketOpened(1),
     update.SocketClosed(1, True),
     update.SocketError(1),
-    update.ServerEvent(1, domain.UnknownEvent),
+    update.ServerEvent(1, 0, domain.UnknownEvent),
+    update.RateLimitTimerFired(1, 1000),
     update.ReconnectTimerFired(1, 8),
     update.RetryRequested,
     update.ReturnToUsername,
   ]
 
-  assert list.map(messages, msg_kind) == [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  assert list.map(messages, msg_kind) == [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 }
 
 pub fn every_external_command_is_a_closed_trusted_value_test() {
@@ -85,13 +86,16 @@ pub fn every_external_command_is_a_closed_trusted_value_test() {
     update.WriteUsernamePreference("Ada"),
     update.ScheduleReconnect(1, 9, 500),
     update.CancelReconnect(1, 9),
+    update.ScheduleRateLimit(1, 1000, 1000),
+    update.CancelRateLimit(1, 1000),
     update.FocusUsername,
     update.FocusComposer,
     update.ScrollChatToEnd,
     update.RenderScene,
   ]
 
-  assert list.map(commands, command_kind) == [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+  assert list.map(commands, command_kind)
+    == [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 }
 
 pub fn local_input_remains_the_only_minimal_transition_test() {
@@ -214,6 +218,7 @@ pub fn only_matching_default_room_snapshot_enters_joined_test() {
       waiting,
       update.ServerEvent(
         2,
+        0,
         domain.RoomState(domain.default_room_id, self_id, [participant], [
           message,
         ]),
@@ -228,6 +233,7 @@ pub fn only_matching_default_room_snapshot_enters_joined_test() {
       waiting,
       update.ServerEvent(
         1,
+        0,
         domain.RoomState(other_room, self_id, [participant], [message]),
       ),
     )
@@ -239,6 +245,7 @@ pub fn only_matching_default_room_snapshot_enters_joined_test() {
       waiting,
       update.ServerEvent(
         1,
+        0,
         domain.RoomState(domain.default_room_id, self_id, [participant], [
           message,
         ]),
@@ -262,6 +269,7 @@ pub fn only_matching_default_room_snapshot_enters_joined_test() {
       joined,
       update.ServerEvent(
         1,
+        0,
         domain.RoomState(domain.default_room_id, self_id, [], []),
       ),
     )
@@ -292,6 +300,7 @@ pub fn reconnect_snapshot_replaces_stale_snapshot_and_self_identity_test() {
       awaiting,
       update.ServerEvent(
         2,
+        0,
         domain.RoomState(
           domain.default_room_id,
           new_self,
@@ -328,6 +337,7 @@ pub fn joined_presence_deltas_upsert_and_remove_by_connection_id_test() {
       joined,
       update.ServerEvent(
         4,
+        0,
         domain.UserJoined(domain.default_room_id, replacement),
       ),
     )
@@ -337,7 +347,11 @@ pub fn joined_presence_deltas_upsert_and_remove_by_connection_id_test() {
   let #(removed, remove_commands) =
     update.transition(
       upserted,
-      update.ServerEvent(4, domain.UserLeft(domain.default_room_id, first_id)),
+      update.ServerEvent(
+        4,
+        0,
+        domain.UserLeft(domain.default_room_id, first_id),
+      ),
     )
   assert remove_commands == []
   assert snapshot_participants(removed) == [second]
@@ -353,7 +367,11 @@ pub fn duplicate_usernames_remain_distinct_during_presence_deltas_test() {
   let #(updated, _) =
     update.transition(
       joined,
-      update.ServerEvent(5, domain.UserJoined(domain.default_room_id, second)),
+      update.ServerEvent(
+        5,
+        0,
+        domain.UserJoined(domain.default_room_id, second),
+      ),
     )
 
   assert snapshot_participants(updated) == [first, second]
@@ -361,7 +379,11 @@ pub fn duplicate_usernames_remain_distinct_during_presence_deltas_test() {
   let #(removed, _) =
     update.transition(
       updated,
-      update.ServerEvent(5, domain.UserLeft(domain.default_room_id, first_id)),
+      update.ServerEvent(
+        5,
+        0,
+        domain.UserLeft(domain.default_room_id, first_id),
+      ),
     )
   assert snapshot_participants(removed) == [second]
 }
@@ -375,14 +397,16 @@ pub fn wrong_generation_presence_and_snapshot_callbacks_are_ignored_test() {
   let callbacks = [
     update.ServerEvent(
       5,
+      0,
       domain.UserJoined(
         domain.default_room_id,
         domain.Presence(domain.connection_id_from_string("late"), "Late"),
       ),
     ),
-    update.ServerEvent(5, domain.UserLeft(domain.default_room_id, peer_id)),
+    update.ServerEvent(5, 0, domain.UserLeft(domain.default_room_id, peer_id)),
     update.ServerEvent(
       5,
+      0,
       domain.RoomState(
         domain.default_room_id,
         domain.connection_id_from_string("replacement-self"),
@@ -481,6 +505,7 @@ pub fn peer_echo_appends_but_keeps_draft_and_pending_send_test() {
       sending,
       update.ServerEvent(
         11,
+        0,
         domain.MessageSent(domain.default_room_id, peer_message),
       ),
     )
@@ -507,6 +532,7 @@ pub fn matching_self_echo_appends_and_clears_only_matching_draft_test() {
       sending,
       update.ServerEvent(
         12,
+        0,
         domain.MessageSent(domain.default_room_id, accepted),
       ),
     )
@@ -535,6 +561,7 @@ pub fn self_echo_keeps_a_newer_current_draft_test() {
       edited,
       update.ServerEvent(
         13,
+        0,
         domain.MessageSent(domain.default_room_id, accepted),
       ),
     )
@@ -565,6 +592,7 @@ pub fn duplicate_message_ids_are_no_op_and_snapshot_history_is_latest_50_test() 
       joined,
       update.ServerEvent(
         14,
+        0,
         domain.MessageSent(domain.default_room_id, new_message),
       ),
     )
@@ -580,6 +608,7 @@ pub fn duplicate_message_ids_are_no_op_and_snapshot_history_is_latest_50_test() 
       with_new,
       update.ServerEvent(
         14,
+        0,
         domain.MessageSent(domain.default_room_id, duplicate),
       ),
     )
@@ -606,6 +635,7 @@ pub fn room_state_snapshot_deduplicates_before_latest_50_bound_test() {
       awaiting,
       update.ServerEvent(
         17,
+        0,
         domain.RoomState(
           domain.default_room_id,
           self_id,
@@ -638,6 +668,7 @@ pub fn stale_generation_and_nonmatching_self_echo_do_not_clear_pending_send_test
       sending,
       update.ServerEvent(
         17,
+        0,
         domain.MessageSent(domain.default_room_id, stale_message),
       ),
     )
@@ -652,6 +683,7 @@ pub fn stale_generation_and_nonmatching_self_echo_do_not_clear_pending_send_test
       sending,
       update.ServerEvent(
         18,
+        0,
         domain.MessageSent(domain.default_room_id, nonmatching_message),
       ),
     )
@@ -751,6 +783,386 @@ pub fn stale_disconnect_does_not_clear_replacement_send_test() {
   assert commands == []
 }
 
+pub fn active_phase_error_matrix_has_explicit_outcomes_test() {
+  let connecting = model.Connecting(1, 0)
+  let awaiting = model.AwaitingRoomState(1, 0)
+  let joined = model.Joined(1, domain.connection_id_from_string("self"))
+  let cases = [
+    #(connecting, domain.InvalidUsername, model.ChoosingUsername, [1, 8]),
+    #(connecting, domain.InvalidMessage, connecting, [9]),
+    #(connecting, domain.RateLimited, connecting, [6]),
+    #(connecting, domain.JoinRequired, connecting, []),
+    #(connecting, domain.AlreadyJoined, connecting, []),
+    #(connecting, domain.InvalidRoomId, model.Blocked(model.OfficeUnavailable), [
+      1,
+    ]),
+    #(connecting, domain.RoomNotFound, model.Blocked(model.OfficeUnavailable), [
+      1,
+    ]),
+    #(connecting, domain.RoomMismatch, connecting, []),
+    #(connecting, domain.InvalidEvent, model.Blocked(model.ProtocolFailure), [1]),
+    #(connecting, domain.RoomFull, model.Blocked(model.RoomFull), [1]),
+    #(connecting, domain.RoomUnavailable, connecting, []),
+    #(awaiting, domain.InvalidUsername, model.ChoosingUsername, [1, 8]),
+    #(awaiting, domain.InvalidMessage, awaiting, [9]),
+    #(awaiting, domain.RateLimited, awaiting, [6]),
+    #(awaiting, domain.JoinRequired, awaiting, []),
+    #(awaiting, domain.AlreadyJoined, awaiting, []),
+    #(awaiting, domain.InvalidRoomId, model.Blocked(model.OfficeUnavailable), [
+      1,
+    ]),
+    #(awaiting, domain.RoomNotFound, model.Blocked(model.OfficeUnavailable), [1]),
+    #(awaiting, domain.RoomMismatch, awaiting, []),
+    #(awaiting, domain.InvalidEvent, model.Blocked(model.ProtocolFailure), [1]),
+    #(awaiting, domain.RoomFull, model.Blocked(model.RoomFull), [1]),
+    #(awaiting, domain.RoomUnavailable, awaiting, []),
+    #(joined, domain.InvalidUsername, model.ChoosingUsername, [1, 8]),
+    #(joined, domain.InvalidMessage, joined, [9]),
+    #(joined, domain.RateLimited, joined, [6]),
+    #(joined, domain.JoinRequired, joined, []),
+    #(joined, domain.AlreadyJoined, joined, []),
+    #(joined, domain.InvalidRoomId, model.Blocked(model.OfficeUnavailable), [1]),
+    #(joined, domain.RoomNotFound, model.Blocked(model.OfficeUnavailable), [1]),
+    #(joined, domain.RoomMismatch, joined, []),
+    #(joined, domain.InvalidEvent, model.Blocked(model.ProtocolFailure), [1]),
+    #(joined, domain.RoomFull, model.Blocked(model.RoomFull), [1]),
+    #(joined, domain.RoomUnavailable, joined, []),
+  ]
+
+  list.each(cases, fn(item) {
+    let #(phase, code, expected_phase, expected_commands) = item
+    let state = model_for_phase(phase)
+    let #(updated, commands) =
+      update.transition(
+        state,
+        update.ServerEvent(1, 4000, domain.ServerError(error_event(code))),
+      )
+    assert updated.phase == expected_phase
+    assert list.map(commands, command_kind) == expected_commands
+  })
+}
+
+pub fn error_recoverability_mismatch_fails_closed_without_loop_test() {
+  let codes = [
+    #(domain.InvalidEvent, True),
+    #(domain.RoomUnavailable, True),
+    #(domain.RoomFull, True),
+    #(domain.JoinRequired, False),
+    #(domain.AlreadyJoined, False),
+    #(domain.InvalidRoomId, False),
+    #(domain.RoomNotFound, False),
+    #(domain.RoomMismatch, False),
+    #(domain.InvalidUsername, False),
+    #(domain.InvalidMessage, False),
+    #(domain.RateLimited, False),
+  ]
+
+  list.each(codes, fn(item) {
+    let #(code, recoverable) = item
+    let state =
+      model_for_phase(model.Joined(1, domain.connection_id_from_string("self")))
+    let #(blocked, commands) =
+      update.transition(
+        state,
+        update.ServerEvent(
+          1,
+          4000,
+          domain.ServerError(error_event_with_recoverability(code, recoverable)),
+        ),
+      )
+    assert blocked.phase == model.Blocked(model.ProtocolFailure)
+    assert commands == [update.CloseSocket(1)]
+
+    let #(unchanged, late_commands) =
+      update.transition(
+        blocked,
+        update.ServerEvent(1, 4000, domain.ServerError(error_event(code))),
+      )
+    assert unchanged == blocked
+    assert late_commands == []
+  })
+}
+
+pub fn rate_limit_deadline_is_generation_and_deadline_safe_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let joined =
+    model.Model(
+      ..joined_model(20, self_id, []),
+      draft: "keep me",
+      send_in_flight: Some(model.SendInFlight(20, "keep me")),
+    )
+  let #(limited, commands) =
+    update.transition(
+      joined,
+      update.ServerEvent(
+        20,
+        4000,
+        domain.ServerError(error_event(domain.RateLimited)),
+      ),
+    )
+
+  assert limited.rate_limit_until == Some(5000)
+  assert limited.draft == "keep me"
+  assert limited.send_in_flight == None
+  assert commands == [update.ScheduleRateLimit(20, 5000, 1000)]
+
+  let #(blocked_send, blocked_commands) =
+    update.transition(limited, update.SubmitMessage)
+  assert blocked_send == limited
+  assert blocked_commands == []
+
+  let #(stale_timer, stale_commands) =
+    update.transition(limited, update.RateLimitTimerFired(19, 5000))
+  assert stale_timer == limited
+  assert stale_commands == []
+
+  let #(wrong_deadline, wrong_deadline_commands) =
+    update.transition(limited, update.RateLimitTimerFired(20, 5001))
+  assert wrong_deadline == limited
+  assert wrong_deadline_commands == []
+
+  let #(available, available_commands) =
+    update.transition(limited, update.RateLimitTimerFired(20, 5000))
+  assert available.rate_limit_until == None
+  assert available_commands == []
+
+  let #(closed, close_commands) =
+    update.transition(limited, update.SocketClosed(20, False))
+  assert closed.rate_limit_until == None
+  assert close_commands == [update.CancelRateLimit(20, 5000)]
+}
+
+pub fn terminal_error_close_callbacks_are_no_ops_test() {
+  let state =
+    model.Model(
+      ..model_for_phase(model.Joined(
+        21,
+        domain.connection_id_from_string("self"),
+      )),
+      rate_limit_until: Some(5000),
+    )
+  let #(blocked, close_commands) =
+    update.transition(
+      state,
+      update.ServerEvent(
+        21,
+        4000,
+        domain.ServerError(error_event(domain.RoomFull)),
+      ),
+    )
+  assert blocked.phase == model.Blocked(model.RoomFull)
+  assert close_commands
+    == [update.CloseSocket(21), update.CancelRateLimit(21, 5000)]
+
+  let #(after_close, callbacks) =
+    update.transition(blocked, update.SocketClosed(21, False))
+  assert after_close == blocked
+  assert callbacks == []
+}
+
+pub fn username_error_returns_to_entry_without_losing_draft_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let state =
+    model.Model(
+      ..joined_model(22, self_id, []),
+      username_preference: "Ada",
+      username_input: "Ada",
+      draft: "keep this",
+      send_in_flight: Some(model.SendInFlight(22, "keep this")),
+    )
+  let #(updated, commands) =
+    update.transition(
+      state,
+      update.ServerEvent(
+        22,
+        4000,
+        domain.ServerError(error_event(domain.InvalidUsername)),
+      ),
+    )
+
+  assert updated.phase == model.ChoosingUsername
+  assert updated.username_preference == "Ada"
+  assert updated.username_input == "Ada"
+  assert updated.draft == "keep this"
+  assert updated.send_in_flight == None
+  assert updated.feedback == Some("server feedback")
+  assert commands == [update.CloseSocket(22), update.FocusUsername]
+}
+
+pub fn joined_join_required_disables_chat_without_a_resend_loop_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let state =
+    model.Model(
+      ..joined_model(23, self_id, []),
+      draft: "keep this",
+      send_in_flight: Some(model.SendInFlight(23, "keep this")),
+    )
+  let #(updated, commands) =
+    update.transition(
+      state,
+      update.ServerEvent(
+        23,
+        4000,
+        domain.ServerError(error_event(domain.JoinRequired)),
+      ),
+    )
+
+  assert updated.phase == model.Joined(23, self_id)
+  assert updated.draft == "keep this"
+  assert updated.send_in_flight == None
+  assert snapshot_is_stale(updated)
+  assert commands == []
+
+  let #(still_disabled, retry_commands) =
+    update.transition(updated, update.SubmitMessage)
+  assert still_disabled == updated
+  assert retry_commands == []
+}
+
+pub fn room_unavailable_keeps_phase_for_the_close_reconnect_handoff_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let state =
+    model.Model(
+      ..joined_model(24, self_id, []),
+      draft: "keep this",
+      send_in_flight: Some(model.SendInFlight(24, "keep this")),
+    )
+  let #(updated, commands) =
+    update.transition(
+      state,
+      update.ServerEvent(
+        24,
+        4000,
+        domain.ServerError(error_event(domain.RoomUnavailable)),
+      ),
+    )
+
+  assert updated.phase == model.Joined(24, self_id)
+  assert updated.draft == "keep this"
+  assert updated.send_in_flight == None
+  assert snapshot_is_stale(updated)
+  assert commands == []
+}
+
+pub fn joined_error_table_preserves_draft_and_routes_feedback_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let cases = [
+    #(domain.InvalidUsername, 0, False, True, False),
+    #(domain.InvalidMessage, 3, False, True, False),
+    #(domain.RateLimited, 3, False, True, False),
+    #(domain.JoinRequired, 3, False, False, True),
+    #(domain.AlreadyJoined, 3, True, False, True),
+    #(domain.InvalidRoomId, 5, False, False, True),
+    #(domain.RoomNotFound, 5, False, False, True),
+    #(domain.RoomMismatch, 3, False, False, True),
+    #(domain.InvalidEvent, 5, False, False, True),
+    #(domain.RoomFull, 5, False, False, True),
+    #(domain.RoomUnavailable, 3, False, False, True),
+  ]
+
+  list.each(cases, fn(item) {
+    let #(
+      code,
+      expected_phase,
+      expected_in_flight,
+      field_error,
+      connection_error,
+    ) = item
+    let state =
+      model.Model(
+        ..joined_model(25, self_id, []),
+        draft: "preserve me",
+        send_in_flight: Some(model.SendInFlight(25, "preserve me")),
+      )
+    let #(updated, _) =
+      update.transition(
+        state,
+        update.ServerEvent(25, 4000, domain.ServerError(error_event(code))),
+      )
+
+    assert phase_kind(updated.phase) == expected_phase
+    assert updated.draft == "preserve me"
+    assert option_present(updated.send_in_flight) == expected_in_flight
+    assert option_present(updated.feedback) == field_error
+    assert option_present(updated.connection_feedback) == connection_error
+  })
+}
+
+pub fn inactive_phases_ignore_every_server_error_test() {
+  let inactive_phases = [
+    model.ChoosingUsername,
+    model.WaitingToReconnect(2, 1, 500),
+    model.Blocked(model.ProtocolFailure),
+  ]
+  let codes = [
+    domain.InvalidEvent,
+    domain.JoinRequired,
+    domain.AlreadyJoined,
+    domain.InvalidRoomId,
+    domain.RoomNotFound,
+    domain.RoomMismatch,
+    domain.RoomUnavailable,
+    domain.InvalidUsername,
+    domain.InvalidMessage,
+    domain.RateLimited,
+    domain.RoomFull,
+  ]
+
+  list.each(inactive_phases, fn(phase) {
+    list.each(codes, fn(code) {
+      let state = model_for_phase(phase)
+      let #(updated, commands) =
+        update.transition(
+          state,
+          update.ServerEvent(1, 4000, domain.ServerError(error_event(code))),
+        )
+      assert updated == state
+      assert commands == []
+    })
+  })
+}
+
+pub fn active_wrong_generation_errors_are_ignored_test() {
+  let phases = [
+    model.Connecting(10, 0),
+    model.AwaitingRoomState(10, 0),
+    model.Joined(10, domain.connection_id_from_string("self")),
+  ]
+  let codes = [
+    domain.InvalidEvent,
+    domain.JoinRequired,
+    domain.AlreadyJoined,
+    domain.InvalidRoomId,
+    domain.RoomNotFound,
+    domain.RoomMismatch,
+    domain.RoomUnavailable,
+    domain.InvalidUsername,
+    domain.InvalidMessage,
+    domain.RateLimited,
+    domain.RoomFull,
+  ]
+
+  list.each(phases, fn(phase) {
+    list.each(codes, fn(code) {
+      let state = model_for_phase(phase)
+      let #(updated, commands) =
+        update.transition(
+          state,
+          update.ServerEvent(9, 4000, domain.ServerError(error_event(code))),
+        )
+      assert updated == state
+      assert commands == []
+    })
+  })
+}
+
+fn option_present(value: Option(a)) -> Bool {
+  case value {
+    Some(_) -> True
+    None -> False
+  }
+}
+
 fn joined_model(
   generation: Int,
   self_id: domain.ConnectionId,
@@ -769,6 +1181,51 @@ fn joined_model(
       False,
     )),
   )
+}
+
+fn model_for_phase(phase: model.ConnectionPhase) -> model.Model {
+  let initial = model.initial()
+  case phase {
+    model.Joined(generation, self_id) ->
+      model.Model(
+        ..joined_model(generation, self_id, []),
+        username_preference: "Ada",
+        username_input: "Ada",
+      )
+    _ ->
+      model.Model(
+        ..initial,
+        username_preference: "Ada",
+        username_input: "Ada",
+        phase: phase,
+        socket_generation: 1,
+      )
+  }
+}
+
+fn error_event(code: domain.ErrorCode) -> domain.ErrorEvent {
+  error_event_with_recoverability(code, expected_recoverability(code))
+}
+
+fn error_event_with_recoverability(
+  code: domain.ErrorCode,
+  recoverable: Bool,
+) -> domain.ErrorEvent {
+  domain.ErrorEvent(
+    Some(domain.default_room_id),
+    code,
+    "server feedback",
+    recoverable,
+  )
+}
+
+fn expected_recoverability(code: domain.ErrorCode) -> Bool {
+  case code {
+    domain.InvalidEvent -> False
+    domain.RoomUnavailable -> False
+    domain.RoomFull -> False
+    _ -> True
+  }
 }
 
 fn snapshot_messages(state: model.Model) -> List(domain.ChatMessage) {
@@ -844,10 +1301,11 @@ fn msg_kind(message: update.Msg) -> Int {
     update.SocketOpened(_) -> 4
     update.SocketClosed(_, _) -> 5
     update.SocketError(_) -> 6
-    update.ServerEvent(_, _) -> 7
-    update.ReconnectTimerFired(_, _) -> 8
-    update.RetryRequested -> 9
-    update.ReturnToUsername -> 10
+    update.ServerEvent(_, _, _) -> 7
+    update.RateLimitTimerFired(_, _) -> 8
+    update.ReconnectTimerFired(_, _) -> 9
+    update.RetryRequested -> 10
+    update.ReturnToUsername -> 11
   }
 }
 
@@ -859,9 +1317,11 @@ fn command_kind(command: update.Command) -> Int {
     update.WriteUsernamePreference(_) -> 3
     update.ScheduleReconnect(_, _, _) -> 4
     update.CancelReconnect(_, _) -> 5
-    update.FocusUsername -> 6
-    update.FocusComposer -> 7
-    update.ScrollChatToEnd -> 8
-    update.RenderScene -> 9
+    update.ScheduleRateLimit(_, _, _) -> 6
+    update.CancelRateLimit(_, _) -> 7
+    update.FocusUsername -> 8
+    update.FocusComposer -> 9
+    update.ScrollChatToEnd -> 10
+    update.RenderScene -> 11
   }
 }
