@@ -33,6 +33,15 @@ fn schedule_timer_ffi(
 @external(javascript, "./browser_ffi.mjs", "cancel_timer")
 fn cancel_timer_ffi(timer_kind: Int, generation: Int, timer_id: Int) -> Nil
 
+@external(javascript, "./browser_ffi.mjs", "focus_username")
+fn focus_username_ffi() -> Nil
+
+@external(javascript, "./browser_ffi.mjs", "focus_composer")
+fn focus_composer_ffi() -> Nil
+
+@external(javascript, "./browser_ffi.mjs", "scroll_chat_to_end")
+fn scroll_chat_to_end_ffi() -> Nil
+
 /// Namespaces for timers owned by separate application concerns. A timer ID
 /// is opaque within its namespace, so reconnect cleanup cannot cancel a
 /// rate-limit timer that happens to use the same integer.
@@ -113,6 +122,26 @@ pub fn cancel_timer(
   effect.from(fn(_dispatch) {
     cancel_timer_ffi(timer_kind_code(kind), generation, timer_id)
   })
+}
+
+/// Focuses the application-owned username input after Lustre has applied its
+/// latest view. The target is fixed in the browser boundary and a missing node
+/// is a harmless no-op.
+pub fn focus_username() -> Effect(a) {
+  effect.before_paint(fn(_dispatch, _root) { focus_username_ffi() })
+}
+
+/// Focuses the application-owned chat composer after Lustre has applied its
+/// latest view. The target is fixed in the browser boundary and a missing node
+/// is a harmless no-op.
+pub fn focus_composer() -> Effect(a) {
+  effect.before_paint(fn(_dispatch, _root) { focus_composer_ffi() })
+}
+
+/// Scrolls the application-owned chat log to its end after Lustre has applied
+/// its latest view. A missing node is a harmless no-op.
+pub fn scroll_chat_to_end() -> Effect(a) {
+  effect.before_paint(fn(_dispatch, _root) { scroll_chat_to_end_ffi() })
 }
 
 fn timer_kind_code(kind: TimerKind) -> Int {

@@ -1,5 +1,9 @@
 const USERNAME_COOKIE_PREFIX = "pixel_scribe_username=";
 
+const USERNAME_INPUT_ID = "username";
+const COMPOSER_ID = "composer";
+const CHAT_LOG_ID = "chat-log";
+
 // A timer is owned by its kind and opaque identity. Its generation is retained
 // on the entry for cancellation checks and callback dispatch. Keeping the
 // entry object in the map lets a callback prove it is still the currently
@@ -84,6 +88,59 @@ export function cancel_timer(timerKind, generation, timerId) {
     } catch (_error) {
       // Cleanup is idempotent even if the browser rejects an old handle.
     }
+  }
+
+  return undefined;
+}
+
+function fixedElement(id) {
+  try {
+    if (
+      typeof document === "undefined" ||
+      typeof document.getElementById !== "function"
+    ) {
+      return undefined;
+    }
+
+    return document.getElementById(id) ?? undefined;
+  } catch (_error) {
+    return undefined;
+  }
+}
+
+function focusFixedElement(id) {
+  const element = fixedElement(id);
+  if (element === undefined || typeof element.focus !== "function") {
+    return;
+  }
+
+  try {
+    element.focus();
+  } catch (_error) {
+    // A removed or non-focusable target is safe to ignore.
+  }
+}
+
+export function focus_username() {
+  focusFixedElement(USERNAME_INPUT_ID);
+  return undefined;
+}
+
+export function focus_composer() {
+  focusFixedElement(COMPOSER_ID);
+  return undefined;
+}
+
+export function scroll_chat_to_end() {
+  const element = fixedElement(CHAT_LOG_ID);
+  if (element === undefined) {
+    return undefined;
+  }
+
+  try {
+    element.scrollTop = element.scrollHeight;
+  } catch (_error) {
+    // A removed or non-scrollable target is safe to ignore.
   }
 
   return undefined;
