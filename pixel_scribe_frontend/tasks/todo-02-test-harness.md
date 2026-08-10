@@ -6,7 +6,7 @@ non-interactive CLI workflow before browser behavior becomes complex.
 
 ### Work units
 
-- [ ] **Task 2A — Add the Gleam test entry and one view test.**
+- [x] **Task 2A — Add the Gleam test entry and one view test.**
   - **Done when:** `gleam test` discovers the suite and a focused test proves the
     initial model plus one semantic username-view assertion without production
     test hooks.
@@ -14,7 +14,7 @@ non-interactive CLI workflow before browser behavior becomes complex.
     `test/pixel_scribe_frontend/view_test.gleam`.
   - **Verify:** `gleam format --check src test`; `gleam build`; `gleam test`.
   - **Depends:** Task 1B.
-- [ ] **Task 2B — Configure deterministic Playwright execution.**
+- [x] **Task 2B — Configure deterministic Playwright execution.**
   - **Done when:** the config defines the Lustre dev server, base URL, bounded
     timeouts, ignored failure artifacts, and explicit Chromium/Firefox/WebKit
     projects with Chromium as the routine project.
@@ -22,7 +22,7 @@ non-interactive CLI workflow before browser behavior becomes complex.
   - **Verify:** `bunx playwright test --list --project=chromium` starts and exits
     without downloading a browser or leaving a dev server.
   - **Depends:** Tasks 0B and 1C.
-- [ ] **Task 2C — Add the shell browser and axe checks.**
+- [x] **Task 2C — Add the shell browser and axe checks.**
   - **Done when:** the headless test covers semantic locators, keyboard submit,
     320px bounds, horizontal overflow, console/page errors, and an unsuppressed
     WCAG A/AA axe scan.
@@ -48,21 +48,21 @@ non-interactive CLI workflow before browser behavior becomes complex.
 
 **Acceptance criteria:**
 
-- [ ] `gleam test` discovers and runs frontend tests on the JavaScript target.
-- [ ] Playwright starts/stops the frontend predictably and the Chromium shell
+- [x] `gleam test` discovers and runs frontend tests on the JavaScript target.
+- [x] Playwright starts/stops the frontend predictably and the Chromium shell
   test passes headlessly with `--reporter=line --workers=1`.
-- [ ] Failure artifacts are written only to ignored directories, and axe scans
+- [x] Failure artifacts are written only to ignored directories, and axe scans
   the initial state without suppressing rules or excluding the application.
 
 **Verification:**
 
-- [ ] `gleam format --check src test`
-- [ ] `gleam build`
-- [ ] `gleam test`
-- [ ] `gleam run -m lustre/dev build`
-- [ ] `bunx playwright install chromium` (explicit environment setup)
-- [ ] `bunx playwright test --project=chromium --reporter=line --workers=1`
-- [ ] Review that the Playwright process exits and does not leave a dev server.
+- [x] `gleam format --check src test`
+- [x] `gleam build`
+- [x] `gleam test`
+- [x] `gleam run -m lustre/dev build`
+- [x] `bunx playwright install chromium` (explicit environment setup)
+- [x] `bunx playwright test --project=chromium --reporter=line --workers=1`
+- [x] Review that the Playwright process exits and does not leave a dev server.
 
 **Dependencies:** Tasks 0-1.
 
@@ -75,4 +75,3 @@ non-interactive CLI workflow before browser behavior becomes complex.
 - `e2e/support/accessibility.ts`
 
 **Estimated scope:** Medium, 5 files.
-
