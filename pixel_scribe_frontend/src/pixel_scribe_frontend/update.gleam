@@ -154,7 +154,63 @@ fn server_event(
         }
         _ -> #(model, [])
       }
+    domain.UserJoined(room_id, user) ->
+      case model.phase, model.room_snapshot {
+        model.Joined(expected_generation, _), Some(snapshot)
+          if expected_generation == generation && room_id == snapshot.room_id
+        -> {
+          let updated_snapshot =
+            model.RoomSnapshot(
+              ..snapshot,
+              participants: upsert_presence(snapshot.participants, user),
+            )
+          #(model.Model(..model, room_snapshot: Some(updated_snapshot)), [])
+        }
+        _, _ -> #(model, [])
+      }
+    domain.UserLeft(room_id, connection_id) ->
+      case model.phase, model.room_snapshot {
+        model.Joined(expected_generation, _), Some(snapshot)
+          if expected_generation == generation && room_id == snapshot.room_id
+        -> {
+          let updated_snapshot =
+            model.RoomSnapshot(
+              ..snapshot,
+              participants: remove_presence(
+                snapshot.participants,
+                connection_id,
+              ),
+            )
+          #(model.Model(..model, room_snapshot: Some(updated_snapshot)), [])
+        }
+        _, _ -> #(model, [])
+      }
     _ -> #(model, [])
+  }
+}
+
+fn upsert_presence(
+  participants: List(domain.Presence),
+  replacement: domain.Presence,
+) -> List(domain.Presence) {
+  case participants {
+    [] -> [replacement]
+    [first, ..rest] if first.connection_id == replacement.connection_id -> [
+      replacement,
+      ..rest
+    ]
+    [first, ..rest] -> [first, ..upsert_presence(rest, replacement)]
+  }
+}
+
+fn remove_presence(
+  participants: List(domain.Presence),
+  connection_id: domain.ConnectionId,
+) -> List(domain.Presence) {
+  case participants {
+    [] -> []
+    [first, ..rest] if first.connection_id == connection_id -> rest
+    [first, ..rest] -> [first, ..remove_presence(rest, connection_id)]
   }
 }
 

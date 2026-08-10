@@ -268,6 +268,162 @@ pub fn only_matching_default_room_snapshot_enters_joined_test() {
   assert ignored_commands == []
 }
 
+pub fn reconnect_snapshot_replaces_stale_snapshot_and_self_identity_test() {
+  let old_self = domain.connection_id_from_string("old-self")
+  let new_self = domain.connection_id_from_string("new-self")
+  let old_user = domain.Presence(old_self, "Ada")
+  let old_snapshot =
+    model.RoomSnapshot(domain.default_room_id, old_self, [old_user], [], True)
+  let replacement_user = domain.Presence(new_self, "Grace")
+  let awaiting =
+    model.Model(
+      ..model.initial(),
+      username_preference: "Ada",
+      username_input: "Ada",
+      phase: model.AwaitingRoomState(2, 3),
+      socket_generation: 2,
+      room_snapshot: Some(old_snapshot),
+      draft: "preserve me",
+    )
+
+  let #(updated, commands) =
+    update.transition(
+      awaiting,
+      update.ServerEvent(
+        2,
+        domain.RoomState(
+          domain.default_room_id,
+          new_self,
+          [replacement_user],
+          [],
+        ),
+      ),
+    )
+
+  assert updated.phase == model.Joined(2, new_self)
+  assert updated.room_snapshot
+    == Some(model.RoomSnapshot(
+      domain.default_room_id,
+      new_self,
+      [replacement_user],
+      [],
+      False,
+    ))
+  assert updated.draft == "preserve me"
+  assert updated.reconnect_attempt == 0
+  assert commands == []
+}
+
+pub fn joined_presence_deltas_upsert_and_remove_by_connection_id_test() {
+  let first_id = domain.connection_id_from_string("first")
+  let second_id = domain.connection_id_from_string("second")
+  let first = domain.Presence(first_id, "Same name")
+  let second = domain.Presence(second_id, "Same name")
+  let joined = joined_model(4, first_id, [first, second])
+
+  let replacement = domain.Presence(first_id, "Renamed")
+  let #(upserted, upsert_commands) =
+    update.transition(
+      joined,
+      update.ServerEvent(
+        4,
+        domain.UserJoined(domain.default_room_id, replacement),
+      ),
+    )
+  assert upsert_commands == []
+  assert snapshot_participants(upserted) == [replacement, second]
+
+  let #(removed, remove_commands) =
+    update.transition(
+      upserted,
+      update.ServerEvent(4, domain.UserLeft(domain.default_room_id, first_id)),
+    )
+  assert remove_commands == []
+  assert snapshot_participants(removed) == [second]
+}
+
+pub fn duplicate_usernames_remain_distinct_during_presence_deltas_test() {
+  let first_id = domain.connection_id_from_string("first")
+  let second_id = domain.connection_id_from_string("second")
+  let first = domain.Presence(first_id, "Same name")
+  let second = domain.Presence(second_id, "Same name")
+  let joined = joined_model(5, first_id, [first])
+
+  let #(updated, _) =
+    update.transition(
+      joined,
+      update.ServerEvent(5, domain.UserJoined(domain.default_room_id, second)),
+    )
+
+  assert snapshot_participants(updated) == [first, second]
+
+  let #(removed, _) =
+    update.transition(
+      updated,
+      update.ServerEvent(5, domain.UserLeft(domain.default_room_id, first_id)),
+    )
+  assert snapshot_participants(removed) == [second]
+}
+
+pub fn wrong_generation_presence_and_snapshot_callbacks_are_ignored_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let peer_id = domain.connection_id_from_string("peer")
+  let peer = domain.Presence(peer_id, "Peer")
+  let joined = joined_model(6, self_id, [peer])
+
+  let callbacks = [
+    update.ServerEvent(
+      5,
+      domain.UserJoined(
+        domain.default_room_id,
+        domain.Presence(domain.connection_id_from_string("late"), "Late"),
+      ),
+    ),
+    update.ServerEvent(5, domain.UserLeft(domain.default_room_id, peer_id)),
+    update.ServerEvent(
+      5,
+      domain.RoomState(
+        domain.default_room_id,
+        domain.connection_id_from_string("replacement-self"),
+        [],
+        [],
+      ),
+    ),
+  ]
+
+  assert list.all(callbacks, fn(callback) {
+    let #(updated, commands) = update.transition(joined, callback)
+    updated == joined && commands == []
+  })
+}
+
+fn joined_model(
+  generation: Int,
+  self_id: domain.ConnectionId,
+  participants: List(domain.Presence),
+) -> model.Model {
+  let initial = model.initial()
+  model.Model(
+    ..initial,
+    phase: model.Joined(generation, self_id),
+    socket_generation: generation,
+    room_snapshot: Some(model.RoomSnapshot(
+      domain.default_room_id,
+      self_id,
+      participants,
+      [],
+      False,
+    )),
+  )
+}
+
+fn snapshot_participants(state: model.Model) -> List(domain.Presence) {
+  case state.room_snapshot {
+    Some(snapshot) -> snapshot.participants
+    None -> []
+  }
+}
+
 fn phase_kind(phase: model.ConnectionPhase) -> Int {
   case phase {
     model.ChoosingUsername -> 0
