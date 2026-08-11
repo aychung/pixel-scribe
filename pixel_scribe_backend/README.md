@@ -60,6 +60,15 @@ ENVIRONMENT=development \
   gleam run
 ```
 
+From the repository root, rebuild and stage the frontend before starting the
+backend with:
+
+```sh
+ENVIRONMENT=development \
+  DEVELOPMENT_ORIGINS='http://localhost:1234' \
+  ./scripts/run_backend.sh
+```
+
 Runtime configuration is validated as follows:
 
 - `HOST` is an optional bind address, defaulting to `localhost`.

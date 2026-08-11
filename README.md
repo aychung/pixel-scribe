@@ -86,6 +86,15 @@ ENVIRONMENT=development \
   gleam run
 ```
 
+From the repository root, use the runner to rebuild and stage the frontend
+artifacts before starting the backend:
+
+```sh
+ENVIRONMENT=development \
+  DEVELOPMENT_ORIGINS='http://localhost:1234' \
+  ./scripts/run_backend.sh
+```
+
 At startup the backend generates a Wisp adapter key in memory; `SECRET_KEY_BASE`
 is not required. Runtime configuration is validated as follows:
 
