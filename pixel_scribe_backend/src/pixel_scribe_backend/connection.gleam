@@ -40,6 +40,18 @@ pub type Transition {
   Transition(phase: Phase, action: Action)
 }
 
+/// Build the terminal transition used when a validated room handle is dead.
+///
+/// `ReplyError` is applied by sending the error event before stopping the
+/// socket when its `close` flag is `True`.
+@internal
+pub fn room_unavailable_transition(
+  phase: Phase,
+  room_id: domain.RoomId,
+) -> Transition {
+  error_transition(phase, Some(room_id), protocol.RoomUnavailable)
+}
+
 type ConnectionControl {
   FromRoom(event: room.RoomEvent)
   JoinedRoomDown(pid: Pid)
@@ -100,7 +112,7 @@ pub fn handle_room_down(phase: Phase) -> Transition {
   case phase {
     AwaitingJoin -> Transition(phase, Ignore)
     Joining(room_id) | Joined(room_id, _) ->
-      error_transition(phase, Some(room_id), protocol.RoomUnavailable)
+      room_unavailable_transition(phase, room_id)
   }
 }
 
@@ -297,12 +309,7 @@ fn resolve_and_join(
             None,
             lifecycle_logging.RoomUnavailable,
           ))
-          let transition =
-            error_transition(
-              AwaitingJoin,
-              Some(room_id),
-              protocol.RoomUnavailable,
-            )
+          let transition = room_unavailable_transition(AwaitingJoin, room_id)
           apply_transition(state, transition, websocket)
         }
         True -> {

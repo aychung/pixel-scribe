@@ -137,6 +137,21 @@ pub fn error_server_events_decode_string_and_null_room_context_test() {
     == domain.ErrorEvent(None, domain.InvalidEvent, "Invalid event.", False)
 }
 
+pub fn room_unavailable_fixture_preserves_requested_room_and_terminal_policy_test() {
+  let assert Ok(domain.ServerError(error)) =
+    protocol.decode_server_event(
+      "{\"type\":\"error\",\"room_id\":\"default\",\"code\":\"room_unavailable\",\"message\":\"Room is unavailable. Reconnect to continue.\",\"recoverable\":false}",
+    )
+
+  assert error
+    == domain.ErrorEvent(
+      Some(domain.default_room_id),
+      domain.RoomUnavailable,
+      "Room is unavailable. Reconnect to continue.",
+      False,
+    )
+}
+
 pub fn every_documented_error_code_decodes_to_its_domain_variant_test() {
   let codes = [
     #("invalid_event", domain.InvalidEvent),

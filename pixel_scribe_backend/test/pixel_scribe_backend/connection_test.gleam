@@ -183,6 +183,26 @@ pub fn joined_room_down_is_fatal_and_has_room_context_test() {
   assert error_room_id == room_id
 }
 
+pub fn awaiting_join_dead_room_sends_contextual_error_before_terminal_close_test() {
+  let transition =
+    connection.room_unavailable_transition(
+      connection.AwaitingJoin,
+      domain.default_room_id,
+    )
+
+  let assert connection.Transition(
+    connection.AwaitingJoin,
+    connection.ReplyError(Some(room_id), protocol.RoomUnavailable, True),
+  ) = transition
+  assert room_id == domain.default_room_id
+  assert !protocol.error_is_recoverable(protocol.RoomUnavailable)
+  assert protocol.encode_server_event(protocol.ErrorEvent(
+      Some(room_id),
+      protocol.RoomUnavailable,
+    ))
+    == "{\"type\":\"error\",\"room_id\":\"default\",\"code\":\"room_unavailable\",\"message\":\"Room is unavailable. Reconnect to continue.\",\"recoverable\":false}"
+}
+
 pub fn join_deadline_is_ten_seconds_test() {
   assert connection.join_deadline_ms == 10_000
 }

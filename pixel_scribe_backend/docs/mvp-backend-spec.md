@@ -348,7 +348,8 @@ be recovered from the input. Initial error codes:
 - `invalid_room_id`: the room ID failed shape validation.
 - `room_not_found`: the room ID is valid but not supported by the server.
 - `room_mismatch`: an event's room ID differs from the connection's joined room.
-- `room_unavailable`: the joined room process stopped and the client must reconnect.
+- `room_unavailable`: the requested or joined room handle is unavailable and the
+  client must reconnect.
 - `invalid_username`: the display label failed validation.
 - `invalid_message`: the chat text failed validation.
 - `rate_limited`: the connection is sending chat faster than allowed.
@@ -399,13 +400,19 @@ is no longer observable after closure.
 | `invalid_room_id` | Any phase; `null` | Yes | Send error, remain in phase |
 | `room_not_found` | `AwaitingJoin`; requested valid room | Yes | Send error, remain in `AwaitingJoin` |
 | `room_mismatch` | `Joined`; requested room | Yes | Send error, remain in `Joined` |
-| `room_unavailable` | `Joining` or `Joined`; joined/requested room | No | Send error when possible, then close |
+| `room_unavailable` | `AwaitingJoin`/`Joining`: validated requested room; `Joined`: joined room | No | Send error when possible, then close |
 | `invalid_username` | Any phase; validated room when available | Yes | Send error, remain in phase |
 | `invalid_message` | Any phase; validated room when available | Yes | Send error, remain in phase |
 | `room_full` | `Joining`; resolved room | No | Send error, then close |
 
 `rate_limited` is reserved for Task 8 and follows the same recoverable error
 shape once the chat rate limiter is connected.
+
+An `AwaitingJoin` connection can receive `room_unavailable` when the directory
+returns a room handle that has died before the connection's liveness check. The
+validated requested room remains the error context, and the connection sends
+the non-recoverable error before closing the socket. This is the same
+fail-closed policy used when a room dies during `Joining` or after `Joined`.
 
 ## BEAM Process Architecture
 

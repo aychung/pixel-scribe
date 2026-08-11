@@ -222,7 +222,7 @@ JavaScript callbacks.
 | `room_mismatch` | Keep joined state, reject the affected action, show client-defect feedback, never change rooms. |
 | `invalid_event` or malformed server data | Close deliberately, enter blocked protocol-failure UI, require explicit retry. |
 | `room_full` | Enter blocked join UI with username prefilled and an explicit retry that opens a new socket. |
-| `room_unavailable` | Mark the retained snapshot stale and accept the backend's documented close; that close enters Task 4F's automatic backoff path. Also expose an immediate retry control. |
+| `room_unavailable` | Treat the backend error as terminal whether it arrives while awaiting the first `room_state` or after joining; accept the documented error-before-close sequence, mark any retained snapshot stale, and enter Task 4F's automatic backoff path. Also expose an immediate retry control. |
 | Unexpected error/close | Enter automatic reconnect unless the user deliberately left or a terminal policy already owns the close. |
 
 Task 6 must compare this table with the backend's finalized Task 7 error/close
