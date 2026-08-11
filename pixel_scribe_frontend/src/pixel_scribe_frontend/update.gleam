@@ -6,6 +6,7 @@ import pixel_scribe_frontend/domain
 import pixel_scribe_frontend/model.{type Model}
 import pixel_scribe_frontend/protocol
 import pixel_scribe_frontend/reconnect
+import pixel_scribe_frontend/socket
 import pixel_scribe_frontend/validation
 
 /// Trusted application inputs and decoded server events. Raw browser payloads
@@ -237,11 +238,17 @@ fn server_event(
   received_at_ms: Int,
   event: domain.ServerEvent,
 ) -> #(Model, List(Command)) {
-  case room_id_for_event(event), current_phase_generation(model.phase) {
-    Some(room_id), Some(expected_generation)
-      if expected_generation == generation && room_id != domain.default_room_id
-    -> protocol_failure(model, generation)
-    _, _ -> dispatch_server_event(model, generation, received_at_ms, event)
+  case event {
+    domain.ServerError(error) ->
+      server_error(model, generation, received_at_ms, error)
+    _ ->
+      case room_id_for_event(event), current_phase_generation(model.phase) {
+        Some(room_id), Some(expected_generation)
+          if expected_generation == generation
+          && room_id != domain.default_room_id
+        -> protocol_failure(model, generation)
+        _, _ -> dispatch_server_event(model, generation, received_at_ms, event)
+      }
   }
 }
 
@@ -261,7 +268,6 @@ fn room_id_for_event(event: domain.ServerEvent) -> Option(domain.RoomId) {
     | domain.UserJoined(room_id, _)
     | domain.UserLeft(room_id, _)
     | domain.MessageSent(room_id, _) -> Some(room_id)
-    domain.ServerError(error) -> error.room_id
     _ -> None
   }
 }
@@ -278,27 +284,31 @@ fn dispatch_server_event(
         model.AwaitingRoomState(expected_generation, _)
           if expected_generation == generation
           && room_id == domain.default_room_id
-        -> {
-          let snapshot =
-            model.RoomSnapshot(
-              room_id,
-              self_id,
-              users,
-              latest_unique_messages(messages),
-              False,
-            )
-          #(
-            model.Model(
-              ..model,
-              phase: model.Joined(generation, self_id),
-              room_snapshot: Some(snapshot),
-              reconnect_attempt: 0,
-              reconnect_timer: None,
-              connection_feedback: None,
-            ),
-            cancel_reconnect(model),
-          )
-        }
+        ->
+          case snapshot_participants_are_valid(users, self_id) {
+            True -> {
+              let snapshot =
+                model.RoomSnapshot(
+                  room_id,
+                  self_id,
+                  users,
+                  latest_unique_messages(messages),
+                  False,
+                )
+              #(
+                model.Model(
+                  ..model,
+                  phase: model.Joined(generation, self_id),
+                  room_snapshot: Some(snapshot),
+                  reconnect_attempt: 0,
+                  reconnect_timer: None,
+                  connection_feedback: None,
+                ),
+                cancel_reconnect(model),
+              )
+            }
+            False -> protocol_failure(model, generation)
+          }
         _ -> #(model, [])
       }
     domain.UserJoined(room_id, user) ->
@@ -350,13 +360,73 @@ fn server_error(
   received_at_ms: Int,
   error: domain.ErrorEvent,
 ) -> #(Model, List(Command)) {
-  case current_phase_generation(model.phase), recoverability_matches(error) {
-    Some(expected_generation), True if expected_generation == generation ->
-      apply_server_error(model, generation, received_at_ms, error)
-    Some(expected_generation), False if expected_generation == generation ->
-      protocol_failure(model, generation)
-    _, _ -> #(model, [])
+  case current_phase_generation(model.phase) {
+    Some(expected_generation) if expected_generation == generation ->
+      case
+        server_error_context_matches(model.phase, error),
+        recoverability_matches(error)
+      {
+        True, True ->
+          apply_server_error(model, generation, received_at_ms, error)
+        _, _ -> protocol_failure(model, generation)
+      }
+    _ -> #(model, [])
   }
+}
+
+fn server_error_context_matches(
+  phase: model.ConnectionPhase,
+  error: domain.ErrorEvent,
+) -> Bool {
+  case error.code {
+    domain.InvalidEvent | domain.InvalidRoomId -> error.room_id == None
+    domain.RoomMismatch ->
+      case phase, error.room_id {
+        model.Joined(_, _), Some(room_id) -> room_id != domain.default_room_id
+        _, _ -> False
+      }
+    domain.JoinRequired -> is_awaiting_phase(phase) && has_default_room(error)
+    domain.AlreadyJoined ->
+      is_awaiting_or_joined_phase(phase) && has_default_room(error)
+    domain.RoomNotFound -> is_awaiting_phase(phase) && has_default_room(error)
+    domain.RoomUnavailable ->
+      is_awaiting_or_joined_phase(phase) && has_default_room(error)
+    domain.RoomFull -> is_awaiting_phase(phase) && has_default_room(error)
+    domain.RateLimited -> is_joined_phase(phase) && has_default_room(error)
+    domain.InvalidUsername | domain.InvalidMessage ->
+      is_active_phase(phase) && has_default_room(error)
+  }
+}
+
+fn has_default_room(error: domain.ErrorEvent) -> Bool {
+  error.room_id == Some(domain.default_room_id)
+}
+
+fn is_active_phase(phase: model.ConnectionPhase) -> Bool {
+  case phase {
+    model.Connecting(_, _)
+    | model.AwaitingRoomState(_, _)
+    | model.Joined(_, _) -> True
+    _ -> False
+  }
+}
+
+fn is_awaiting_phase(phase: model.ConnectionPhase) -> Bool {
+  case phase {
+    model.AwaitingRoomState(_, _) -> True
+    _ -> False
+  }
+}
+
+fn is_joined_phase(phase: model.ConnectionPhase) -> Bool {
+  case phase {
+    model.Joined(_, _) -> True
+    _ -> False
+  }
+}
+
+fn is_awaiting_or_joined_phase(phase: model.ConnectionPhase) -> Bool {
+  is_awaiting_phase(phase) || is_joined_phase(phase)
 }
 
 fn apply_server_error(
@@ -971,8 +1041,45 @@ fn remove_presence(
   }
 }
 
+fn has_presence_id(
+  participants: List(domain.Presence),
+  connection_id: domain.ConnectionId,
+) -> Bool {
+  case participants {
+    [] -> False
+    [first, ..] if first.connection_id == connection_id -> True
+    [_, ..rest] -> has_presence_id(rest, connection_id)
+  }
+}
+
+fn snapshot_participants_are_valid(
+  participants: List(domain.Presence),
+  self_id: domain.ConnectionId,
+) -> Bool {
+  has_presence_id(participants, self_id)
+  && has_unique_presence_ids(participants, [])
+}
+
+fn has_unique_presence_ids(
+  participants: List(domain.Presence),
+  seen: List(domain.ConnectionId),
+) -> Bool {
+  case participants {
+    [] -> True
+    [first, ..rest] ->
+      case list.contains(seen, first.connection_id) {
+        True -> False
+        False -> has_unique_presence_ids(rest, [first.connection_id, ..seen])
+      }
+  }
+}
+
 fn interpret_command(command: Command) -> Effect(Msg) {
   case command {
+    OpenSocket(generation) ->
+      effect.map(socket.open(generation), socket_fact_to_msg)
+    CloseSocket(generation) -> socket.close(generation)
+    SendSocketFrame(generation, frame) -> socket.send(generation, frame)
     WriteUsernamePreference(username) ->
       effect.from(fn(_dispatch) { browser.write_username_preference(username) })
     ScheduleReconnect(generation, timer_id, delay_ms) ->
@@ -998,8 +1105,28 @@ fn interpret_command(command: Command) -> Effect(Msg) {
     FocusUsername -> browser.focus_username()
     FocusComposer -> browser.focus_composer()
     ScrollChatToEnd -> browser.scroll_chat_to_end()
-    OpenSocket(_) | CloseSocket(_) | SendSocketFrame(_, _) | RenderScene ->
-      effect.none()
+    RenderScene -> effect.none()
+  }
+}
+
+/// Maps one transport fact to a trusted application message.
+///
+/// Socket text is decoded here, inside the effect mapping, before Lustre can
+/// dispatch it to the application update function. Unknown event types become
+/// a payload-free domain value; malformed JSON or malformed known event shapes
+/// become the generation-scoped protocol failure message.
+pub fn socket_fact_to_msg(fact: socket.Fact) -> Msg {
+  case fact {
+    socket.Opened(generation) -> SocketOpened(generation)
+    socket.Message(generation, received_at_ms, payload) ->
+      case protocol.decode_server_event(payload) {
+        Ok(event) -> ServerEvent(generation, received_at_ms, event)
+        Error(_) -> ServerDecodeFailed(generation)
+      }
+    socket.Error(generation, random_unit) ->
+      SocketError(generation, random_unit)
+    socket.Closed(generation, deliberate, random_unit) ->
+      SocketClosed(generation, deliberate, random_unit)
   }
 }
 

@@ -21,7 +21,7 @@ a later task merely because a nearby file is already open.
 
 ## Real-time UI
 
-- [ ] [Task 6 — Native WebSocket join](todo-06-join.md)
+- [x] [Task 6 — Native WebSocket join](todo-06-join.md)
 - [ ] [Task 7 — Presence and status workspace](todo-07-presence.md)
 - [ ] [Task 8 — Accepted-message chat](todo-08-chat.md)
 - [ ] [Task 9 — Recovery behavior](todo-09-recovery.md)

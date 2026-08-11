@@ -16,7 +16,7 @@ pub fn view(model: Model) -> Element(Msg) {
     ]),
     html.div([attribute.class("workspace-shell")], [
       office_preview(),
-      username_panel(model.username_input, model.feedback),
+      username_panel(model),
     ]),
   ])
 }
@@ -54,10 +54,7 @@ fn office_preview() -> Element(Msg) {
   )
 }
 
-fn username_panel(
-  username_input: String,
-  feedback: Option(String),
-) -> Element(Msg) {
+fn username_panel(model: Model) -> Element(Msg) {
   html.section(
     [
       attribute.class("join-panel"),
@@ -81,7 +78,7 @@ fn username_panel(
             attribute.type_("text"),
             attribute.autocomplete("nickname"),
             attribute.placeholder("e.g. Ada"),
-            attribute.value(username_input),
+            attribute.value(model.username_input),
             attribute.required(True),
             attribute.aria_describedby("username-help username-feedback"),
             event.on_input(update.UsernameInput),
@@ -90,18 +87,34 @@ fn username_panel(
             [attribute.id("username-help"), attribute.class("field-help")],
             [html.text("Use 1–32 characters. Spaces and emoji are welcome.")],
           ),
-          feedback_message(feedback),
+          feedback_message(model.feedback),
           html.button(
             [attribute.type_("submit"), attribute.class("join-button")],
             [html.text("Enter the office")],
           ),
         ],
       ),
-      html.p([attribute.class("status-copy"), attribute.role("status")], [
-        html.text("You will join the built-in default office."),
-      ]),
+      html.p(
+        [
+          attribute.class("status-copy"),
+          attribute.role("status"),
+          attribute.aria_live("polite"),
+        ],
+        [html.text(connection_status(model))],
+      ),
     ],
   )
+}
+
+fn connection_status(model: Model) -> String {
+  case model.phase {
+    model.ChoosingUsername -> "You will join the built-in default office."
+    model.Connecting(_, _) -> "Connecting to the office…"
+    model.AwaitingRoomState(_, _) -> "Waiting for the office snapshot…"
+    model.Joined(_, _) -> "Joined the default office."
+    model.WaitingToReconnect(_, _, _) -> "Reconnecting to the office…"
+    model.Blocked(_) -> "The office is unavailable."
+  }
 }
 
 fn feedback_message(feedback: Option(String)) -> Element(Msg) {

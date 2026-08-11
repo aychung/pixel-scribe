@@ -21,6 +21,7 @@ test.describe("application shell", () => {
   test("writes the Unicode preference with the exact HTTP cookie policy", async ({
     page,
   }) => {
+    await page.routeWebSocket("/ws", () => {});
     await page.addInitScript(() => {
       const descriptor = Object.getOwnPropertyDescriptor(
         Document.prototype,
@@ -97,6 +98,7 @@ test.describe("application shell", () => {
     });
     page.on("pageerror", (error) => pageErrors.push(error.message));
 
+    await page.routeWebSocket("/ws", () => {});
     await page.goto("/");
 
     await expect(page.getByRole("heading", { name: "Pixel Scribe" })).toBeVisible();

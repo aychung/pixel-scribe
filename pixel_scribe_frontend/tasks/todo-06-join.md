@@ -2,11 +2,11 @@
 
 **Description:** Add the native WebSocket effect and complete the first vertical
 slice: username submit, connection, exactly one join, decoded `room_state`, and
-joined UI enablement. Reconcile the final backend error/close contract first.
+minimal joined status. Reconcile the final backend error/close contract first.
 
 ### Work units
 
-- [ ] **Task 6A — Freeze the backend connection/error fixtures.**
+- [x] **Task 6A — Freeze the backend connection/error fixtures.**
   - **Done when:** backend Task 7's implemented room context, recoverability,
     close order, and post-error phase match the canonical spec, frontend plan,
     and protocol fixtures; every difference is resolved in docs before socket
@@ -16,7 +16,7 @@ joined UI enablement. Reconcile the final backend error/close contract first.
     build, and `gleam test`. If any source document differs, stop and request a
     separate reviewed contract-reconciliation unit instead of editing it here.
   - **Depends:** foundation checkpoint and completed backend Task 7.
-- [ ] **Task 6B — Implement native WebSocket lifecycle externals.**
+- [x] **Task 6B — Implement native WebSocket lifecycle externals.**
   - **Done when:** one socket per generation derives same-origin `/ws`, accepts
     text callbacks only, dispatches typed open/message/error/close facts, supports
     text send/deliberate close, removes listeners, and logs no payload.
@@ -25,7 +25,7 @@ joined UI enablement. Reconcile the final backend error/close contract first.
   - **Verify:** unit-test URL derivation including HTTPS to WSS; format/build;
     review every FFI export and listener cleanup path.
   - **Depends:** Task 6A.
-- [ ] **Task 6C — Interpret socket commands and decode inbound frames.**
+- [x] **Task 6C — Interpret socket commands and decode inbound frames.**
   - **Done when:** the command interpreter opens/sends/closes by generation,
     decodes before dispatch to update, safely ignores unknown event types, and
     turns malformed known frames into the documented protocol failure.
@@ -33,19 +33,26 @@ joined UI enablement. Reconcile the final backend error/close contract first.
     `src/pixel_scribe_frontend/update.gleam`.
   - **Verify:** focused command/ingress tests plus all Gleam checks.
   - **Depends:** Task 6B.
-- [ ] **Task 6D — Prove the join-to-snapshot browser slice.**
+- [x] **Task 6D — Prove the join-to-snapshot browser slice.**
   - **Done when:** routed `/ws` observes exactly one canonical join after open,
     an oversized final join frame shows inline feedback without opening a socket,
-    chat stays disabled before a matching snapshot, room state enables joined UI,
-    and `ws:` behavior has no console/page errors.
-  - **Files:** `e2e/join.spec.ts`, `src/pixel_scribe_frontend/update.gleam` only if
-    the test exposes a missing documented transition.
+    the entry UI exposes connecting/awaiting status before a matching snapshot,
+    room state exposes a minimal joined status, and `ws:` behavior has no
+    console/page errors. Task 7 still owns the participant/chat workspace.
+  - **Files:** `e2e/join.spec.ts`, `e2e/app_shell.spec.ts` only to route sockets
+    for existing submit coverage, `src/pixel_scribe_frontend/view.gleam`,
+    `test/pixel_scribe_frontend/view_test.gleam`, and
+    `src/pixel_scribe_frontend/update.gleam` only if the test exposes a missing
+    documented transition.
   - **Verify:** production build and focused Chromium join test.
   - **Depends:** Task 6C.
-- [ ] **Task 6E — Prove join race and malformed-frame defenses.**
-  - **Done when:** duplicate submit, old-generation callbacks, pre-snapshot
-    deltas, wrong-room frames, malformed known frames, and unknown future types
-    all follow their specified safe paths in browser tests.
+- [x] **Task 6E — Prove join race and malformed-frame defenses.**
+  - **Done when:** browser-routable duplicate submit, pre-snapshot deltas,
+    wrong-room frames, malformed known frames, and unknown future types follow
+    their specified safe paths in browser tests. Injected pure transition tests
+    prove late old-generation callbacks are ignored; the native boundary removes
+    listeners when a routed socket closes, so Playwright cannot manufacture such
+    a callback without a forbidden application test hook.
   - **Files:** `e2e/join.spec.ts`, `src/pixel_scribe_frontend/update.gleam` only for
     a documented missing transition.
   - **Verify:** all Gleam checks and the full Chromium suite.
@@ -69,22 +76,23 @@ joined UI enablement. Reconcile the final backend error/close contract first.
 
 **Acceptance criteria:**
 
-- [ ] A valid username opens one same-origin socket, emits one join after open,
-  waits for matching `room_state`, and only then enters joined state/enables chat.
-- [ ] A second submit, late old-generation callback, pre-snapshot delta, malformed
+- [x] A valid username opens one same-origin socket, emits one join after open,
+  waits for matching `room_state`, and only then enters the joined model state
+  that Task 7 will use to expose chat.
+- [x] A second submit, late old-generation callback, pre-snapshot delta, malformed
   known frame, and unknown future event follow the documented safe paths.
-- [ ] The implemented frontend/backend error room context, recoverability, close
+- [x] The implemented frontend/backend error room context, recoverability, close
   order, and post-error phases are represented by matching fixtures.
 
 **Verification:**
 
-- [ ] `gleam format --check src test`
-- [ ] `gleam build`
-- [ ] `gleam test`
-- [ ] `gleam run -m lustre/dev build`
-- [ ] Focused Playwright join test passes for `ws:` and URL derivation is unit
+- [x] `gleam format --check src test`
+- [x] `gleam build`
+- [x] `gleam test`
+- [x] `gleam run -m lustre/dev build`
+- [x] Focused Playwright join test passes for `ws:` and URL derivation is unit
   tested for `https:` -> `wss:`.
-- [ ] `bunx playwright test --project=chromium --reporter=line --workers=1`
+- [x] `bunx playwright test --project=chromium --reporter=line --workers=1`
 
 **Dependencies:** Foundation checkpoint and finalized backend Task 7 contract.
 
@@ -92,9 +100,13 @@ joined UI enablement. Reconcile the final backend error/close contract first.
 
 - `src/pixel_scribe_frontend/socket.gleam`
 - `src/pixel_scribe_frontend/socket_ffi.mjs`
-- `src/pixel_scribe_frontend/model.gleam`
 - `src/pixel_scribe_frontend/update.gleam`
+- `src/pixel_scribe_frontend/view.gleam`
+- `test/pixel_scribe_frontend/protocol_test.gleam`
+- `test/pixel_scribe_frontend/socket_test.gleam`
+- `test/pixel_scribe_frontend/update_test.gleam`
+- `test/pixel_scribe_frontend/view_test.gleam`
 - `e2e/join.spec.ts`
+- `e2e/app_shell.spec.ts`
 
-**Estimated scope:** Medium, 5 files.
-
+**Actual scope:** Medium, 10 files plus aligned task/README documentation.

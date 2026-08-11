@@ -9,10 +9,11 @@ Lustre runs only as a browser SPA. The frontend does not use Lustre server
 components, server-side rendering, or Lustre's DOM-patch WebSocket protocol. The
 existing backend remains the authority for the JSON `/ws` contract.
 
-The foundation is implemented: the browser-only Lustre shell, protocol codecs,
-pure connection state machine, username preference, and browser effects are in
-place. Native WebSocket integration, the joined workspace, office renderer, and
-staging delivery remain in the later MVP tasks.
+The foundation and native join slice are implemented: the browser-only Lustre
+shell, protocol codecs, pure connection state machine, username preference,
+same-origin native WebSocket, and decoded `room_state` transition are in place.
+The joined presence/chat workspace, office renderer, and staging delivery remain
+in later MVP tasks.
 
 ## MVP
 
@@ -92,9 +93,8 @@ native media query is the single source of truth for the layout breakpoint.
 
 The source of truth is the backend
 [MVP specification](../pixel_scribe_backend/docs/mvp-backend-spec.md). It is
-approved, but its exact connection-state behavior remains subject to the backend
-codec and state-machine tasks. Keep frontend codecs and contract tests aligned
-with it.
+approved, and its backend connection/error matrix is finalized. Keep frontend
+codecs and contract tests aligned with it.
 
 ### HTTP
 
@@ -206,10 +206,10 @@ lines without changing the full DOM message.
 | `rate_limited` | Yes | Keep the draft usable and briefly throttle sending |
 | `room_full` | No | Return to a blocked join state with retry available |
 
-The backend currently closes after `invalid_event`, `room_full`, and
-`room_unavailable`; the exact close sequence and resulting connection phase are
-still being finalized. Drive behavior from `recoverable`, but contract-test the
-documented code-specific cases so changes are visible.
+The backend sends the structured error and then closes after `invalid_event`,
+`room_full`, and `room_unavailable`. Recoverable errors leave the backend phase
+unchanged. The frontend contract-tests each code's documented room context,
+recoverability, phase, and close policy so changes are visible.
 
 Backend recoverability describes the server's phase and whether it closes the
 socket. The built-in-room-only frontend deliberately closes and resets after

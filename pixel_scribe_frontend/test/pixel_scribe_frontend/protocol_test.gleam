@@ -137,19 +137,131 @@ pub fn error_server_events_decode_string_and_null_room_context_test() {
     == domain.ErrorEvent(None, domain.InvalidEvent, "Invalid event.", False)
 }
 
-pub fn room_unavailable_fixture_preserves_requested_room_and_terminal_policy_test() {
-  let assert Ok(domain.ServerError(error)) =
-    protocol.decode_server_event(
-      "{\"type\":\"error\",\"room_id\":\"default\",\"code\":\"room_unavailable\",\"message\":\"Room is unavailable. Reconnect to continue.\",\"recoverable\":false}",
-    )
-
-  assert error
-    == domain.ErrorEvent(
+pub fn canonical_error_fixtures_match_room_context_and_recoverability_test() {
+  let fixtures = [
+    #(
+      "null",
+      None,
+      "invalid_event",
+      domain.InvalidEvent,
+      "Invalid event.",
+      False,
+    ),
+    #(
+      "\"default\"",
       Some(domain.default_room_id),
+      "join_required",
+      domain.JoinRequired,
+      "Join a room before sending messages.",
+      True,
+    ),
+    #(
+      "\"default\"",
+      Some(domain.default_room_id),
+      "already_joined",
+      domain.AlreadyJoined,
+      "This connection has already joined a room.",
+      True,
+    ),
+    #(
+      "null",
+      None,
+      "invalid_room_id",
+      domain.InvalidRoomId,
+      "Room ID is invalid.",
+      True,
+    ),
+    #(
+      "\"default\"",
+      Some(domain.default_room_id),
+      "room_not_found",
+      domain.RoomNotFound,
+      "Room not found.",
+      True,
+    ),
+    #(
+      "\"other\"",
+      Some(domain.room_id_from_string("other")),
+      "room_mismatch",
+      domain.RoomMismatch,
+      "Room ID does not match the joined room.",
+      True,
+    ),
+    #(
+      "\"default\"",
+      Some(domain.default_room_id),
+      "room_unavailable",
       domain.RoomUnavailable,
       "Room is unavailable. Reconnect to continue.",
       False,
+    ),
+    #(
+      "\"default\"",
+      Some(domain.default_room_id),
+      "invalid_username",
+      domain.InvalidUsername,
+      "Username must contain between 1 and 32 characters.",
+      True,
+    ),
+    #(
+      "\"default\"",
+      Some(domain.default_room_id),
+      "invalid_message",
+      domain.InvalidMessage,
+      "Message must contain between 1 and 500 characters.",
+      True,
+    ),
+    #(
+      "\"default\"",
+      Some(domain.default_room_id),
+      "rate_limited",
+      domain.RateLimited,
+      "You are sending messages too quickly.",
+      True,
+    ),
+    #(
+      "\"default\"",
+      Some(domain.default_room_id),
+      "room_full",
+      domain.RoomFull,
+      "Room is full.",
+      False,
+    ),
+  ]
+
+  assert list.all(fixtures, fn(fixture) {
+    let #(
+      room_id_json,
+      expected_room_id,
+      wire_code,
+      expected_code,
+      message,
+      recoverable,
+    ) = fixture
+    let payload =
+      "{\"type\":\"error\",\"room_id\":"
+      <> room_id_json
+      <> ",\"code\":\""
+      <> wire_code
+      <> "\",\"message\":\""
+      <> message
+      <> "\",\"recoverable\":"
+      <> case recoverable {
+        True -> "true"
+        False -> "false"
+      }
+      <> "}"
+
+    protocol.decode_server_event(payload)
+    == Ok(
+      domain.ServerError(domain.ErrorEvent(
+        expected_room_id,
+        expected_code,
+        message,
+        recoverable,
+      )),
     )
+  })
 }
 
 pub fn every_documented_error_code_decodes_to_its_domain_variant_test() {

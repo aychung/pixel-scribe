@@ -283,6 +283,7 @@ pub fn return_from_waiting_cancels_only_timer_and_preserves_draft_test() {
 
 pub fn matching_room_state_only_resets_attempt_and_cancels_pending_timer_test() {
   let self_id = domain.connection_id_from_string("self")
+  let self_presence = domain.Presence(self_id, "Ada")
   let awaiting =
     model.Model(
       ..model.initial(),
@@ -297,7 +298,7 @@ pub fn matching_room_state_only_resets_attempt_and_cancels_pending_timer_test() 
     update.ServerEvent(
       60,
       0,
-      domain.RoomState(domain.default_room_id, self_id, [], []),
+      domain.RoomState(domain.default_room_id, self_id, [self_presence], []),
     )
 
   let #(joined, commands) = update.transition(awaiting, room_state)

@@ -197,8 +197,7 @@ pub fn stale_or_wrong_phase_open_callbacks_are_ignored_test() {
 
 pub fn only_matching_default_room_snapshot_enters_joined_test() {
   let self_id = domain.connection_id_from_string("self-1")
-  let participant =
-    domain.Presence(domain.connection_id_from_string("peer-1"), "Ada")
+  let participant = domain.Presence(self_id, "Ada")
   let message =
     domain.ChatMessage(
       domain.message_id_from_string("message-1"),
@@ -274,11 +273,90 @@ pub fn only_matching_default_room_snapshot_enters_joined_test() {
       update.ServerEvent(
         1,
         0,
-        domain.RoomState(domain.default_room_id, self_id, [], []),
+        domain.RoomState(domain.default_room_id, self_id, [participant], []),
       ),
     )
   assert ignored_after_join == joined
   assert ignored_commands == []
+}
+
+pub fn snapshot_missing_self_presence_fails_closed_test() {
+  let self_id = domain.connection_id_from_string("self-1")
+  let peer = domain.Presence(domain.connection_id_from_string("peer-1"), "Ada")
+  let assert #(entered, []) =
+    update.transition(model.initial(), update.UsernameInput("Ada"))
+  let #(connecting, _) = update.transition(entered, update.SubmitUsername)
+  let #(awaiting, _) = update.transition(connecting, update.SocketOpened(1))
+
+  let #(blocked, commands) =
+    update.transition(
+      awaiting,
+      update.ServerEvent(
+        1,
+        0,
+        domain.RoomState(domain.default_room_id, self_id, [peer], []),
+      ),
+    )
+
+  assert blocked.phase == model.Blocked(model.ProtocolFailure)
+  assert blocked.connection_feedback == Some("Protocol error.")
+  assert commands == [update.CloseSocket(1)]
+}
+
+pub fn snapshot_duplicate_self_presence_fails_closed_test() {
+  let self_id = domain.connection_id_from_string("self-1")
+  let self_presence = domain.Presence(self_id, "Ada")
+  let assert #(entered, []) =
+    update.transition(model.initial(), update.UsernameInput("Ada"))
+  let #(connecting, _) = update.transition(entered, update.SubmitUsername)
+  let #(awaiting, _) = update.transition(connecting, update.SocketOpened(1))
+
+  let #(blocked, commands) =
+    update.transition(
+      awaiting,
+      update.ServerEvent(
+        1,
+        0,
+        domain.RoomState(
+          domain.default_room_id,
+          self_id,
+          [self_presence, self_presence],
+          [],
+        ),
+      ),
+    )
+
+  assert blocked.phase == model.Blocked(model.ProtocolFailure)
+  assert commands == [update.CloseSocket(1)]
+}
+
+pub fn snapshot_duplicate_peer_presence_fails_closed_test() {
+  let self_id = domain.connection_id_from_string("self-1")
+  let self_presence = domain.Presence(self_id, "Ada")
+  let peer_presence =
+    domain.Presence(domain.connection_id_from_string("peer-1"), "Grace")
+  let assert #(entered, []) =
+    update.transition(model.initial(), update.UsernameInput("Ada"))
+  let #(connecting, _) = update.transition(entered, update.SubmitUsername)
+  let #(awaiting, _) = update.transition(connecting, update.SocketOpened(1))
+
+  let #(blocked, commands) =
+    update.transition(
+      awaiting,
+      update.ServerEvent(
+        1,
+        0,
+        domain.RoomState(
+          domain.default_room_id,
+          self_id,
+          [self_presence, peer_presence, peer_presence],
+          [],
+        ),
+      ),
+    )
+
+  assert blocked.phase == model.Blocked(model.ProtocolFailure)
+  assert commands == [update.CloseSocket(1)]
 }
 
 pub fn reconnect_snapshot_replaces_stale_snapshot_and_self_identity_test() {
@@ -503,7 +581,12 @@ pub fn wrong_generation_presence_and_snapshot_callbacks_are_ignored_test() {
       domain.RoomState(
         domain.default_room_id,
         domain.connection_id_from_string("replacement-self"),
-        [],
+        [
+          domain.Presence(
+            domain.connection_id_from_string("replacement-self"),
+            "Replacement",
+          ),
+        ],
         [],
       ),
     ),
@@ -513,7 +596,12 @@ pub fn wrong_generation_presence_and_snapshot_callbacks_are_ignored_test() {
       domain.RoomState(
         other_room,
         domain.connection_id_from_string("replacement-self"),
-        [],
+        [
+          domain.Presence(
+            domain.connection_id_from_string("replacement-self"),
+            "Replacement",
+          ),
+        ],
         [],
       ),
     ),
@@ -746,6 +834,7 @@ pub fn room_state_snapshot_deduplicates_before_latest_50_bound_test() {
     list.append(numbered_messages(1, 51, self_id), [
       message("message-1", self_id, "duplicate after original"),
     ])
+  let self_presence = domain.Presence(self_id, "Snapshot self")
 
   let #(joined, commands) =
     update.transition(
@@ -756,7 +845,7 @@ pub fn room_state_snapshot_deduplicates_before_latest_50_bound_test() {
         domain.RoomState(
           domain.default_room_id,
           self_id,
-          [],
+          [self_presence],
           messages_with_duplicate,
         ),
       ),
@@ -902,61 +991,58 @@ pub fn stale_disconnect_does_not_clear_replacement_send_test() {
 }
 
 pub fn active_phase_error_matrix_has_explicit_outcomes_test() {
+  let self_id = domain.connection_id_from_string("self")
   let connecting = model.Connecting(1, 0)
   let awaiting = model.AwaitingRoomState(1, 0)
-  let joined = model.Joined(1, domain.connection_id_from_string("self"))
+  let joined = model.Joined(1, self_id)
+  let other_room = domain.room_id_from_string("other")
   let cases = [
-    #(connecting, domain.InvalidUsername, model.ChoosingUsername, [1, 8]),
-    #(connecting, domain.InvalidMessage, connecting, [9]),
-    #(connecting, domain.RateLimited, connecting, [6]),
-    #(connecting, domain.JoinRequired, connecting, []),
-    #(connecting, domain.AlreadyJoined, connecting, []),
-    #(connecting, domain.InvalidRoomId, model.Blocked(model.OfficeUnavailable), [
-      1,
-    ]),
-    #(connecting, domain.RoomNotFound, model.Blocked(model.OfficeUnavailable), [
-      1,
-    ]),
-    #(connecting, domain.RoomMismatch, connecting, []),
-    #(connecting, domain.InvalidEvent, model.Blocked(model.ProtocolFailure), [1]),
-    #(connecting, domain.RoomFull, model.Blocked(model.RoomFull), [1]),
-    #(connecting, domain.RoomUnavailable, connecting, []),
-    #(awaiting, domain.InvalidUsername, model.ChoosingUsername, [1, 8]),
-    #(awaiting, domain.InvalidMessage, awaiting, [9]),
-    #(awaiting, domain.RateLimited, awaiting, [6]),
-    #(awaiting, domain.JoinRequired, awaiting, []),
-    #(awaiting, domain.AlreadyJoined, awaiting, []),
-    #(awaiting, domain.InvalidRoomId, model.Blocked(model.OfficeUnavailable), [
-      1,
-    ]),
-    #(awaiting, domain.RoomNotFound, model.Blocked(model.OfficeUnavailable), [1]),
-    #(awaiting, domain.RoomMismatch, awaiting, []),
-    #(awaiting, domain.InvalidEvent, model.Blocked(model.ProtocolFailure), [1]),
-    #(awaiting, domain.RoomFull, model.Blocked(model.RoomFull), [1]),
-    #(awaiting, domain.RoomUnavailable, awaiting, []),
-    #(joined, domain.InvalidUsername, model.ChoosingUsername, [1, 8]),
-    #(joined, domain.InvalidMessage, joined, [9]),
-    #(joined, domain.RateLimited, joined, [6]),
-    #(joined, domain.JoinRequired, joined, []),
-    #(joined, domain.AlreadyJoined, joined, []),
-    #(joined, domain.InvalidRoomId, model.Blocked(model.OfficeUnavailable), [1]),
-    #(joined, domain.RoomNotFound, model.Blocked(model.OfficeUnavailable), [1]),
-    #(joined, domain.RoomMismatch, joined, []),
-    #(joined, domain.InvalidEvent, model.Blocked(model.ProtocolFailure), [1]),
-    #(joined, domain.RoomFull, model.Blocked(model.RoomFull), [1]),
-    #(joined, domain.RoomUnavailable, joined, []),
+    #(connecting, domain.InvalidEvent, None, True),
+    #(connecting, domain.InvalidEvent, Some(domain.default_room_id), True),
+    #(awaiting, domain.JoinRequired, Some(domain.default_room_id), False),
+    #(joined, domain.JoinRequired, Some(domain.default_room_id), True),
+    #(joined, domain.AlreadyJoined, Some(domain.default_room_id), False),
+    #(connecting, domain.AlreadyJoined, Some(domain.default_room_id), True),
+    #(connecting, domain.InvalidRoomId, None, False),
+    #(connecting, domain.InvalidRoomId, Some(domain.default_room_id), True),
+    #(awaiting, domain.RoomNotFound, Some(domain.default_room_id), False),
+    #(joined, domain.RoomNotFound, Some(domain.default_room_id), True),
+    #(joined, domain.RoomMismatch, Some(other_room), False),
+    #(joined, domain.RoomMismatch, Some(domain.default_room_id), True),
+    #(joined, domain.RoomUnavailable, Some(domain.default_room_id), False),
+    #(joined, domain.RoomUnavailable, None, True),
+    #(connecting, domain.InvalidUsername, Some(domain.default_room_id), False),
+    #(connecting, domain.InvalidUsername, None, True),
+    #(joined, domain.InvalidMessage, Some(domain.default_room_id), False),
+    #(awaiting, domain.InvalidMessage, None, True),
+    #(joined, domain.RateLimited, Some(domain.default_room_id), False),
+    #(awaiting, domain.RateLimited, Some(domain.default_room_id), True),
+    #(awaiting, domain.RoomFull, Some(domain.default_room_id), False),
+    #(joined, domain.RoomFull, Some(domain.default_room_id), True),
   ]
 
   list.each(cases, fn(item) {
-    let #(phase, code, expected_phase, expected_commands) = item
+    let #(phase, code, room_id, expect_protocol_failure) = item
     let state = model_for_phase(phase)
+    let event =
+      domain.ServerError(domain.ErrorEvent(
+        room_id,
+        code,
+        "server feedback",
+        expected_recoverability(code),
+      ))
     let #(updated, commands) =
-      update.transition(
-        state,
-        update.ServerEvent(1, 4000, domain.ServerError(error_event(code))),
-      )
-    assert updated.phase == expected_phase
-    assert list.map(commands, command_kind) == expected_commands
+      update.transition(state, update.ServerEvent(1, 4000, event))
+
+    case expect_protocol_failure {
+      True -> {
+        assert updated.phase == model.Blocked(model.ProtocolFailure)
+        assert commands == [update.CloseSocket(1)]
+      }
+      False -> {
+        assert updated.phase != model.Blocked(model.ProtocolFailure)
+      }
+    }
   })
 }
 
@@ -1057,10 +1143,7 @@ pub fn rate_limit_deadline_is_generation_and_deadline_safe_test() {
 pub fn terminal_error_close_callbacks_are_no_ops_test() {
   let state =
     model.Model(
-      ..model_for_phase(model.Joined(
-        21,
-        domain.connection_id_from_string("self"),
-      )),
+      ..model_for_phase(model.AwaitingRoomState(21, 0)),
       rate_limit_until: Some(5000),
     )
   let #(blocked, close_commands) =
@@ -1111,13 +1194,19 @@ pub fn username_error_returns_to_entry_without_losing_draft_test() {
   assert commands == [update.CloseSocket(22), update.FocusUsername]
 }
 
-pub fn joined_join_required_disables_chat_without_a_resend_loop_test() {
+pub fn awaiting_join_required_disables_chat_without_a_resend_loop_test() {
   let self_id = domain.connection_id_from_string("self")
   let state =
     model.Model(
-      ..joined_model(23, self_id, []),
+      ..model_for_phase(model.AwaitingRoomState(23, 0)),
       draft: "keep this",
-      send_in_flight: Some(model.SendInFlight(23, "keep this")),
+      room_snapshot: Some(model.RoomSnapshot(
+        domain.default_room_id,
+        self_id,
+        [],
+        [],
+        False,
+      )),
     )
   let #(updated, commands) =
     update.transition(
@@ -1129,10 +1218,10 @@ pub fn joined_join_required_disables_chat_without_a_resend_loop_test() {
       ),
     )
 
-  assert updated.phase == model.Joined(23, self_id)
+  assert updated.phase == model.AwaitingRoomState(23, 0)
   assert updated.draft == "keep this"
   assert updated.send_in_flight == None
-  assert snapshot_is_stale(updated)
+  assert updated.room_snapshot == state.room_snapshot
   assert commands == []
 
   let #(still_disabled, retry_commands) =
@@ -1172,7 +1261,7 @@ pub fn joined_error_table_preserves_draft_and_routes_feedback_test() {
     #(domain.InvalidUsername, 0, False, True, False),
     #(domain.InvalidMessage, 3, False, True, False),
     #(domain.RateLimited, 3, False, True, False),
-    #(domain.JoinRequired, 3, False, False, True),
+    #(domain.JoinRequired, 5, False, False, True),
     #(domain.AlreadyJoined, 3, True, False, True),
     #(domain.InvalidRoomId, 5, False, False, True),
     #(domain.RoomNotFound, 5, False, False, True),
@@ -1411,12 +1500,12 @@ fn error_event_with_recoverability(
   code: domain.ErrorCode,
   recoverable: Bool,
 ) -> domain.ErrorEvent {
-  domain.ErrorEvent(
-    Some(domain.default_room_id),
-    code,
-    "server feedback",
-    recoverable,
-  )
+  let room_id = case code {
+    domain.InvalidEvent | domain.InvalidRoomId -> None
+    domain.RoomMismatch -> Some(domain.room_id_from_string("other"))
+    _ -> Some(domain.default_room_id)
+  }
+  domain.ErrorEvent(room_id, code, "server feedback", recoverable)
 }
 
 fn expected_recoverability(code: domain.ErrorCode) -> Bool {

@@ -455,11 +455,12 @@ the unit names the package-manager command that produces them.
 - [x] Format, Gleam build/tests, production bundle, and shell Playwright test pass.
 - [x] Protocol fixtures match the canonical backend specification.
 - [x] No browser handle or untrusted dynamic value enters the application model.
-- [ ] Human reviews the state/error tables before network integration.
+- [x] Human reviewed and reconciled the state/error tables before network
+  integration.
 
 ### Phase 2: Real-time vertical slices
 
-- [ ] Task 6 (6A-6E): Deliver joining through native WebSocket.
+- [x] Task 6 (6A-6E): Deliver joining through native WebSocket.
 - [ ] Task 7 (7A-7D): Deliver the joined presence/status workspace.
 - [ ] Task 8 (8A-8E): Deliver accepted chat without optimistic rendering.
 - [ ] Task 9 (9A-9E): Deliver reconnect, terminal errors, and recovery.
@@ -542,8 +543,8 @@ the unit names the package-manager command that produces them.
 No product decision currently blocks Tasks 0-5. The following decisions are
 deliberately resolved at named checkpoints:
 
-- Task 6 must adopt the backend Task 7 finalized error room-context, close order,
-  and post-error phase exactly.
+- Task 6 adopted the backend Task 7 finalized error room-context, close order,
+  and post-error phase, including pre-snapshot `room_unavailable`.
 - Task 11's original or licensed art and palette require human visual/provenance
   approval before speech-bubble polish proceeds.
 - Task 14 must coordinate the ignored/staged `priv/public` policy and Docker
