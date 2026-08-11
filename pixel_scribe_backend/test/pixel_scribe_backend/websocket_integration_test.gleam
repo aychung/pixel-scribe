@@ -23,6 +23,8 @@ import pixel_scribe_backend/room_directory
 import pixel_scribe_backend/room_factory
 import pixel_scribe_backend/web
 
+const test_key_base = "0123456789012345678901234567890123456789012345678901234567890123"
+
 pub fn two_clients_join_and_disconnect_over_websocket_test() {
   let server = start_test_server()
 
@@ -248,7 +250,7 @@ fn start_test_server() -> TestServer {
   let directory = room_directory.from_name(directory_name)
   let factory_name = room_factory.new_name()
   let web_child =
-    web.mist_handler(directory, "test-secret-key")
+    web.mist_handler(directory, test_key_base)
     |> mist.new
     |> mist.port(0)
     |> mist.after_start(fn(port, _, _) { process.send(port_subject, port) })

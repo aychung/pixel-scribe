@@ -4,6 +4,8 @@ import gleam/list
 import gleam/result
 import pixel_scribe_backend/supervisor
 
+const test_key_base = "0123456789012345678901234567890123456789012345678901234567890123"
+
 type ChildPids {
   ChildPids(directory: Pid, factory: Pid, web: Pid)
 }
@@ -51,30 +53,23 @@ pub fn factory_failure_keeps_directory_and_restarts_factory_and_web_test() {
 }
 
 pub fn startup_configuration_rejects_invalid_values_test() {
-  assert supervisor.startup_configuration(-1, "test-secret-key") == Error(Nil)
-  assert supervisor.startup_configuration(65_536, "test-secret-key")
-    == Error(Nil)
-  assert supervisor.startup_configuration(0, "") == Error(Nil)
+  assert supervisor.startup_configuration(-1) == Error(Nil)
+  assert supervisor.startup_configuration(65_536) == Error(Nil)
   assert supervisor.startup_configuration_with_bind_address(
       0,
-      "test-secret-key",
       "127.0.0.1; touch /tmp/pwned",
     )
     == Error(Nil)
 }
 
 pub fn startup_configuration_accepts_ephemeral_test_values_test() {
-  assert supervisor.startup_configuration(0, "test-secret-key") != Error(Nil)
-  assert supervisor.startup_configuration_with_bind_address(
-      0,
-      "test-secret-key",
-      "0.0.0.0",
-    )
+  assert supervisor.startup_configuration(0) != Error(Nil)
+  assert supervisor.startup_configuration_with_bind_address(0, "0.0.0.0")
     != Error(Nil)
 }
 
 fn start_root() -> Pid {
-  let assert Ok(started) = supervisor.start(0, "test-secret-key")
+  let assert Ok(started) = supervisor.start(0, test_key_base)
   process.unlink(started.pid)
   started.pid
 }

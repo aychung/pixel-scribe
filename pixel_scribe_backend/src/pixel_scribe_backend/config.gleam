@@ -1,5 +1,4 @@
 import envoy
-import gleam/bit_array
 import gleam/dynamic.{type Dynamic}
 import gleam/erlang/charlist
 import gleam/int
@@ -17,8 +16,6 @@ const default_static_directory = "priv/public"
 
 const default_development_origins = ["http://localhost:1234"]
 
-const minimum_secret_key_bytes = 64
-
 pub type Environment {
   Development
   Production
@@ -28,7 +25,6 @@ pub opaque type Config {
   Config(
     port: Int,
     bind_address: String,
-    secret_key_base: String,
     static_directory: String,
     environment: Environment,
     development_origins: List(String),
@@ -39,7 +35,6 @@ pub opaque type Config {
 pub type Setting {
   Port
   BindAddress
-  SecretKeyBase
   StaticDirectory
   Environment
   DevelopmentOrigins
@@ -47,14 +42,12 @@ pub type Setting {
 }
 
 pub type ConfigError {
-  Missing(Setting)
   Invalid(Setting)
 }
 
 pub fn load() -> Result(Config, ConfigError) {
   use port <- result.try(read_port())
   use bind_address <- result.try(read_bind_address())
-  use secret_key_base <- result.try(read_secret_key_base())
   use static_directory <- result.try(read_static_directory())
   use environment <- result.try(read_environment())
   use public_origin <- result.try(read_public_origin())
@@ -72,7 +65,6 @@ pub fn load() -> Result(Config, ConfigError) {
       Ok(Config(
         port:,
         bind_address:,
-        secret_key_base:,
         static_directory:,
         environment:,
         development_origins:,
@@ -88,10 +80,6 @@ pub fn port(config: Config) -> Int {
 
 pub fn bind_address(config: Config) -> String {
   config.bind_address
-}
-
-pub fn secret_key_base(config: Config) -> String {
-  config.secret_key_base
 }
 
 pub fn static_directory(config: Config) -> String {
@@ -130,17 +118,6 @@ fn read_bind_address() -> Result(String, ConfigError) {
   case valid_bind_address(address) {
     True -> Ok(address)
     False -> Error(Invalid(BindAddress))
-  }
-}
-
-fn read_secret_key_base() -> Result(String, ConfigError) {
-  case envoy.get("SECRET_KEY_BASE") {
-    Error(Nil) -> Error(Missing(SecretKeyBase))
-    Ok(value) ->
-      case valid_secret_key_base(value) {
-        True -> Ok(value)
-        False -> Error(Invalid(SecretKeyBase))
-      }
   }
 }
 
@@ -236,12 +213,6 @@ fn normalize_origin(value: String) -> Result(String, Nil) {
           }
       }
   }
-}
-
-fn valid_secret_key_base(value: String) -> Bool {
-  bit_array.byte_size(bit_array.from_string(value)) >= minimum_secret_key_bytes
-  && string.trim(value) == value
-  && !contains_control_character(value)
 }
 
 pub fn valid_bind_address(value: String) -> Bool {

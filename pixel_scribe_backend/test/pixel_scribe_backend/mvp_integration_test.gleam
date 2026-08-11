@@ -22,6 +22,8 @@ import pixel_scribe_backend/room_directory
 import pixel_scribe_backend/room_factory
 import pixel_scribe_backend/web
 
+const test_key_base = "0123456789012345678901234567890123456789012345678901234567890123"
+
 pub fn entry_page_and_static_assets_are_served_by_live_server_test() {
   let server = start_test_server()
 
@@ -219,7 +221,7 @@ fn start_test_server() -> TestServer {
   let web_child =
     web.mist_handler_with_options(
       directory,
-      "test-secret-key",
+      test_key_base,
       static_fixture_directory(),
       Some("https://example.test"),
       [],

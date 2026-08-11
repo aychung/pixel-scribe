@@ -35,7 +35,6 @@ docker run --detach \
   --name "$container_name" \
   --publish 127.0.0.1::80 \
   --env ENVIRONMENT=production \
-  --env SECRET_KEY_BASE=container-health-smoke-key-012345678901234567890123456789012345678901234567890123 \
   "$image_name" >/dev/null
 
 published_port=$(docker port "$container_name" 80/tcp | sed -n 's/.*:\([0-9][0-9]*\)$/\1/p')
