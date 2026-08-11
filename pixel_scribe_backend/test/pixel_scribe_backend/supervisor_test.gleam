@@ -50,6 +50,17 @@ pub fn factory_failure_keeps_directory_and_restarts_factory_and_web_test() {
   assert after.web != before.web
 }
 
+pub fn startup_configuration_rejects_invalid_values_test() {
+  assert supervisor.startup_configuration(-1, "test-secret-key") == Error(Nil)
+  assert supervisor.startup_configuration(65_536, "test-secret-key")
+    == Error(Nil)
+  assert supervisor.startup_configuration(0, "") == Error(Nil)
+}
+
+pub fn startup_configuration_accepts_ephemeral_test_values_test() {
+  assert supervisor.startup_configuration(0, "test-secret-key") != Error(Nil)
+}
+
 fn start_root() -> Pid {
   let assert Ok(started) = supervisor.start(0, "test-secret-key")
   process.unlink(started.pid)

@@ -107,7 +107,7 @@ Wisp/Mist baseline + JSON codecs + room supervision
 
 ### Phase 4: Delivery and acceptance
 
-- [ ] Task 10: Harden HTTP configuration and static delivery.
+- [x] Task 10: Harden HTTP configuration and static delivery.
 - [ ] Task 11: Integrate frontend artifacts and run MVP acceptance checks.
 
 ### Checkpoint: Complete

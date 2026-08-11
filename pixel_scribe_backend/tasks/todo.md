@@ -531,21 +531,21 @@ failure responses through Wisp.
 
 **Acceptance criteria:**
 
-- [ ] `/healthz`, `/ws`, `/`, known assets, and unknown-path `404` behavior match
+- [x] `/healthz`, `/ws`, `/`, known assets, and unknown-path `404` behavior match
   the specification without directory traversal or SPA fallback.
-- [ ] Production WebSocket upgrades require same origin; development origins are
+- [x] Production WebSocket upgrades require same origin; development origins are
   explicit configuration and never wildcarded.
-- [ ] Port, an in-memory adapter-valid Wisp key base, static directory, security
+- [x] Port, an in-memory adapter-valid Wisp key base, static directory, security
   headers, graceful shutdown, and structured lifecycle logging are handled without
   exposing internal errors, usernames, message contents, or the generated key.
 
 **Verification:**
 
-- [ ] Handler and configuration tests cover good, missing, and invalid settings.
-- [ ] Header, origin, traversal, missing-asset, and health tests pass.
-- [ ] `gleam format --check src test`
-- [ ] `gleam build`
-- [ ] `gleam test`
+- [x] Handler and configuration tests cover good, missing, and invalid settings.
+- [x] Header, origin, traversal, missing-asset, and health tests pass.
+- [x] `gleam format --check src test`
+- [x] `gleam build`
+- [x] `gleam test`
 
 **Dependencies:** Tasks 1, 6, 7, and 9.
 
