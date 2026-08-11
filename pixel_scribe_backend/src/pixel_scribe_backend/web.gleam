@@ -34,6 +34,7 @@ pub fn handle_request_from(
 
 pub fn supervised_with_options(
   port: Int,
+  bind_address: String,
   secret_key_base: String,
   directory: room_directory.RoomDirectory,
   static_directory: String,
@@ -46,6 +47,7 @@ pub fn supervised_with_options(
     development_origins,
   )
   |> mist.new
+  |> mist.bind(bind_address)
   |> mist.port(port)
   |> mist.supervised
 }
@@ -57,6 +59,7 @@ pub fn supervised(
 ) -> ChildSpecification(Supervisor) {
   mist_handler(directory, secret_key_base)
   |> mist.new
+  |> mist.bind("localhost")
   |> mist.port(port)
   |> mist.supervised
 }

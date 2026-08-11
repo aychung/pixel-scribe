@@ -1,5 +1,7 @@
 import envoy
 import gleam/bit_array
+import gleam/dynamic.{type Dynamic}
+import gleam/erlang/charlist
 import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -8,6 +10,8 @@ import gleam/string
 import gleam/uri.{Uri}
 
 const default_port = 4000
+
+const default_bind_address = "localhost"
 
 const default_static_directory = "priv/public"
 
@@ -23,6 +27,7 @@ pub type Environment {
 pub opaque type Config {
   Config(
     port: Int,
+    bind_address: String,
     secret_key_base: String,
     static_directory: String,
     environment: Environment,
@@ -32,6 +37,7 @@ pub opaque type Config {
 
 pub type Setting {
   Port
+  BindAddress
   SecretKeyBase
   StaticDirectory
   Environment
@@ -45,6 +51,7 @@ pub type ConfigError {
 
 pub fn load() -> Result(Config, ConfigError) {
   use port <- result.try(read_port())
+  use bind_address <- result.try(read_bind_address())
   use secret_key_base <- result.try(read_secret_key_base())
   use static_directory <- result.try(read_static_directory())
   use environment <- result.try(read_environment())
@@ -61,6 +68,7 @@ pub fn load() -> Result(Config, ConfigError) {
     Production, [] | Development, _ ->
       Ok(Config(
         port:,
+        bind_address:,
         secret_key_base:,
         static_directory:,
         environment:,
@@ -72,6 +80,10 @@ pub fn load() -> Result(Config, ConfigError) {
 
 pub fn port(config: Config) -> Int {
   config.port
+}
+
+pub fn bind_address(config: Config) -> String {
+  config.bind_address
 }
 
 pub fn secret_key_base(config: Config) -> String {
@@ -98,6 +110,18 @@ fn read_port() -> Result(Int, ConfigError) {
         Ok(port) if port >= 1 && port <= 65_535 -> Ok(port)
         _ -> Error(Invalid(Port))
       }
+  }
+}
+
+fn read_bind_address() -> Result(String, ConfigError) {
+  let address = case envoy.get("HOST") {
+    Error(Nil) -> default_bind_address
+    Ok(value) -> string.trim(value)
+  }
+
+  case valid_bind_address(address) {
+    True -> Ok(address)
+    False -> Error(Invalid(BindAddress))
   }
 }
 
@@ -194,6 +218,25 @@ fn valid_secret_key_base(value: String) -> Bool {
   && string.trim(value) == value
   && !contains_control_character(value)
 }
+
+pub fn valid_bind_address(value: String) -> Bool {
+  value != ""
+  && string.trim(value) == value
+  && !contains_control_character(value)
+  && {
+    case value {
+      "localhost" -> True
+      _ ->
+        case parse_address(charlist.from_string(value)) {
+          Ok(_) -> True
+          Error(_) -> False
+        }
+    }
+  }
+}
+
+@external(erlang, "inet", "parse_address")
+fn parse_address(value: charlist.Charlist) -> Result(Dynamic, Dynamic)
 
 fn valid_static_directory(path: String) -> Bool {
   path != ""

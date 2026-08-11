@@ -13,6 +13,7 @@ import pixel_scribe_backend/web
 pub opaque type StartupConfiguration {
   StartupConfiguration(
     port: Int,
+    bind_address: String,
     secret_key_base: String,
     static_directory: String,
     development_origins: List(String),
@@ -28,11 +29,25 @@ pub fn startup_configuration(
   port: Int,
   secret_key_base: String,
 ) -> Result(StartupConfiguration, Nil) {
-  case port >= 0 && port <= 65_535 && secret_key_base != "" {
+  startup_configuration_with_bind_address(port, secret_key_base, "localhost")
+}
+
+pub fn startup_configuration_with_bind_address(
+  port: Int,
+  secret_key_base: String,
+  bind_address: String,
+) -> Result(StartupConfiguration, Nil) {
+  case
+    port >= 0
+    && port <= 65_535
+    && secret_key_base != ""
+    && config.valid_bind_address(bind_address)
+  {
     True ->
       Ok(
         StartupConfiguration(
           port:,
+          bind_address:,
           secret_key_base:,
           static_directory: "priv/public",
           development_origins: [],
@@ -47,6 +62,7 @@ pub fn startup_configuration_from_config(
 ) -> StartupConfiguration {
   StartupConfiguration(
     port: config.port(configuration),
+    bind_address: config.bind_address(configuration),
     secret_key_base: config.secret_key_base(configuration),
     static_directory: config.static_directory(configuration),
     development_origins: config.development_origins(configuration),
@@ -57,9 +73,14 @@ pub fn startup_configuration_from_config(
 pub fn start_with_configuration(
   configuration: StartupConfiguration,
 ) -> actor.StartResult(static_supervisor.Supervisor) {
-  let StartupConfiguration(port, secret_key_base, static_directory, origins) =
-    configuration
-  start_tree(port, secret_key_base, static_directory, origins)
+  let StartupConfiguration(
+    port,
+    bind_address,
+    secret_key_base,
+    static_directory,
+    origins,
+  ) = configuration
+  start_tree(port, bind_address, secret_key_base, static_directory, origins)
 }
 
 /// Compatibility wrapper for supervised tests and existing callers.
@@ -75,6 +96,7 @@ pub fn start(
 
 fn start_tree(
   port: Int,
+  bind_address: String,
   secret_key_base: String,
   static_directory: String,
   development_origins: List(String),
@@ -88,6 +110,7 @@ fn start_tree(
   |> static_supervisor.add(room_factory.supervised(directory, factory_name))
   |> static_supervisor.add(web.supervised_with_options(
     port,
+    bind_address,
     secret_key_base,
     directory,
     static_directory,

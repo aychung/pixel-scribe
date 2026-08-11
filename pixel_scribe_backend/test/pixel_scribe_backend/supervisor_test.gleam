@@ -55,10 +55,22 @@ pub fn startup_configuration_rejects_invalid_values_test() {
   assert supervisor.startup_configuration(65_536, "test-secret-key")
     == Error(Nil)
   assert supervisor.startup_configuration(0, "") == Error(Nil)
+  assert supervisor.startup_configuration_with_bind_address(
+      0,
+      "test-secret-key",
+      "127.0.0.1; touch /tmp/pwned",
+    )
+    == Error(Nil)
 }
 
 pub fn startup_configuration_accepts_ephemeral_test_values_test() {
   assert supervisor.startup_configuration(0, "test-secret-key") != Error(Nil)
+  assert supervisor.startup_configuration_with_bind_address(
+      0,
+      "test-secret-key",
+      "0.0.0.0",
+    )
+    != Error(Nil)
 }
 
 fn start_root() -> Pid {
