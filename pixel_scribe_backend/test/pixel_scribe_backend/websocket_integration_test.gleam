@@ -250,7 +250,9 @@ fn start_test_server() -> TestServer {
   let directory = room_directory.from_name(directory_name)
   let factory_name = room_factory.new_name()
   let web_child =
-    web.mist_handler(directory, test_key_base)
+    web.mist_handler(directory, test_key_base, "priv/public", None, [
+      "http://127.0.0.1",
+    ])
     |> mist.new
     |> mist.port(0)
     |> mist.after_start(fn(port, _, _) { process.send(port_subject, port) })
@@ -314,6 +316,7 @@ fn connect_websocket(port: Int) -> Client {
   let request =
     "GET /ws HTTP/1.1\r\n"
     <> "Host: 127.0.0.1\r\n"
+    <> "Origin: http://127.0.0.1\r\n"
     <> "Upgrade: websocket\r\n"
     <> "Connection: Upgrade\r\n"
     <> "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"

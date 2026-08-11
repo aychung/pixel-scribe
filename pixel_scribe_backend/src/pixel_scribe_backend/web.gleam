@@ -32,7 +32,7 @@ pub fn handle_request_from(
   add_security_headers(response)
 }
 
-pub fn supervised_with_options(
+pub fn supervised(
   port: Int,
   bind_address: String,
   secret_key_base: String,
@@ -41,7 +41,7 @@ pub fn supervised_with_options(
   public_origin: Option(String),
   development_origins: List(String),
 ) -> ChildSpecification(Supervisor) {
-  mist_handler_with_options(
+  mist_handler(
     directory,
     secret_key_base,
     static_directory,
@@ -54,60 +54,12 @@ pub fn supervised_with_options(
   |> mist.supervised
 }
 
-pub fn supervised(
-  port: Int,
-  secret_key_base: String,
-  directory: room_directory.RoomDirectory,
-) -> ChildSpecification(Supervisor) {
-  mist_handler(directory, secret_key_base)
-  |> mist.new
-  |> mist.bind("localhost")
-  |> mist.port(port)
-  |> mist.supervised
-}
-
 pub fn mist_handler(
-  directory: room_directory.RoomDirectory,
-  secret_key_base: String,
-) -> fn(Request(mist.Connection)) -> Response(mist.ResponseData) {
-  let http_handler = wisp_mist.handler(handle_request, secret_key_base)
-  fn(request: Request(mist.Connection)) {
-    let response = case request.method, request.path {
-      http.Get, "/ws" -> connection.websocket(request, directory)
-      _, _ -> http_handler(request)
-    }
-
-    add_security_headers_to_mist_response(response)
-  }
-}
-
-pub fn mist_handler_with_origins(
-  directory: room_directory.RoomDirectory,
-  secret_key_base: String,
-  allowed_origins: List(String),
-) -> fn(Request(mist.Connection)) -> Response(mist.ResponseData) {
-  let http_handler = wisp_mist.handler(handle_request, secret_key_base)
-  fn(request: Request(mist.Connection)) {
-    let response = case request.method, request.path {
-      http.Get, "/ws" -> {
-        case websocket_origin_allowed(request, allowed_origins) {
-          True -> connection.websocket(request, directory)
-          False -> forbidden_response()
-        }
-      }
-      _, _ -> http_handler(request)
-    }
-
-    add_security_headers_to_mist_response(response)
-  }
-}
-
-pub fn mist_handler_with_options(
   directory: room_directory.RoomDirectory,
   secret_key_base: String,
   static_directory: String,
   public_origin: Option(String),
-  allowed_origins: List(String),
+  development_origins: List(String),
 ) -> fn(Request(mist.Connection)) -> Response(mist.ResponseData) {
   let http_handler =
     wisp_mist.handler(
@@ -121,7 +73,7 @@ pub fn mist_handler_with_options(
           websocket_origin_allowed_with_public_origin(
             request,
             public_origin,
-            allowed_origins,
+            development_origins,
           )
         {
           True -> connection.websocket(request, directory)

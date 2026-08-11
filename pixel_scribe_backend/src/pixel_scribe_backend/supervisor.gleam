@@ -117,7 +117,7 @@ fn start_tree(
   static_supervisor.new(static_supervisor.RestForOne)
   |> static_supervisor.add(room_directory.supervised(directory_name))
   |> static_supervisor.add(room_factory.supervised(directory, factory_name))
-  |> static_supervisor.add(web.supervised_with_options(
+  |> static_supervisor.add(web.supervised(
     port,
     bind_address,
     secret_key_base,

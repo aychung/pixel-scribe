@@ -219,7 +219,7 @@ fn start_test_server() -> TestServer {
   let directory = room_directory.from_name(directory_name)
   let factory_name = room_factory.new_name()
   let web_child =
-    web.mist_handler_with_options(
+    web.mist_handler(
       directory,
       test_key_base,
       static_fixture_directory(),
