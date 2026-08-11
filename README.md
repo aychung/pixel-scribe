@@ -177,7 +177,11 @@ docker run --rm --name pixel-scribe \
 For a TLS-terminating reverse proxy, add the external origin to the container
 configuration, for example `--env PUBLIC_ORIGIN=https://office.example.com`.
 The checked-in container smoke command builds an image, runs it with production
-configuration and an ephemeral published port, checks `/healthz`, and cleans up:
+configuration and an ephemeral published port, verifies `/healthz` readiness,
+then checks the Docker-generated `/`, `/styles.css`, and
+`/pixel_scribe_frontend.js` for successful responses, exact content types, and
+stable generated-content markers before cleaning up. It does not perform
+browser, WebSocket, or full UI acceptance:
 
 ```sh
 ./scripts/container_health_smoke.sh
@@ -197,6 +201,7 @@ the backend and no same-origin live evidence has been recorded.
 ## Verification boundary
 
 The automated evidence includes package checks, the frontend bundle command, the
-staging command, and a live backend integration test covering HTTP delivery and
-the two-client WebSocket lifecycle. Full browser acceptance still requires the
+staging command, the production container smoke's health and generated-asset
+checks, and a live backend integration test covering HTTP delivery and the
+two-client WebSocket lifecycle. Full browser acceptance still requires the
 frontend WebSocket effect and a manual two-browser smoke test.

@@ -95,8 +95,11 @@ For a TLS-terminating reverse proxy, also set, for example,
 `--env PUBLIC_ORIGIN=https://office.example.com`.
 
 The checked-in container health smoke command builds an image, starts it with
-`ENVIRONMENT=production`, checks `/healthz` through a temporary published port,
-and removes its container and temporary image:
+`ENVIRONMENT=production`, verifies `/healthz` through a temporary published
+port, then checks the Docker-generated `/`, `/styles.css`, and
+`/pixel_scribe_frontend.js` for successful responses, exact content types, and
+stable generated-content markers before removing its container and temporary
+image. It does not perform browser, WebSocket, or full UI acceptance:
 
 ```sh
 ./scripts/container_health_smoke.sh

@@ -860,8 +860,11 @@ container health smoke command is:
 ~~~
 
 It builds an image, runs it with `ENVIRONMENT=production` and a temporary host
-port, checks `/healthz`, and cleans up. This verifies container reachability and
-process health; it is not browser WebSocket or full UI acceptance.
+port, verifies `/healthz` readiness, then checks the Docker-generated `/`,
+`/styles.css`, and `/pixel_scribe_frontend.js` for successful responses, exact
+content types, and stable generated-content markers before cleaning up. This
+verifies container reachability, process health, and generated static assets; it
+is not browser, WebSocket, or full UI acceptance.
 
 ## Code Style
 
@@ -905,9 +908,9 @@ hypothetical rooms, databases, movement, or media features.
   children described by the `RestForOne` policy.
 - Automated tests cover the static handler, missing assets, traversal rejection,
   security headers, and `/healthz`. The checked-in container smoke command
-  validates production image reachability and `/healthz`; a separate final
-  browser smoke test must exercise the generated frontend through the running
-  backend origin.
+  validates production image reachability, `/healthz`, and generated static
+  assets; a separate final browser smoke test must exercise the generated
+  frontend through the running backend origin.
 - Build and run the full test suite at each implementation checkpoint.
 
 No coverage percentage is required for the MVP. Every specified state transition
