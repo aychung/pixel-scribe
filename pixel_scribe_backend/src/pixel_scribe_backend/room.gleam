@@ -1,8 +1,10 @@
 import gleam/erlang/process.{type Monitor, type Pid, type Subject}
 import gleam/list
+import gleam/option.{None, Some}
 import gleam/otp/actor
 import gleam/result
 import pixel_scribe_backend/domain
+import pixel_scribe_backend/lifecycle_logging
 
 pub const max_connections = 50
 
@@ -129,6 +131,11 @@ fn handle_join(
 ) -> actor.Next(State, RoomCommand) {
   case list.length(state.members) >= max_connections {
     True -> {
+      lifecycle_logging.log(lifecycle_logging.RoomJoinRejected(
+        state.room_id,
+        lifecycle_logging.RoomFull,
+        list.length(state.members),
+      ))
       process.send(sink.subject, JoinRejected(state.room_id, RoomFull))
       actor.continue(state)
     }
@@ -138,6 +145,12 @@ fn handle_join(
       case process.is_alive(sink.pid) {
         False -> {
           process.demonitor_process(monitor)
+          lifecycle_logging.log(lifecycle_logging.RoomUnexpectedFailure(
+            Some(state.room_id),
+            None,
+            Some(list.length(state.members)),
+            lifecycle_logging.JoinSinkUnavailable,
+          ))
           actor.continue(state)
         }
         True -> {
@@ -153,6 +166,11 @@ fn handle_join(
             state.members,
             UserJoined(state.room_id, domain.Presence(connection_id, username)),
           )
+          lifecycle_logging.log(lifecycle_logging.RoomJoined(
+            state.room_id,
+            connection_id,
+            list.length(members),
+          ))
 
           actor.continue(State(state.room_id, members, state.messages))
         }
@@ -232,6 +250,11 @@ fn remove_matching_members(
         process.demonitor_process(member.monitor)
       })
       list.each(removed, fn(member) {
+        lifecycle_logging.log(lifecycle_logging.RoomLeft(
+          state.room_id,
+          member.connection_id,
+          list.length(remaining),
+        ))
         broadcast(remaining, UserLeft(state.room_id, member.connection_id))
       })
       actor.continue(State(state.room_id, remaining, state.messages))

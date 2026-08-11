@@ -1,8 +1,10 @@
 import gleam/erlang/process
+import gleam/option.{None, Some}
 import gleam/otp/actor
 import gleam/otp/factory_supervisor as factory
 import gleam/otp/supervision.{type ChildSpecification, Transient, supervisor}
 import pixel_scribe_backend/domain
+import pixel_scribe_backend/lifecycle_logging
 import pixel_scribe_backend/room
 import pixel_scribe_backend/room_directory
 
@@ -74,12 +76,26 @@ pub fn start_child(
 fn start_room(arguments: RoomStartArguments) -> actor.StartResult(room.Room) {
   let RoomStartArguments(room_id, directory) = arguments
   case room.start(room_id) {
-    Error(error) -> Error(error)
+    Error(error) -> {
+      lifecycle_logging.log(lifecycle_logging.RoomUnexpectedFailure(
+        Some(room_id),
+        None,
+        None,
+        lifecycle_logging.RoomStartFailed,
+      ))
+      Error(error)
+    }
     Ok(room_handle) -> {
       case room_directory.register(directory, room_handle) {
         Ok(Nil) ->
           Ok(actor.Started(pid: room.pid(room_handle), data: room_handle))
         Error(_) -> {
+          lifecycle_logging.log(lifecycle_logging.RoomUnexpectedFailure(
+            Some(room_id),
+            None,
+            None,
+            lifecycle_logging.RoomRegistrationFailed,
+          ))
           process.unlink(room.pid(room_handle))
           process.kill(room.pid(room_handle))
           Error(actor.InitFailed("room registration failed"))

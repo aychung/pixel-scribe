@@ -4,6 +4,7 @@ import gleam/http/response.{type Response}
 import gleam/option.{type Option, None, Some}
 import mist
 import pixel_scribe_backend/domain
+import pixel_scribe_backend/lifecycle_logging
 import pixel_scribe_backend/protocol
 import pixel_scribe_backend/rate_limit
 import pixel_scribe_backend/room
@@ -179,12 +180,20 @@ fn handle_control(
       case state.room {
         Some(room_handle) ->
           case room.pid(room_handle) == pid {
-            True ->
+            True -> {
+              let #(room_id, connection_id) = room_failure_context(state.phase)
+              lifecycle_logging.log(lifecycle_logging.RoomUnexpectedFailure(
+                room_id,
+                connection_id,
+                None,
+                lifecycle_logging.RoomUnavailable,
+              ))
               apply_transition(
                 State(..state, room: None),
                 handle_room_down(state.phase),
                 websocket,
               )
+            }
             False -> mist.continue(state)
           }
         None -> mist.continue(state)
@@ -282,6 +291,12 @@ fn resolve_and_join(
     Ok(room_handle) ->
       case process.is_alive(room.pid(room_handle)) {
         False -> {
+          lifecycle_logging.log(lifecycle_logging.RoomUnexpectedFailure(
+            Some(room_id),
+            None,
+            None,
+            lifecycle_logging.RoomUnavailable,
+          ))
           let transition =
             error_transition(
               AwaitingJoin,
@@ -356,5 +371,15 @@ fn down_to_control(down: process.Down) -> ConnectionControl {
   case down {
     process.ProcessDown(_, pid, _) -> JoinedRoomDown(pid)
     process.PortDown(_, _, _) -> JoinedRoomDown(process.self())
+  }
+}
+
+fn room_failure_context(
+  phase: Phase,
+) -> #(Option(domain.RoomId), Option(domain.ConnectionId)) {
+  case phase {
+    AwaitingJoin -> #(None, None)
+    Joining(room_id) -> #(Some(room_id), None)
+    Joined(room_id, connection_id) -> #(Some(room_id), Some(connection_id))
   }
 }
