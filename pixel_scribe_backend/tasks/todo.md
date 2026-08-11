@@ -566,18 +566,19 @@ through the browser-facing origin. Generated JavaScript remains generated.
 
 **Acceptance criteria:**
 
-- [ ] One documented repository-level command builds the frontend and populates
+- [x] One documented repository-level command builds the frontend and populates
   the backend static directory reproducibly.
-- [ ] The running backend serves the entry page and assets, while two clients can
+- [x] The running backend serves the entry page and assets, while two clients can
   join `default`, observe presence, chat, disconnect, and reconnect with history.
-- [ ] README and specification reflect the final commands, limits, accepted risks,
+- [x] README and specification reflect the final commands, limits, accepted risks,
   and intentionally deferred features.
 
 **Verification:**
 
-- [ ] Full `gleam format --check src test`, `gleam build`, and `gleam test` pass.
-- [ ] The frontend build-and-copy command succeeds from a clean artifact directory.
-- [ ] Manual two-browser smoke test and automated MVP integration test pass.
+- [x] Full `gleam format --check src test`, `gleam build`, and `gleam test` pass.
+- [x] The frontend build-and-copy command succeeds from a clean artifact directory.
+- [x] Automated MVP integration test passes.
+- [ ] Manual two-browser smoke test passes.
 
 **Dependencies:** Tasks 1–10 and finalized frontend bundler output.
 

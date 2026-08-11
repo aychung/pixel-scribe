@@ -2,8 +2,37 @@
 
 ## Status
 
-Approved on 2026-08-08. Implementation remains gated on approval of the follow-up
-task plan.
+Approved on 2026-08-08. Backend Tasks 0–11 artifact delivery are implemented in
+the current checkout and covered by automated package tests. Browser acceptance
+remains open because the frontend WebSocket client is not complete.
+
+This document is still the canonical backend contract. The status above is an
+implementation boundary, not a claim that the final browser-facing MVP has
+passed acceptance.
+
+## Current delivery boundary
+
+The frontend package currently provides the Lustre shell, username preference,
+protocol validation, and pure connection-state behavior. It does not yet
+provide the browser WebSocket effect, joined chat workspace, office world,
+Canvas renderer, or approved art assets; its scene state remains a placeholder.
+
+From `pixel_scribe_frontend/`, the verified bundle command is:
+
+~~~sh
+gleam run -m lustre/dev build
+~~~
+
+It writes `dist/index.html`, `dist/pixel_scribe_frontend.js`, and
+`dist/styles.css`. From the repository root,
+`./scripts/build_frontend.sh` cleans the build directory, validates this exact
+artifact set, and copies it into the backend's default static directory,
+`pixel_scribe_backend/priv/public` (overridable at runtime with
+`STATIC_DIRECTORY`).
+
+The automated package checks, staging command, and live backend integration test
+are distinct from the remaining manual/browser smoke procedure. No browser or
+Canvas evidence is implied by the commands alone.
 
 ## Objective
 
@@ -29,7 +58,9 @@ shapes.
 - Current-user presence with join and leave notifications.
 - Real-time plain-text chat.
 - The latest 50 accepted messages, stored in memory and sent to new arrivals.
-- A Wisp HTTP server that serves the compiled frontend and WebSocket endpoint.
+- A Wisp HTTP server that serves files from a configured static directory and
+  exposes the WebSocket endpoint. The repository staging command copies the
+  compiled frontend into that directory.
 - A single BEAM application instance.
 
 ### Excluded
@@ -723,17 +754,67 @@ state.
 
 ## Commands
 
-Run from the backend package directory:
+Run the backend checks from the backend package directory:
 
 ```sh
 gleam format --check src test
 gleam build
 gleam test
-gleam run
 ```
 
-The frontend build-and-copy command remains a repository-level integration task
-and must be documented once the frontend bundler output path is finalized.
+To run the backend locally, provide a non-empty development key of at least
+64 bytes:
+
+~~~sh
+SECRET_KEY_BASE='0123456789012345678901234567890123456789012345678901234567890123' \
+  ENVIRONMENT=development \
+  DEVELOPMENT_ORIGINS='http://localhost:1234' \
+  gleam run
+~~~
+
+The default port is `4000`; `PORT`, `STATIC_DIRECTORY`, and
+`DEVELOPMENT_ORIGINS` are validated configuration values. Production requires
+`ENVIRONMENT=production` and rejects development origins.
+
+Run the frontend checks from `pixel_scribe_frontend/`:
+
+~~~sh
+bun install --frozen-lockfile
+gleam format --check src test
+gleam build
+gleam test
+gleam run -m lustre/dev build
+~~~
+
+The frontend's configured `bun run test:e2e` and
+`bun run test:e2e:focused` commands exercise the current shell against the
+Lustre development server. They do not replace a same-origin browser
+acceptance test.
+
+For a static-only smoke procedure, first build the frontend. From the backend
+package directory, start the backend in one terminal against the normalized
+absolute `dist/` path:
+
+~~~sh
+STATIC_DIRECTORY="$(cd ../pixel_scribe_frontend/dist && pwd)" \
+SECRET_KEY_BASE='0123456789012345678901234567890123456789012345678901234567890123' \
+ENVIRONMENT=development \
+gleam run
+~~~
+
+In a second terminal, still from the backend package directory, check:
+
+~~~sh
+curl -i http://127.0.0.1:4000/healthz
+curl -i http://127.0.0.1:4000/
+curl -i http://127.0.0.1:4000/styles.css
+curl -i http://127.0.0.1:4000/does-not-exist
+~~~
+
+This verifies HTTP/static behavior only; it does not verify browser WebSocket
+behavior, two-client presence/chat, reconnect, or Canvas rendering. The live
+backend integration test covers those WebSocket lifecycle events without a
+browser.
 
 ## Code Style
 
@@ -775,7 +856,9 @@ hypothetical rooms, databases, movement, or media features.
   presence.
 - Supervision-test that directory and factory failures restart the dependent
   children described by the `RestForOne` policy.
-- Smoke-test static frontend serving, missing assets, and `/healthz`.
+- Automated tests cover the static handler, missing assets, traversal rejection,
+  security headers, and `/healthz`. A separate final smoke test must exercise
+  the generated frontend through the running backend origin.
 - Build and run the full test suite at each implementation checkpoint.
 
 No coverage percentage is required for the MVP. Every specified state transition
@@ -788,8 +871,10 @@ and validation boundary must have at least one focused test.
 - Include room ID, connection ID, and current room-user count in relevant
   structured logs.
 - Detect WebSocket closure and clean up presence promptly.
-- Recommended: require `join_room` within 10 seconds and use WebSocket ping/pong
-  support to detect dead connections that do not close cleanly.
+- The implementation requires `join_room` within 10 seconds. Mist connection
+  monitoring and close cleanup handle dead connections; WebSocket ping/pong
+  remains a deployment/runtime consideration rather than an application
+  protocol feature.
 - On graceful shutdown, stop accepting connections and close active sockets.
 - A room-process restart clears all presences and message history by design.
 
@@ -842,6 +927,8 @@ and validation boundary must have at least one focused test.
   restarted by the factory without restarting the directory or HTTP server.
 - Connections attached to a failed room receive `room_unavailable` when possible,
   close, and can reconnect through the directory to the replacement room.
-- Static frontend files and the WebSocket are available from the same production
-  origin, and `/healthz` reports process availability.
-- Format, build, unit tests, and integration tests pass.
+- The backend static handler, WebSocket, `/healthz`, and repository frontend
+  staging command are implemented.
+- Backend format, build, unit, actor, and live WebSocket integration tests pass
+  in the current package. Full browser MVP acceptance additionally requires a
+  real same-origin browser test and a manual two-browser smoke test.
