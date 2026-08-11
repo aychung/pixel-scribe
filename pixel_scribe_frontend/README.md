@@ -9,8 +9,10 @@ Lustre runs only as a browser SPA. The frontend does not use Lustre server
 components, server-side rendering, or Lustre's DOM-patch WebSocket protocol. The
 existing backend remains the authority for the JSON `/ws` contract.
 
-This package is currently a scaffold. The application source, static entry page,
-styles, tests, and build-to-backend integration still need to be created.
+The foundation is implemented: the browser-only Lustre shell, protocol codecs,
+pure connection state machine, username preference, and browser effects are in
+place. Native WebSocket integration, the joined workspace, office renderer, and
+staging delivery remain in the later MVP tasks.
 
 ## MVP
 
