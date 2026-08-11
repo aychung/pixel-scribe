@@ -32,6 +32,7 @@ pub opaque type Config {
     static_directory: String,
     environment: Environment,
     development_origins: List(String),
+    public_origin: Option(String),
   )
 }
 
@@ -42,6 +43,7 @@ pub type Setting {
   StaticDirectory
   Environment
   DevelopmentOrigins
+  PublicOrigin
 }
 
 pub type ConfigError {
@@ -55,6 +57,7 @@ pub fn load() -> Result(Config, ConfigError) {
   use secret_key_base <- result.try(read_secret_key_base())
   use static_directory <- result.try(read_static_directory())
   use environment <- result.try(read_environment())
+  use public_origin <- result.try(read_public_origin())
 
   let default_origins = case environment {
     Development -> default_development_origins
@@ -73,6 +76,7 @@ pub fn load() -> Result(Config, ConfigError) {
         static_directory:,
         environment:,
         development_origins:,
+        public_origin:,
       ))
     Production, _ -> Error(Invalid(DevelopmentOrigins))
   }
@@ -100,6 +104,10 @@ pub fn environment(config: Config) -> Environment {
 
 pub fn development_origins(config: Config) -> List(String) {
   config.development_origins
+}
+
+pub fn public_origin(config: Config) -> Option(String) {
+  config.public_origin
 }
 
 fn read_port() -> Result(Int, ConfigError) {
@@ -175,6 +183,23 @@ fn read_development_origins(
           {
             Ok(origins) -> Ok(origins)
             Error(Nil) -> Error(Invalid(DevelopmentOrigins))
+          }
+      }
+    }
+  }
+}
+
+fn read_public_origin() -> Result(Option(String), ConfigError) {
+  case envoy.get("PUBLIC_ORIGIN") {
+    Error(Nil) -> Ok(None)
+    Ok(value) -> {
+      let value = string.trim(value)
+      case value {
+        "" -> Ok(None)
+        _ ->
+          case normalize_origin(value) {
+            Ok(origin) -> Ok(Some(origin))
+            Error(Nil) -> Error(Invalid(PublicOrigin))
           }
       }
     }

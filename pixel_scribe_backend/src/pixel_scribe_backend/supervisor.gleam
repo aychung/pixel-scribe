@@ -1,3 +1,4 @@
+import gleam/option.{type Option, None}
 import gleam/otp/actor
 import gleam/otp/static_supervisor
 import gleam/otp/supervision.{type ChildSpecification, supervisor}
@@ -16,6 +17,7 @@ pub opaque type StartupConfiguration {
     bind_address: String,
     secret_key_base: String,
     static_directory: String,
+    public_origin: Option(String),
     development_origins: List(String),
   )
 }
@@ -50,6 +52,7 @@ pub fn startup_configuration_with_bind_address(
           bind_address:,
           secret_key_base:,
           static_directory: "priv/public",
+          public_origin: None,
           development_origins: [],
         ),
       )
@@ -65,6 +68,7 @@ pub fn startup_configuration_from_config(
     bind_address: config.bind_address(configuration),
     secret_key_base: config.secret_key_base(configuration),
     static_directory: config.static_directory(configuration),
+    public_origin: config.public_origin(configuration),
     development_origins: config.development_origins(configuration),
   )
 }
@@ -78,9 +82,17 @@ pub fn start_with_configuration(
     bind_address,
     secret_key_base,
     static_directory,
+    public_origin,
     origins,
   ) = configuration
-  start_tree(port, bind_address, secret_key_base, static_directory, origins)
+  start_tree(
+    port,
+    bind_address,
+    secret_key_base,
+    static_directory,
+    public_origin,
+    origins,
+  )
 }
 
 /// Compatibility wrapper for supervised tests and existing callers.
@@ -99,6 +111,7 @@ fn start_tree(
   bind_address: String,
   secret_key_base: String,
   static_directory: String,
+  public_origin: Option(String),
   development_origins: List(String),
 ) -> actor.StartResult(static_supervisor.Supervisor) {
   let directory_name = room_directory.new_name()
@@ -114,6 +127,7 @@ fn start_tree(
     secret_key_base,
     directory,
     static_directory,
+    public_origin,
     development_origins,
   ))
   |> static_supervisor.start

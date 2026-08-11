@@ -38,12 +38,14 @@ pub fn supervised_with_options(
   secret_key_base: String,
   directory: room_directory.RoomDirectory,
   static_directory: String,
+  public_origin: Option(String),
   development_origins: List(String),
 ) -> ChildSpecification(Supervisor) {
   mist_handler_with_options(
     directory,
     secret_key_base,
     static_directory,
+    public_origin,
     development_origins,
   )
   |> mist.new
@@ -100,10 +102,11 @@ pub fn mist_handler_with_origins(
   }
 }
 
-fn mist_handler_with_options(
+pub fn mist_handler_with_options(
   directory: room_directory.RoomDirectory,
   secret_key_base: String,
   static_directory: String,
+  public_origin: Option(String),
   allowed_origins: List(String),
 ) -> fn(Request(mist.Connection)) -> Response(mist.ResponseData) {
   let http_handler =
@@ -114,7 +117,13 @@ fn mist_handler_with_options(
   fn(request: Request(mist.Connection)) {
     let response = case request.method, request.path {
       http.Get, "/ws" -> {
-        case websocket_origin_allowed(request, allowed_origins) {
+        case
+          websocket_origin_allowed_with_public_origin(
+            request,
+            public_origin,
+            allowed_origins,
+          )
+        {
           True -> connection.websocket(request, directory)
           False -> forbidden_response()
         }
@@ -130,10 +139,22 @@ pub fn websocket_origin_allowed(
   request: Request(body),
   allowed_origins: List(String),
 ) -> Bool {
+  websocket_origin_allowed_with_public_origin(request, None, allowed_origins)
+}
+
+pub fn websocket_origin_allowed_with_public_origin(
+  request: Request(body),
+  public_origin: Option(String),
+  allowed_origins: List(String),
+) -> Bool {
   case request.get_header(request, "origin") {
     Error(_) -> False
     Ok(origin) -> {
-      case canonical_origin(origin), request_origin(request) {
+      let expected_origin = case public_origin {
+        Some(value) -> canonical_origin(value)
+        None -> request_origin(request)
+      }
+      case canonical_origin(origin), expected_origin {
         Some(origin), Some(expected) ->
           origin == expected
           || list.any(allowed_origins, fn(allowed) {

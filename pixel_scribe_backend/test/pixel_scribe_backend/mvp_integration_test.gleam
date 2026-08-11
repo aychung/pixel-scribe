@@ -147,6 +147,23 @@ pub fn two_clients_complete_the_mvp_lifecycle_test() {
   })
 }
 
+pub fn proxied_https_origin_is_accepted_by_configured_handler_test() {
+  let server = start_test_server()
+
+  exception.defer(fn() { stop_test_server(server) }, fn() {
+    let client = connect_websocket(server.port)
+    close_client(client)
+  })
+}
+
+pub fn mismatched_origin_is_rejected_by_configured_handler_test() {
+  let server = start_test_server()
+
+  exception.defer(fn() { stop_test_server(server) }, fn() {
+    assert websocket_status(server.port, "https://evil.example") == 403
+  })
+}
+
 type TestServer {
   TestServer(root: process.Pid, port: Int)
 }
@@ -200,7 +217,13 @@ fn start_test_server() -> TestServer {
   let directory = room_directory.from_name(directory_name)
   let factory_name = room_factory.new_name()
   let web_child =
-    web.mist_handler(directory, "test-secret-key")
+    web.mist_handler_with_options(
+      directory,
+      "test-secret-key",
+      "priv/public",
+      Some("https://example.test"),
+      [],
+    )
     |> mist.new
     |> mist.port(0)
     |> mist.after_start(fn(port, _, _) { process.send(port_subject, port) })
@@ -296,16 +319,32 @@ fn response_header(
 
 fn connect_websocket(port: Int) -> Client {
   let socket = open_socket(port)
-  let request =
-    "GET /ws HTTP/1.1\r\n"
-    <> "Host: 127.0.0.1\r\n"
-    <> "Upgrade: websocket\r\n"
-    <> "Connection: Upgrade\r\n"
-    <> "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
-    <> "Sec-WebSocket-Version: 13\r\n\r\n"
+  let request = websocket_request("https://example.test")
   let assert Ok(Nil) = tcp.send(socket, bytes_tree.from_string(request))
   let assert Ok(rest) = read_handshake(socket, <<>>)
   Client(socket, rest)
+}
+
+fn websocket_status(port: Int, origin: String) -> Int {
+  let socket = open_socket(port)
+  let request = websocket_request(origin)
+  let assert Ok(Nil) = tcp.send(socket, bytes_tree.from_string(request))
+  let assert Ok(raw_response) = read_http_bytes(socket, <<>>)
+  let _ = tcp.close(socket)
+  let assert Ok(response) = decode_http_response(raw_response)
+  response.status
+}
+
+fn websocket_request(origin: String) -> String {
+  "GET /ws HTTP/1.1\r\n"
+  <> "Host: example.test\r\n"
+  <> "Origin: "
+  <> origin
+  <> "\r\n"
+  <> "Upgrade: websocket\r\n"
+  <> "Connection: Upgrade\r\n"
+  <> "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+  <> "Sec-WebSocket-Version: 13\r\n\r\n"
 }
 
 fn open_socket(port: Int) -> Socket {

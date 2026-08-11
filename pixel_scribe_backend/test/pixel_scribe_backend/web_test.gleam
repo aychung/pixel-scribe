@@ -1,6 +1,8 @@
-import gleam/http.{Get}
+import gleam/http.{Get, Http}
+import gleam/http/request as http_request
 import gleam/http/response.{Response}
 import gleam/list
+import gleam/option.{None, Some}
 import pixel_scribe_backend/web
 import wisp
 import wisp/simulate
@@ -57,6 +59,30 @@ pub fn websocket_origins_must_be_explicit_or_same_origin_test() {
   assert !web.websocket_origin_allowed(
     simulate.header(request, "origin", "https://evil.example"),
     ["http://localhost:1234"],
+  )
+}
+
+pub fn configured_public_origin_handles_tls_termination_test() {
+  let request = simulate.request(Get, "/ws")
+  assert web.websocket_origin_allowed_with_public_origin(
+    simulate.header(request, "origin", "https://example.test"),
+    Some("https://example.test"),
+    [],
+  )
+  assert !web.websocket_origin_allowed_with_public_origin(
+    simulate.header(request, "origin", "https://evil.example"),
+    Some("https://example.test"),
+    [],
+  )
+}
+
+pub fn direct_http_same_origin_remains_allowed_test() {
+  let request = simulate.request(Get, "/ws")
+  let request = http_request.set_scheme(request, Http)
+  assert web.websocket_origin_allowed_with_public_origin(
+    simulate.header(request, "origin", "http://wisp.example.com"),
+    None,
+    [],
   )
 }
 
