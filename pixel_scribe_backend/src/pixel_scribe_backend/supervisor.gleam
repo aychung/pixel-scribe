@@ -129,13 +129,6 @@ fn start_tree(
   |> static_supervisor.start
 }
 
-pub fn supervised(
-  port: Int,
-  secret_key_base: String,
-) -> ChildSpecification(static_supervisor.Supervisor) {
-  supervisor(fn() { start(port, secret_key_base) })
-}
-
 /// Add a validated application supervisor to another supervision tree.
 pub fn supervised_with_configuration(
   configuration: StartupConfiguration,
