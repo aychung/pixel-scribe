@@ -17,9 +17,10 @@ chat workspace, local office world, Canvas renderer, and approved art assets are
 not implemented yet. The current scene state is a placeholder, so the browser
 shell is not the completed real-backend MVP.
 
-Task 11's reproducible artifact staging is implemented. The frontend remains a
-shell rather than the completed real-time browser client, so no manual browser
-acceptance is claimed yet.
+Task 11's reproducible artifact staging is implemented. The production
+Dockerfile also builds the frontend and includes those generated artifacts in
+the runtime image. The frontend remains a shell rather than the completed
+real-time browser client, so no manual browser acceptance is claimed yet.
 
 ## Repository layout
 
@@ -76,20 +77,32 @@ gleam build
 gleam test
 ```
 
-To run the backend locally, provide a non-empty `SECRET_KEY_BASE` of at least
-64 bytes. This development-only value is deliberately not a production secret:
+To run the backend locally:
 
 ```sh
 cd pixel_scribe_backend
-SECRET_KEY_BASE='0123456789012345678901234567890123456789012345678901234567890123' \
-  ENVIRONMENT=development \
+ENVIRONMENT=development \
   DEVELOPMENT_ORIGINS='http://localhost:1234' \
   gleam run
 ```
 
-The default port is `4000`. `PORT`, `STATIC_DIRECTORY`, and
-`DEVELOPMENT_ORIGINS` are validated configuration values. Production requires
-`ENVIRONMENT=production` and does not accept development origins.
+At startup the backend generates a Wisp adapter key in memory; `SECRET_KEY_BASE`
+is not required. Runtime configuration is validated as follows:
+
+- `HOST` is an optional bind address, defaulting to `localhost`. The production
+  image sets it to `0.0.0.0` so the published container port is reachable.
+- `PORT` is an optional TCP port from 1 through 65,535, defaulting to `4000`.
+- `STATIC_DIRECTORY` is an optional path without parent-directory segments or
+  control characters, defaulting to `priv/public`.
+- `ENVIRONMENT` defaults to `development`; set it to `production` for deployed
+  instances. Production rejects non-empty `DEVELOPMENT_ORIGINS`.
+- `DEVELOPMENT_ORIGINS` is an optional comma-separated list of validated HTTP or
+  HTTPS origins. Development defaults to `http://localhost:1234`; set it to an
+  empty value to allow no additional origins.
+- `PUBLIC_ORIGIN` is optional and must be one validated HTTP or HTTPS origin
+  without a path, wildcard, or credentials. Set it to the public HTTPS origin
+  when a TLS-terminating reverse proxy fronts the backend; otherwise same-origin
+  checks use the request origin.
 
 ### Frontend
 
@@ -131,7 +144,6 @@ normalized absolute `dist/` path:
 
 ```sh
 STATIC_DIRECTORY="$(cd ../pixel_scribe_frontend/dist && pwd)" \
-SECRET_KEY_BASE='0123456789012345678901234567890123456789012345678901234567890123' \
 ENVIRONMENT=development \
 gleam run
 ```
@@ -147,6 +159,29 @@ curl -i http://127.0.0.1:4000/does-not-exist
 
 This checks HTTP/static behavior only; it does not verify a browser, WebSocket,
 two-client presence, chat, reconnect, or Canvas flow.
+
+### Production container
+
+From the repository root, build the production image. The Dockerfile builds the
+locked frontend stage, copies its generated `dist/` artifacts into the backend
+shipment, and the runtime image listens on `0.0.0.0:80`:
+
+```sh
+docker build --tag pixel-scribe:local .
+docker run --rm --name pixel-scribe \
+  --publish 127.0.0.1:4000:80 \
+  --env ENVIRONMENT=production \
+  pixel-scribe:local
+```
+
+For a TLS-terminating reverse proxy, add the external origin to the container
+configuration, for example `--env PUBLIC_ORIGIN=https://office.example.com`.
+The checked-in container smoke command builds an image, runs it with production
+configuration and an ephemeral published port, checks `/healthz`, and cleans up:
+
+```sh
+./scripts/container_health_smoke.sh
+```
 
 ### Pending Task 11 browser smoke procedure
 

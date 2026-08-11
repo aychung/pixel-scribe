@@ -210,10 +210,36 @@ MVP abuse controls:
 - Static asset paths: serve files from `priv/public` without directory traversal.
 - Unknown paths: return `404` rather than exposing filesystem details.
 
-Production accepts WebSocket upgrades only from the application's own origin.
-Development may allow explicitly configured frontend origins. The listening port,
-static asset directory, and development origins are configuration values with
-safe defaults.
+Production accepts WebSocket upgrades from the request's canonical same origin,
+or from the validated `PUBLIC_ORIGIN` when a TLS-terminating reverse proxy
+provides the public origin. Development may allow explicitly configured frontend
+origins. The bind address, listening port, static asset directory, environment,
+and development origins are configuration values with safe defaults.
+
+### Runtime configuration
+
+Configuration is read and validated when the application starts:
+
+- `HOST` is an optional bind address, defaulting to `localhost`. The production
+  Docker image sets `HOST=0.0.0.0` so published container ports are reachable.
+- `PORT` is an optional port from 1 through 65,535, defaulting to `4000`. The
+  production Docker image sets `PORT=80`.
+- `STATIC_DIRECTORY` is an optional safe path without parent-directory segments
+  or control characters, defaulting to `priv/public`.
+- `ENVIRONMENT` defaults to `development`; `production` disables development
+  origins and is the required mode for the production container.
+- `DEVELOPMENT_ORIGINS` is an optional comma-separated list of validated HTTP or
+  HTTPS origins. Development defaults to `http://localhost:1234`; production
+  rejects a non-empty value. Wildcards are not accepted.
+- `PUBLIC_ORIGIN` is optional. When set, it must be one validated HTTP or HTTPS
+  origin with no path, credentials, or wildcard. Set it to the external HTTPS
+  origin when TLS terminates at a reverse proxy; leave it unset for direct
+  same-origin deployments.
+
+The Wisp adapter key is generated with `wisp.random_string(64)` in memory for
+each application start. It is not read from `SECRET_KEY_BASE`, is replaced on
+restart, and must never be logged or exposed. The MVP does not use Wisp signing,
+encryption, or backend-owned cookies, so no deployment secret is required.
 
 ## WebSocket Contract
 
@@ -729,11 +755,12 @@ Mist version before application behavior depends on it.
 ### Task 1 platform baseline
 
 The web module uses Wisp 2.2.2's `wisp/wisp_mist.handler` adapter to convert a
-Wisp request handler into the Mist request/response shape. Its `supervised`
-function accepts the listening port and default-room directory, passes the HTTP
-adapter through `mist.new` and
-`mist.port`, and then calls `mist.supervised`, producing the supervised server
-child that the root supervision tree will start in Task 6.
+Wisp request handler into the Mist request/response shape. Its configured
+supervisor path receives the validated listening port, bind address, static
+directory, optional public origin, and development origins, passes the HTTP
+adapter through `mist.new`, `mist.bind`, and `mist.port`, and then calls
+`mist.supervised`, producing the supervised server child that the root
+supervision tree starts.
 This follows the versioned [Wisp/Mist adapter documentation](https://wisp.hexdocs.pm/wisp/wisp_mist.html)
 and the locked [Mist 6.0.3 server API](https://mist.hexdocs.pm/mist.html). The
 Wisp standalone example mentions `mist.start_http`; the locked Mist API exposes
@@ -747,10 +774,9 @@ per-connection WebSocket process, invokes the documented `on_init` and `on_close
 callbacks, and delivers selected room messages as custom WebSocket messages.
 
 The MVP does not use Wisp signing, encryption, or backend-owned cookies. The
-server may therefore generate any adapter-valid key base at startup, keep it only
-in memory, and replace it on restart. It must never be logged or exposed. A stable
-deployment secret is deferred until a feature actually needs signed or encrypted
-state.
+supervisor therefore generates an adapter-valid key with `wisp.random_string(64)`
+at startup, keeps it only in memory, and replaces it on restart. It must never be
+logged or exposed; `SECRET_KEY_BASE` is not a runtime requirement.
 
 ## Commands
 
@@ -762,19 +788,17 @@ gleam build
 gleam test
 ```
 
-To run the backend locally, provide a non-empty development key of at least
-64 bytes:
+To run the backend locally:
 
 ~~~sh
-SECRET_KEY_BASE='0123456789012345678901234567890123456789012345678901234567890123' \
-  ENVIRONMENT=development \
+ENVIRONMENT=development \
   DEVELOPMENT_ORIGINS='http://localhost:1234' \
   gleam run
 ~~~
 
-The default port is `4000`; `PORT`, `STATIC_DIRECTORY`, and
-`DEVELOPMENT_ORIGINS` are validated configuration values. Production requires
-`ENVIRONMENT=production` and rejects development origins.
+The defaults and validation rules are described in [Runtime configuration](#runtime-configuration).
+The application generates its Wisp adapter key in memory; `SECRET_KEY_BASE` is
+not required.
 
 Run the frontend checks from `pixel_scribe_frontend/`:
 
@@ -797,7 +821,6 @@ absolute `dist/` path:
 
 ~~~sh
 STATIC_DIRECTORY="$(cd ../pixel_scribe_frontend/dist && pwd)" \
-SECRET_KEY_BASE='0123456789012345678901234567890123456789012345678901234567890123' \
 ENVIRONMENT=development \
 gleam run
 ~~~
@@ -815,6 +838,30 @@ This verifies HTTP/static behavior only; it does not verify browser WebSocket
 behavior, two-client presence/chat, reconnect, or Canvas rendering. The live
 backend integration test covers those WebSocket lifecycle events without a
 browser.
+
+From the repository root, build and run the production container:
+
+~~~sh
+docker build --tag pixel-scribe:local .
+docker run --rm --name pixel-scribe \
+  --publish 127.0.0.1:4000:80 \
+  --env ENVIRONMENT=production \
+  pixel-scribe:local
+~~~
+
+The Dockerfile builds the frontend before exporting the backend shipment and
+serves the generated artifacts from `priv/public` in the runtime image. For a
+TLS-terminating reverse proxy, add a validated public origin, for example
+`--env PUBLIC_ORIGIN=https://office.example.com`. The checked-in production
+container health smoke command is:
+
+~~~sh
+./scripts/container_health_smoke.sh
+~~~
+
+It builds an image, runs it with `ENVIRONMENT=production` and a temporary host
+port, checks `/healthz`, and cleans up. This verifies container reachability and
+process health; it is not browser WebSocket or full UI acceptance.
 
 ## Code Style
 
@@ -857,8 +904,10 @@ hypothetical rooms, databases, movement, or media features.
 - Supervision-test that directory and factory failures restart the dependent
   children described by the `RestForOne` policy.
 - Automated tests cover the static handler, missing assets, traversal rejection,
-  security headers, and `/healthz`. A separate final smoke test must exercise
-  the generated frontend through the running backend origin.
+  security headers, and `/healthz`. The checked-in container smoke command
+  validates production image reachability and `/healthz`; a separate final
+  browser smoke test must exercise the generated frontend through the running
+  backend origin.
 - Build and run the full test suite at each implementation checkpoint.
 
 No coverage percentage is required for the MVP. Every specified state transition

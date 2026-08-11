@@ -50,21 +50,57 @@ gleam build
 gleam test
 ```
 
-The backend requires `SECRET_KEY_BASE` even in development. It must contain at
-least 64 bytes, have no surrounding whitespace, and contain no control
-characters. This command uses a local-only placeholder and listens on the
-default port, 4000:
+The backend generates its Wisp adapter key in memory at startup, so
+`SECRET_KEY_BASE` is not required. This command listens on the default port,
+4000:
 
 ```sh
-SECRET_KEY_BASE='0123456789012345678901234567890123456789012345678901234567890123' \
-  ENVIRONMENT=development \
+ENVIRONMENT=development \
   DEVELOPMENT_ORIGINS='http://localhost:1234' \
   gleam run
 ```
 
-Configuration also accepts validated `PORT`, `STATIC_DIRECTORY`, and
-`DEVELOPMENT_ORIGINS` values. Production uses `ENVIRONMENT=production` and
-does not allow development origins.
+Runtime configuration is validated as follows:
+
+- `HOST` is an optional bind address, defaulting to `localhost`.
+- `PORT` is an optional TCP port from 1 through 65,535, defaulting to `4000`.
+- `STATIC_DIRECTORY` is an optional path without parent-directory segments or
+  control characters, defaulting to `priv/public`.
+- `ENVIRONMENT` defaults to `development`; set it to `production` for deployed
+  instances. Production rejects non-empty `DEVELOPMENT_ORIGINS`.
+- `DEVELOPMENT_ORIGINS` is an optional comma-separated list of validated HTTP or
+  HTTPS origins. Development defaults to `http://localhost:1234`; an empty value
+  allows no additional origins.
+- `PUBLIC_ORIGIN` is an optional validated HTTP or HTTPS origin without a path,
+  wildcard, or credentials. Set it to the public HTTPS origin when a
+  TLS-terminating reverse proxy fronts the backend; otherwise same-origin checks
+  use the request origin.
+
+### Production container
+
+From the repository root, build and run the production image:
+
+```sh
+docker build --tag pixel-scribe:local .
+docker run --rm --name pixel-scribe \
+  --publish 127.0.0.1:4000:80 \
+  --env ENVIRONMENT=production \
+  pixel-scribe:local
+```
+
+The Dockerfile builds the frontend and includes its generated artifacts in the
+runtime image. It sets `HOST=0.0.0.0` and `PORT=80`; the application reads both
+values and serves the staged frontend from its default `priv/public` directory.
+For a TLS-terminating reverse proxy, also set, for example,
+`--env PUBLIC_ORIGIN=https://office.example.com`.
+
+The checked-in container health smoke command builds an image, starts it with
+`ENVIRONMENT=production`, checks `/healthz` through a temporary published port,
+and removes its container and temporary image:
+
+```sh
+./scripts/container_health_smoke.sh
+```
 
 ## Frontend artifact boundary
 
@@ -108,7 +144,7 @@ do not exercise this backend's WebSocket with two browser clients.
 
 Authentication, durable chat storage, additional active rooms, server-side
 avatar coordinates or movement, delivery acknowledgements, offline delivery,
-multiple backend replicas, voice, video, screen sharing, and production
-artifact/container staging are intentionally deferred. Local client-side
-avatars and Canvas rendering belong to the frontend and must not be added to the
-backend protocol merely to make the current placeholder shell appear complete.
+multiple backend replicas, voice, video, and screen sharing are intentionally
+deferred. Local client-side avatars and Canvas rendering belong to the frontend
+and must not be added to the backend protocol merely to make the current
+placeholder shell appear complete.
