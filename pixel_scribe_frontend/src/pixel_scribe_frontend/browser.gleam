@@ -21,6 +21,9 @@ fn is_https() -> Bool
 @external(javascript, "./browser_ffi.mjs", "generate_page_seed")
 fn generate_page_seed() -> Int
 
+@external(javascript, "./browser_ffi.mjs", "format_timestamp_local")
+fn format_timestamp_local_ffi(timestamp: String) -> String
+
 @external(javascript, "./browser_ffi.mjs", "schedule_timer")
 fn schedule_timer_ffi(
   timer_kind: Int,
@@ -41,6 +44,9 @@ fn focus_composer_ffi() -> Nil
 
 @external(javascript, "./browser_ffi.mjs", "scroll_chat_to_end")
 fn scroll_chat_to_end_ffi() -> Nil
+
+@external(javascript, "./browser_ffi.mjs", "chat_log_near_bottom")
+fn chat_log_near_bottom_ffi() -> Bool
 
 /// Namespaces for timers owned by separate application concerns. A timer ID
 /// is opaque within its namespace, so reconnect cleanup cannot cancel a
@@ -85,6 +91,15 @@ pub fn page_seed() -> Int {
 /// Injects a deterministic seed source for pure callers and tests.
 pub fn page_seed_with(source: fn() -> Int) -> Int {
   source()
+}
+
+/// Formats a server timestamp for local browser presentation.
+///
+/// The browser boundary preserves the original value when it cannot safely
+/// parse or format it, so the semantic `datetime` value remains useful even
+/// when local presentation is unavailable.
+pub fn format_timestamp_local(timestamp: String) -> String {
+  format_timestamp_local_ffi(timestamp)
 }
 
 /// Schedules a browser timer that sends its typed identity back through the
@@ -142,6 +157,13 @@ pub fn focus_composer() -> Effect(a) {
 /// its latest view. A missing node is a harmless no-op.
 pub fn scroll_chat_to_end() -> Effect(a) {
   effect.before_paint(fn(_dispatch, _root) { scroll_chat_to_end_ffi() })
+}
+
+/// Reports whether the fixed application-owned chat log was conservatively
+/// near its bottom before a new accepted message is applied. The browser
+/// boundary returns only this Bool; DOM handles and scroll metrics stay there.
+pub fn chat_log_near_bottom() -> Bool {
+  chat_log_near_bottom_ffi()
 }
 
 fn timer_kind_code(kind: TimerKind) -> Int {

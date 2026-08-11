@@ -70,3 +70,21 @@ pub fn username_cookie_attributes_are_exact_for_http_and_https_test() {
   assert !string.contains(https_cookie, "Domain")
   assert !string.contains(https_cookie, "HttpOnly")
 }
+
+pub fn valid_timestamp_is_formatted_for_local_display_test() {
+  let timestamp = "2026-08-10T16:00:00Z"
+  let formatted = browser.format_timestamp_local(timestamp)
+
+  assert string.length(formatted) > 0
+  assert formatted != timestamp
+}
+
+pub fn invalid_timestamp_falls_back_to_the_original_input_test() {
+  let invalid = "not-a-timestamp"
+
+  assert browser.format_timestamp_local(invalid) == invalid
+}
+
+pub fn chat_log_near_bottom_is_false_without_the_fixed_dom_target_test() {
+  assert browser.chat_log_near_bottom() == False
+}

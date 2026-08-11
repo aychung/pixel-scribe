@@ -350,3 +350,37 @@ pub fn server_message_text_validation_rejects_controls_at_boundary_test() {
     protocol.decode_server_event(payload) == Error(domain.MalformedServerEvent)
   })
 }
+
+pub fn server_message_timestamp_requires_rfc3339_utc_at_boundary_test() {
+  let invalid_timestamps = [
+    "not-a-timestamp",
+    "2026-02-30T12:00:00Z",
+    "2026-08-08 20:15:00",
+    "2026-08-08 20:15:00Z",
+    "2026-08-08T20:15:00+01:00",
+  ]
+
+  assert list.all(invalid_timestamps, fn(sent_at) {
+    let payload =
+      "{\"type\":\"message_sent\",\"room_id\":\"default\",\"message\":{\"message_id\":\"m\",\"sender_id\":\"c\",\"username\":\"Ada\",\"text\":\"Hello\",\"sent_at\":\""
+      <> sent_at
+      <> "\"}}"
+    protocol.decode_server_event(payload) == Error(domain.MalformedServerEvent)
+  })
+
+  let valid_utc_timestamps = [
+    "2026-08-08T20:15:00Z",
+    "2026-08-08T20:15:00.123456789Z",
+    "2026-08-08T20:15:00+00:00",
+  ]
+  assert list.all(valid_utc_timestamps, fn(sent_at) {
+    let payload =
+      "{\"type\":\"message_sent\",\"room_id\":\"default\",\"message\":{\"message_id\":\"m\",\"sender_id\":\"c\",\"username\":\"Ada\",\"text\":\"Hello\",\"sent_at\":\""
+      <> sent_at
+      <> "\"}}"
+    case protocol.decode_server_event(payload) {
+      Ok(domain.MessageSent(_, message)) -> message.sent_at == sent_at
+      _ -> False
+    }
+  })
+}

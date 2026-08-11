@@ -69,6 +69,12 @@ pub fn every_message_variant_is_a_trusted_constructor_test() {
     update.SocketClosed(1, True, 0.5),
     update.SocketError(1, 0.5),
     update.ServerEvent(1, 0, domain.UnknownEvent),
+    update.AcceptedMessage(
+      1,
+      domain.default_room_id,
+      message("accepted", domain.connection_id_from_string("sender"), "text"),
+      False,
+    ),
     update.ServerDecodeFailed(1),
     update.RateLimitTimerFired(1, 1000),
     update.ReconnectTimerFired(1, 8),
@@ -77,7 +83,7 @@ pub fn every_message_variant_is_a_trusted_constructor_test() {
   ]
 
   assert list.map(messages, msg_kind)
-    == [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    == [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
 }
 
 pub fn every_external_command_is_a_closed_trusted_value_test() {
@@ -439,6 +445,50 @@ pub fn joined_presence_deltas_upsert_and_remove_by_connection_id_test() {
   assert snapshot_participants(removed) == [second]
 }
 
+pub fn duplicate_join_keeps_one_presence_per_connection_id_test() {
+  let first_id = domain.connection_id_from_string("first")
+  let second_id = domain.connection_id_from_string("second")
+  let first = domain.Presence(first_id, "First")
+  let duplicate_first = domain.Presence(first_id, "Old duplicate")
+  let second = domain.Presence(second_id, "Second")
+  let replacement = domain.Presence(first_id, "Renamed")
+  let joined = joined_model(28, first_id, [first, duplicate_first, second])
+
+  let #(updated, commands) =
+    update.transition(
+      joined,
+      update.ServerEvent(
+        28,
+        0,
+        domain.UserJoined(domain.default_room_id, replacement),
+      ),
+    )
+
+  assert snapshot_participants(updated) == [replacement, second]
+  assert commands == []
+}
+
+pub fn unknown_leave_is_a_harmless_no_op_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let peer =
+    domain.Presence(domain.connection_id_from_string("peer"), "Same name")
+  let unknown_id = domain.connection_id_from_string("unknown")
+  let joined = joined_model(29, self_id, [peer])
+
+  let #(updated, commands) =
+    update.transition(
+      joined,
+      update.ServerEvent(
+        29,
+        0,
+        domain.UserLeft(domain.default_room_id, unknown_id),
+      ),
+    )
+
+  assert updated == joined
+  assert commands == []
+}
+
 pub fn duplicate_usernames_remain_distinct_during_presence_deltas_test() {
   let first_id = domain.connection_id_from_string("first")
   let second_id = domain.connection_id_from_string("second")
@@ -468,6 +518,40 @@ pub fn duplicate_usernames_remain_distinct_during_presence_deltas_test() {
       ),
     )
   assert snapshot_participants(removed) == [second]
+}
+
+pub fn room_snapshot_preserves_duplicate_usernames_by_connection_id_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let peer_id = domain.connection_id_from_string("peer")
+  let self_presence = domain.Presence(self_id, "Same name")
+  let peer_presence = domain.Presence(peer_id, "Same name")
+  let awaiting =
+    model.Model(
+      ..model.initial(),
+      username_preference: "Same name",
+      username_input: "Same name",
+      phase: model.AwaitingRoomState(30, 0),
+      socket_generation: 30,
+    )
+
+  let #(joined, commands) =
+    update.transition(
+      awaiting,
+      update.ServerEvent(
+        30,
+        0,
+        domain.RoomState(
+          domain.default_room_id,
+          self_id,
+          [self_presence, peer_presence],
+          [],
+        ),
+      ),
+    )
+
+  assert joined.phase == model.Joined(30, self_id)
+  assert snapshot_participants(joined) == [self_presence, peer_presence]
+  assert commands == []
 }
 
 pub fn current_generation_wrong_room_live_events_fail_closed_test() {
@@ -721,6 +805,115 @@ pub fn peer_echo_appends_but_keeps_draft_and_pending_send_test() {
   assert commands == []
 }
 
+pub fn unique_accepted_self_message_scrolls_even_when_reader_was_not_near_bottom_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let joined = joined_model(31, self_id, [])
+  let accepted = message("self-message", self_id, "accepted")
+
+  let #(updated, commands) =
+    update.transition(
+      joined,
+      update.AcceptedMessage(31, domain.default_room_id, accepted, False),
+    )
+
+  assert snapshot_messages(updated) == [accepted]
+  assert commands == [update.ScrollChatToEnd]
+}
+
+pub fn unique_accepted_peer_message_scrolls_when_reader_was_near_bottom_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let peer_id = domain.connection_id_from_string("peer")
+  let joined = joined_model(32, self_id, [])
+  let accepted = message("peer-message", peer_id, "accepted")
+
+  let #(updated, commands) =
+    update.transition(
+      joined,
+      update.AcceptedMessage(32, domain.default_room_id, accepted, True),
+    )
+
+  assert snapshot_messages(updated) == [accepted]
+  assert commands == [update.ScrollChatToEnd]
+}
+
+pub fn unique_accepted_peer_message_preserves_older_reader_position_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let peer_id = domain.connection_id_from_string("peer")
+  let joined = joined_model(33, self_id, [])
+  let accepted = message("peer-message", peer_id, "accepted")
+
+  let #(updated, commands) =
+    update.transition(
+      joined,
+      update.AcceptedMessage(33, domain.default_room_id, accepted, False),
+    )
+
+  assert snapshot_messages(updated) == [accepted]
+  assert commands == []
+}
+
+pub fn duplicate_accepted_message_never_scrolls_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let accepted = message("duplicate", self_id, "first")
+  let joined =
+    model.Model(
+      ..joined_model(34, self_id, []),
+      room_snapshot: Some(model.RoomSnapshot(
+        domain.default_room_id,
+        self_id,
+        [],
+        [accepted],
+        False,
+      )),
+    )
+
+  let #(updated, commands) =
+    update.transition(
+      joined,
+      update.AcceptedMessage(
+        34,
+        domain.default_room_id,
+        message("duplicate", self_id, "different body"),
+        True,
+      ),
+    )
+
+  assert updated == joined
+  assert commands == []
+}
+
+pub fn stale_generation_and_wrong_room_accepted_messages_never_scroll_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let peer_id = domain.connection_id_from_string("peer")
+  let joined = joined_model(35, self_id, [])
+  let accepted = message("stale", self_id, "accepted")
+  let other_room = domain.room_id_from_string("other")
+
+  let #(stale, stale_commands) =
+    update.transition(
+      joined,
+      update.AcceptedMessage(34, domain.default_room_id, accepted, True),
+    )
+  let #(wrong_room, wrong_room_commands) =
+    update.transition(
+      joined,
+      update.AcceptedMessage(
+        35,
+        other_room,
+        message("wrong-room", peer_id, "elsewhere"),
+        True,
+      ),
+    )
+
+  assert stale == joined
+  assert stale_commands == []
+  assert wrong_room.phase == model.Blocked(model.ProtocolFailure)
+  assert snapshot_is_stale(wrong_room)
+  assert wrong_room.send_in_flight == None
+  assert wrong_room.connection_feedback == Some("Protocol error.")
+  assert wrong_room_commands == [update.CloseSocket(35)]
+}
+
 pub fn matching_self_echo_appends_and_clears_only_matching_draft_test() {
   let self_id = domain.connection_id_from_string("self")
   let joined = joined_model(12, self_id, [])
@@ -745,7 +938,7 @@ pub fn matching_self_echo_appends_and_clears_only_matching_draft_test() {
   assert snapshot_messages(updated) == [accepted]
   assert updated.draft == ""
   assert updated.send_in_flight == None
-  assert commands == []
+  assert commands == [update.ScrollChatToEnd]
 }
 
 pub fn self_echo_keeps_a_newer_current_draft_test() {
@@ -774,7 +967,7 @@ pub fn self_echo_keeps_a_newer_current_draft_test() {
   assert snapshot_messages(updated) == [accepted]
   assert updated.draft == "second"
   assert updated.send_in_flight == None
-  assert commands == []
+  assert commands == [update.ScrollChatToEnd]
 }
 
 pub fn duplicate_message_ids_are_no_op_and_snapshot_history_is_latest_50_test() {
@@ -792,7 +985,7 @@ pub fn duplicate_message_ids_are_no_op_and_snapshot_history_is_latest_50_test() 
       )),
     )
   let new_message = message("message-51", self_id, "newest")
-  let assert #(with_new, []) =
+  let assert #(with_new, [update.ScrollChatToEnd]) =
     update.transition(
       joined,
       update.ServerEvent(
@@ -898,7 +1091,7 @@ pub fn stale_generation_and_nonmatching_self_echo_do_not_clear_pending_send_test
   assert after_nonmatching.draft == "mine"
   assert after_nonmatching.send_in_flight
     == Some(model.SendInFlight(18, "mine"))
-  assert nonmatching_commands == []
+  assert nonmatching_commands == [update.ScrollChatToEnd]
 }
 
 pub fn submit_message_requires_matching_joined_snapshot_test() {
@@ -1591,11 +1784,12 @@ fn msg_kind(message: update.Msg) -> Int {
     update.SocketClosed(_, _, _) -> 5
     update.SocketError(_, _) -> 6
     update.ServerEvent(_, _, _) -> 7
-    update.ServerDecodeFailed(_) -> 8
-    update.RateLimitTimerFired(_, _) -> 9
-    update.ReconnectTimerFired(_, _) -> 10
-    update.RetryRequested -> 11
-    update.ReturnToUsername -> 12
+    update.AcceptedMessage(_, _, _, _) -> 8
+    update.ServerDecodeFailed(_) -> 9
+    update.RateLimitTimerFired(_, _) -> 10
+    update.ReconnectTimerFired(_, _) -> 11
+    update.RetryRequested -> 12
+    update.ReturnToUsername -> 13
   }
 }
 

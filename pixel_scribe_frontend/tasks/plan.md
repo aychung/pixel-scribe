@@ -461,8 +461,8 @@ the unit names the package-manager command that produces them.
 ### Phase 2: Real-time vertical slices
 
 - [x] Task 6 (6A-6E): Deliver joining through native WebSocket.
-- [ ] Task 7 (7A-7D): Deliver the joined presence/status workspace.
-- [ ] Task 8 (8A-8E): Deliver accepted chat without optimistic rendering.
+- [x] Task 7 (7A-7D): Deliver the joined presence/status workspace.
+- [x] Task 8 (8A-8E): Deliver accepted chat without optimistic rendering.
 - [ ] Task 9 (9A-9E): Deliver reconnect, terminal errors, and recovery.
 
 ### Checkpoint: Real-time UI

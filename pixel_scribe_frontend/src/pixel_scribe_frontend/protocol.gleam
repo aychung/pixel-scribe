@@ -4,6 +4,7 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
+import gleam/time/timestamp
 import pixel_scribe_frontend/domain
 import pixel_scribe_frontend/validation
 
@@ -225,9 +226,10 @@ fn trusted_message(raw: RawMessage) -> Result(domain.ChatMessage, Nil) {
 
   case
     validation.normalize_username(raw_username),
-    validation.normalize_message_text(raw_text)
+    validation.normalize_message_text(raw_text),
+    is_utc_rfc3339(sent_at)
   {
-    Ok(username), Ok(text) ->
+    Ok(username), Ok(text), True ->
       Ok(domain.ChatMessage(
         domain.message_id_from_string(message_id),
         domain.connection_id_from_string(sender_id),
@@ -235,7 +237,21 @@ fn trusted_message(raw: RawMessage) -> Result(domain.ChatMessage, Nil) {
         text,
         sent_at,
       ))
-    _, _ -> Error(Nil)
+    _, _, _ -> Error(Nil)
+  }
+}
+
+fn is_utc_rfc3339(value: String) -> Bool {
+  case timestamp.parse_rfc3339(value) {
+    Error(_) -> False
+    Ok(_) ->
+      case string.slice(value, at_index: 10, length: 1) {
+        "T" | "t" ->
+          string.ends_with(value, "Z")
+          || string.ends_with(value, "z")
+          || string.ends_with(value, "+00:00")
+        _ -> False
+      }
   }
 }
 

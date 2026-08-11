@@ -20,6 +20,12 @@ pub type Msg {
   SocketClosed(generation: Int, deliberate: Bool, random_unit: Float)
   SocketError(generation: Int, random_unit: Float)
   ServerEvent(generation: Int, received_at_ms: Int, event: domain.ServerEvent)
+  AcceptedMessage(
+    generation: Int,
+    room_id: domain.RoomId,
+    message: domain.ChatMessage,
+    reader_was_near_bottom: Bool,
+  )
   ServerDecodeFailed(generation: Int)
   ReconnectTimerFired(generation: Int, timer_id: Int)
   RateLimitTimerFired(generation: Int, deadline_ms: Int)
@@ -66,6 +72,14 @@ pub fn transition(model: Model, message: Msg) -> #(Model, List(Command)) {
       socket_error(model, generation, random_unit)
     ServerEvent(generation, received_at_ms, event) ->
       server_event(model, generation, received_at_ms, event)
+    AcceptedMessage(generation, room_id, accepted, reader_was_near_bottom) ->
+      route_accepted_message(
+        model,
+        generation,
+        room_id,
+        accepted,
+        reader_was_near_bottom,
+      )
     ServerDecodeFailed(generation) -> server_decode_failed(model, generation)
     RateLimitTimerFired(generation, deadline_ms) ->
       rate_limit_timer_fired(model, generation, deadline_ms)
@@ -73,6 +87,28 @@ pub fn transition(model: Model, message: Msg) -> #(Model, List(Command)) {
       reconnect_timer_fired(model, generation, timer_id)
     RetryRequested -> retry_requested(model)
     ReturnToUsername -> return_to_username(model)
+  }
+}
+
+fn route_accepted_message(
+  model: Model,
+  generation: Int,
+  room_id: domain.RoomId,
+  message: domain.ChatMessage,
+  reader_was_near_bottom: Bool,
+) -> #(Model, List(Command)) {
+  case current_phase_generation(model.phase) {
+    Some(expected_generation)
+      if expected_generation == generation && room_id != domain.default_room_id
+    -> protocol_failure(model, generation)
+    _ ->
+      accepted_message(
+        model,
+        generation,
+        room_id,
+        message,
+        reader_was_near_bottom,
+      )
   }
 }
 
@@ -347,7 +383,7 @@ fn dispatch_server_event(
         _, _ -> #(model, [])
       }
     domain.MessageSent(room_id, message) ->
-      accepted_message(model, generation, room_id, message)
+      accepted_message(model, generation, room_id, message, False)
     domain.ServerError(error) ->
       server_error(model, generation, received_at_ms, error)
     domain.UnknownEvent -> #(model, [])
@@ -676,6 +712,7 @@ fn accepted_message(
   generation: Int,
   room_id: domain.RoomId,
   message: domain.ChatMessage,
+  reader_was_near_bottom: Bool,
 ) -> #(Model, List(Command)) {
   case model.phase, model.room_snapshot {
     model.Joined(expected_generation, self_id), Some(snapshot)
@@ -692,6 +729,12 @@ fn accepted_message(
             accepted_send_state(model, generation, self_id, message)
           let updated_snapshot =
             model.RoomSnapshot(..snapshot, messages: messages)
+          let scroll = case
+            message.sender_id == self_id || reader_was_near_bottom
+          {
+            True -> [ScrollChatToEnd]
+            False -> []
+          }
           #(
             model.Model(
               ..model,
@@ -699,7 +742,7 @@ fn accepted_message(
               draft: draft,
               send_in_flight: send_in_flight,
             ),
-            [],
+            scroll,
           )
         }
       }
@@ -1024,7 +1067,7 @@ fn upsert_presence(
     [] -> [replacement]
     [first, ..rest] if first.connection_id == replacement.connection_id -> [
       replacement,
-      ..rest
+      ..remove_presence(rest, replacement.connection_id)
     ]
     [first, ..rest] -> [first, ..upsert_presence(rest, replacement)]
   }
@@ -1036,7 +1079,8 @@ fn remove_presence(
 ) -> List(domain.Presence) {
   case participants {
     [] -> []
-    [first, ..rest] if first.connection_id == connection_id -> rest
+    [first, ..rest] if first.connection_id == connection_id ->
+      remove_presence(rest, connection_id)
     [first, ..rest] -> [first, ..remove_presence(rest, connection_id)]
   }
 }
@@ -1120,6 +1164,13 @@ pub fn socket_fact_to_msg(fact: socket.Fact) -> Msg {
     socket.Opened(generation) -> SocketOpened(generation)
     socket.Message(generation, received_at_ms, payload) ->
       case protocol.decode_server_event(payload) {
+        Ok(domain.MessageSent(room_id, message)) ->
+          AcceptedMessage(
+            generation,
+            room_id,
+            message,
+            browser.chat_log_near_bottom(),
+          )
         Ok(event) -> ServerEvent(generation, received_at_ms, event)
         Error(_) -> ServerDecodeFailed(generation)
       }

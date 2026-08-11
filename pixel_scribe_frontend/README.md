@@ -9,11 +9,11 @@ Lustre runs only as a browser SPA. The frontend does not use Lustre server
 components, server-side rendering, or Lustre's DOM-patch WebSocket protocol. The
 existing backend remains the authority for the JSON `/ws` contract.
 
-The foundation and native join slice are implemented: the browser-only Lustre
-shell, protocol codecs, pure connection state machine, username preference,
-same-origin native WebSocket, and decoded `room_state` transition are in place.
-The joined presence/chat workspace, office renderer, and staging delivery remain
-in later MVP tasks.
+The foundation and real-time chat slices are implemented: the browser-only
+Lustre shell, protocol codecs, pure connection state machine, username
+preference, same-origin native WebSocket, joined presence workspace, and
+accepted-message chat are in place. Reconnect recovery, the office renderer,
+and staging delivery remain in later MVP tasks.
 
 ## MVP
 

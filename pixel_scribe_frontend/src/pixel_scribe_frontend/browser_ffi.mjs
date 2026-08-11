@@ -1,8 +1,13 @@
 const USERNAME_COOKIE_PREFIX = "pixel_scribe_username=";
 
 const USERNAME_INPUT_ID = "username";
-const COMPOSER_ID = "composer";
+const COMPOSER_ID = "message-draft";
 const CHAT_LOG_ID = "chat-log";
+
+// Keep the auto-scroll affordance conservative: a reader within 24 CSS pixels
+// of the end is treated as following new messages, while older content remains
+// anchored once they are farther away.
+const CHAT_LOG_NEAR_BOTTOM_PX = 24;
 
 // A timer is owned by its kind and opaque identity. Its generation is retained
 // on the entry for cancellation checks and callback dispatch. Keeping the
@@ -138,12 +143,54 @@ export function scroll_chat_to_end() {
   }
 
   try {
-    element.scrollTop = element.scrollHeight;
+    const scrollTop = element.scrollTop;
+    const scrollHeight = element.scrollHeight;
+    const clientHeight = element.clientHeight;
+    if (!validScrollMetrics(scrollTop, scrollHeight, clientHeight)) {
+      return undefined;
+    }
+
+    element.scrollTop = scrollHeight;
   } catch (_error) {
-    // A removed or non-scrollable target is safe to ignore.
+    // A removed, non-scrollable, or malformed target is safe to ignore.
   }
 
   return undefined;
+}
+
+function validScrollMetric(value) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function validScrollMetrics(scrollTop, scrollHeight, clientHeight) {
+  return (
+    validScrollMetric(scrollTop) &&
+    validScrollMetric(scrollHeight) &&
+    validScrollMetric(clientHeight) &&
+    scrollHeight >= clientHeight &&
+    scrollTop <= scrollHeight
+  );
+}
+
+export function chat_log_near_bottom() {
+  const element = fixedElement(CHAT_LOG_ID);
+  if (element === undefined) {
+    return false;
+  }
+
+  try {
+    const scrollTop = element.scrollTop;
+    const scrollHeight = element.scrollHeight;
+    const clientHeight = element.clientHeight;
+    if (!validScrollMetrics(scrollTop, scrollHeight, clientHeight)) {
+      return false;
+    }
+
+    const distanceFromBottom = scrollHeight - clientHeight - scrollTop;
+    return distanceFromBottom <= CHAT_LOG_NEAR_BOTTOM_PX;
+  } catch (_error) {
+    return false;
+  }
 }
 
 export function read_document_cookie() {
@@ -198,5 +245,46 @@ export function generate_page_seed() {
     return values[0];
   } catch (_error) {
     return 0;
+  }
+}
+
+export function format_timestamp_local(timestamp) {
+  if (typeof timestamp !== "string") {
+    return "";
+  }
+
+  try {
+    const dateConstructor = globalThis.Date;
+    const intl = globalThis.Intl;
+    if (
+      typeof dateConstructor !== "function" ||
+      intl === undefined ||
+      typeof intl.DateTimeFormat !== "function"
+    ) {
+      return timestamp;
+    }
+
+    const date = new dateConstructor(timestamp);
+    if (
+      date === undefined ||
+      typeof date.getTime !== "function" ||
+      Number.isNaN(date.getTime())
+    ) {
+      return timestamp;
+    }
+
+    const formatter = new intl.DateTimeFormat(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    const formatted = formatter.format(date);
+    return typeof formatted === "string" && formatted.length > 0
+      ? formatted
+      : timestamp;
+  } catch (_error) {
+    return timestamp;
   }
 }
