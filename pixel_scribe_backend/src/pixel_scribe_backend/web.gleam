@@ -83,7 +83,7 @@ pub fn mist_handler(
       _, _ -> http_handler(request)
     }
 
-    add_security_headers_to_mist_response(response)
+    add_security_headers(response)
   }
 }
 
@@ -161,24 +161,7 @@ fn unsafe_path_segment(segment: String) -> Bool {
   || string.contains(segment, "\u{0}")
 }
 
-fn add_security_headers(response: wisp.Response) -> wisp.Response {
-  response
-  |> wisp.set_header(
-    "content-security-policy",
-    "default-src 'self'; base-uri 'self'; object-src 'none'; "
-      <> "frame-ancestors 'none'; script-src 'self'; "
-      <> "style-src 'self' 'unsafe-inline'; connect-src 'self'",
-  )
-  |> wisp.set_header("x-content-type-options", "nosniff")
-  |> wisp.set_header("x-frame-options", "DENY")
-  |> wisp.set_header("referrer-policy", "no-referrer")
-  |> wisp.set_header("cross-origin-opener-policy", "same-origin")
-  |> wisp.set_header("cross-origin-resource-policy", "same-origin")
-}
-
-fn add_security_headers_to_mist_response(
-  response: Response(mist.ResponseData),
-) -> Response(mist.ResponseData) {
+fn add_security_headers(response: Response(body)) -> Response(body) {
   response
   |> response.set_header(
     "content-security-policy",
