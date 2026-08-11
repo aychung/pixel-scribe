@@ -220,7 +220,7 @@ fn start_test_server() -> TestServer {
     web.mist_handler_with_options(
       directory,
       "test-secret-key",
-      "priv/public",
+      static_fixture_directory(),
       Some("https://example.test"),
       [],
     )
@@ -315,6 +315,10 @@ fn response_header(
   name: String,
 ) -> Result(String, Nil) {
   list.key_find(headers, name)
+}
+
+fn static_fixture_directory() -> String {
+  "test/fixtures/public"
 }
 
 fn connect_websocket(port: Int) -> Client {

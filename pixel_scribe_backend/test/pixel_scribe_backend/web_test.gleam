@@ -22,7 +22,11 @@ pub fn unknown_paths_return_not_found_test() {
 }
 
 pub fn root_serves_the_known_entry_file_with_security_headers_test() {
-  let response = web.handle_request(simulate.request(Get, "/"))
+  let response =
+    web.handle_request_from(
+      simulate.request(Get, "/"),
+      static_fixture_directory(),
+    )
   let Response(status, headers, body) = response
 
   assert status == 200
@@ -30,15 +34,27 @@ pub fn root_serves_the_known_entry_file_with_security_headers_test() {
   assert response_header(headers, "x-content-type-options") == Ok("nosniff")
   assert response_header(headers, "x-frame-options") == Ok("DENY")
   assert case body {
-    wisp.File(path: "priv/public/index.html", ..) -> True
+    wisp.File(path: "test/fixtures/public/index.html", ..) -> True
     _ -> False
   }
 }
 
 pub fn traversal_and_missing_assets_are_not_found_test() {
-  let traversal = web.handle_request(simulate.request(Get, "/../gleam.toml"))
-  let encoded = web.handle_request(simulate.request(Get, "/%2e%2e/gleam.toml"))
-  let missing = web.handle_request(simulate.request(Get, "/missing.js"))
+  let traversal =
+    web.handle_request_from(
+      simulate.request(Get, "/../gleam.toml"),
+      static_fixture_directory(),
+    )
+  let encoded =
+    web.handle_request_from(
+      simulate.request(Get, "/%2e%2e/gleam.toml"),
+      static_fixture_directory(),
+    )
+  let missing =
+    web.handle_request_from(
+      simulate.request(Get, "/missing.js"),
+      static_fixture_directory(),
+    )
 
   assert traversal.status == 404
   assert encoded.status == 404
@@ -91,4 +107,8 @@ fn response_header(
   name: String,
 ) -> Result(String, Nil) {
   list.key_find(headers, name)
+}
+
+fn static_fixture_directory() -> String {
+  "test/fixtures/public"
 }
