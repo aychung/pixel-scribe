@@ -4,7 +4,8 @@
 
 Approved on 2026-08-08. Backend Tasks 0–11 artifact delivery are implemented in
 the current checkout and covered by automated package tests. Browser acceptance
-remains open because the frontend WebSocket client is not complete.
+remains open because real-backend browser integration and later frontend visual
+slices are not complete.
 
 This document is still the canonical backend contract. The status above is an
 implementation boundary, not a claim that the final browser-facing MVP has
@@ -13,9 +14,10 @@ passed acceptance.
 ## Current delivery boundary
 
 The frontend package currently provides the Lustre shell, username preference,
-protocol validation, and pure connection-state behavior. It does not yet
-provide the browser WebSocket effect, joined chat workspace, office world,
-Canvas renderer, or approved art assets; its scene state remains a placeholder.
+protocol validation, pure connection-state behavior, browser WebSocket effect,
+joined presence/chat workspace, and reconnect recovery. It does not yet provide
+the office world, Canvas renderer, or approved art assets; its scene state
+remains a placeholder.
 
 From `pixel_scribe_frontend/`, the verified bundle command is:
 
@@ -818,9 +820,9 @@ gleam run -m lustre/dev build
 ~~~
 
 The frontend's configured `bun run test:e2e` and
-`bun run test:e2e:focused` commands exercise the current shell against the
-Lustre development server. They do not replace a same-origin browser
-acceptance test.
+`bun run test:e2e:focused` commands exercise the current routed browser client
+slices against the Lustre development server. They do not replace a
+same-origin browser acceptance test.
 
 For a static-only smoke procedure, first build the frontend. From the backend
 package directory, start the backend in one terminal against the normalized

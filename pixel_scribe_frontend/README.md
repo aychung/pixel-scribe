@@ -12,8 +12,8 @@ existing backend remains the authority for the JSON `/ws` contract.
 The foundation and real-time chat slices are implemented: the browser-only
 Lustre shell, protocol codecs, pure connection state machine, username
 preference, same-origin native WebSocket, joined presence workspace, and
-accepted-message chat are in place. Reconnect recovery, the office renderer,
-and staging delivery remain in later MVP tasks.
+accepted-message chat and reconnect recovery are in place. The office renderer,
+approved art, and real-backend browser acceptance remain in later MVP tasks.
 
 ## MVP
 
@@ -305,7 +305,8 @@ pixel_scribe_frontend/
 │   ├── pixel_scribe_frontend.gleam      Browser entry point
 │   └── pixel_scribe_frontend/
 │       ├── model.gleam                  Application and connection state
-│       ├── update.gleam                 Pure state transitions and effects
+│       ├── update.gleam                 Pure state transitions and commands
+│       ├── runtime.gleam                Command and socket-effect interpreter
 │       ├── protocol.gleam               JSON wire types and codecs
 │       ├── socket.gleam                 WebSocket Lustre effects
 │       ├── socket_ffi.mjs               Native WebSocket boundary

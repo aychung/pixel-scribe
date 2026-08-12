@@ -6,21 +6,22 @@ frontend is a client-side Lustre application that compiles to JavaScript.
 
 ## Current status
 
-The backend Tasks 0–10 are implemented and covered by the automated backend
+The backend Tasks 0–11 are implemented and covered by the automated backend
 tests. They provide the HTTP server, static-file handler, JSON WebSocket
 contract, supervised `default` room, presence, bounded in-memory history, rate
 limiting, liveness cleanup, origin checks, and security headers.
 
 The frontend currently contains the Lustre shell, username preference, protocol
-validation, and pure connection-state model. Its browser WebSocket effect, joined
-chat workspace, local office world, Canvas renderer, and approved art assets are
-not implemented yet. The current scene state is a placeholder, so the browser
-shell is not the completed real-backend MVP.
+validation, pure connection-state model, browser WebSocket effect, and joined
+presence/chat workspace, including reconnect recovery. The local office world,
+Canvas renderer, and approved art assets are not implemented yet. The current
+scene state is a placeholder, so the browser client is not the completed
+real-backend MVP.
 
 Task 11's reproducible artifact staging is implemented. The production
 Dockerfile also builds the frontend and includes those generated artifacts in
-the runtime image. The frontend remains a shell rather than the completed
-real-time browser client, so no manual browser acceptance is claimed yet.
+the runtime image. The frontend still has unfinished visual slices, so no
+real-backend or manual browser acceptance is claimed yet.
 
 ## Repository layout
 
@@ -129,8 +130,8 @@ gleam run -m lustre/dev build
 
 The last command writes the generated entry page, JavaScript bundle, and
 `styles.css` to `pixel_scribe_frontend/dist/`. `bun run test:e2e` and
-`bun run test:e2e:focused` run the configured frontend shell suite; they start
-the Lustre development server and do not provide real-backend WebSocket
+`bun run test:e2e:focused` run the configured routed browser client suite; they
+start the Lustre development server and do not provide real-backend WebSocket
 acceptance.
 
 ### Frontend artifact delivery
@@ -196,21 +197,20 @@ browser, WebSocket, or full UI acceptance:
 ./scripts/container_health_smoke.sh
 ```
 
-### Pending Task 11 browser smoke procedure
+### Pending browser smoke procedure
 
-After the frontend WebSocket effect exists, run the
-backend against the staged target and open its backend origin in two separate
-browser contexts. Join `default` from both contexts, check distinct
+Run the backend against the staged target and open its backend origin in two
+separate browser contexts. Join `default` from both contexts, check distinct
 connection IDs and presence updates, exchange accepted plain-text messages,
 disconnect one context, then reconnect it and check snapshot/history behavior.
 Record viewport, browser, backend configuration, and observed results. This
-procedure is not currently passing because the frontend is not yet connected to
-the backend and no same-origin live evidence has been recorded.
+procedure remains pending because no same-origin live evidence has been recorded;
+automated browser coverage of the reconnect path is also still open.
 
 ## Verification boundary
 
 The automated evidence includes package checks, the frontend bundle command, the
 staging command, the production container smoke's health and generated-asset
 checks, and a live backend integration test covering HTTP delivery and the
-two-client WebSocket lifecycle. Full browser acceptance still requires the
-frontend WebSocket effect and a manual two-browser smoke test.
+two-client WebSocket lifecycle. Full browser acceptance still requires a real
+same-origin browser test and a manual two-browser smoke test.

@@ -116,7 +116,8 @@ image. It does not perform browser, WebSocket, or full UI acceptance:
 
 ## Frontend artifact boundary
 
-The frontend package currently builds a Lustre shell, not the completed
+The frontend package currently builds the Lustre shell, native WebSocket join,
+presence workspace, and accepted-message chat slices, not the completed
 real-time office UI:
 
 ```sh
@@ -138,8 +139,9 @@ command to build and copy those artifacts into this package's static target:
 The script removes stale placeholder files, rejects unexpected top-level
 artifacts and symlinks, and does not commit generated output. The backend's live
 integration test verifies the staged entry page and assets plus the two-client
-WebSocket lifecycle. The frontend browser client is still incomplete, so this
-does not claim full browser/WebSocket acceptance.
+WebSocket lifecycle. Real-backend browser acceptance, the office renderer, and
+approved art remain incomplete, so this does not claim full browser/WebSocket
+acceptance.
 
 For the current frontend-only browser checks, run from
 `../pixel_scribe_frontend`:
@@ -149,8 +151,8 @@ bun install --frozen-lockfile
 bun run test:e2e
 ```
 
-Those tests start the Lustre development server and cover the shell only; they
-do not exercise this backend's WebSocket with two browser clients.
+Those tests start the Lustre development server and cover routed browser client
+slices; they do not exercise this backend's WebSocket with two browser clients.
 
 ## Deferred features
 
@@ -159,4 +161,4 @@ avatar coordinates or movement, delivery acknowledgements, offline delivery,
 multiple backend replicas, voice, video, and screen sharing are intentionally
 deferred. Local client-side avatars and Canvas rendering belong to the frontend
 and must not be added to the backend protocol merely to make the current
-placeholder shell appear complete.
+placeholder office scene appear complete.
