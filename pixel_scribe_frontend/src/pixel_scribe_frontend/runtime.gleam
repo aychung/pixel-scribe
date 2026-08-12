@@ -1,0 +1,88 @@
+import gleam/list
+import lustre/effect.{type Effect}
+import pixel_scribe_frontend/browser
+import pixel_scribe_frontend/domain
+import pixel_scribe_frontend/model.{type Model}
+import pixel_scribe_frontend/protocol
+import pixel_scribe_frontend/socket
+import pixel_scribe_frontend/update
+
+/// Connects the pure application transition to browser effects.
+///
+/// The reducer stays independent of Lustre and native browser handles. This
+/// module is the only place that interprets commands or turns socket facts
+/// into trusted application messages.
+pub fn update(
+  model: Model,
+  message: update.Msg,
+) -> #(Model, Effect(update.Msg)) {
+  let #(updated, commands) = update.transition(model, message)
+  #(updated, interpret_commands(commands))
+}
+
+fn interpret_commands(commands: List(update.Command)) -> Effect(update.Msg) {
+  commands
+  |> list.map(interpret_command)
+  |> effect.batch
+}
+
+fn interpret_command(command: update.Command) -> Effect(update.Msg) {
+  case command {
+    update.OpenSocket(generation) ->
+      effect.map(socket.open(generation), socket_fact_to_msg)
+    update.CloseSocket(generation) -> socket.close(generation)
+    update.SendSocketFrame(generation, frame) -> socket.send(generation, frame)
+    update.WriteUsernamePreference(username) ->
+      effect.from(fn(_dispatch) { browser.write_username_preference(username) })
+    update.ScheduleReconnect(generation, timer_id, delay_ms) ->
+      browser.schedule_timer(
+        browser.Reconnect,
+        generation,
+        timer_id,
+        delay_ms,
+        update.ReconnectTimerFired,
+      )
+    update.CancelReconnect(generation, timer_id) ->
+      browser.cancel_timer(browser.Reconnect, generation, timer_id)
+    update.ScheduleRateLimit(generation, deadline_ms, delay_ms) ->
+      browser.schedule_timer(
+        browser.RateLimit,
+        generation,
+        deadline_ms,
+        delay_ms,
+        update.RateLimitTimerFired,
+      )
+    update.CancelRateLimit(generation, deadline_ms) ->
+      browser.cancel_timer(browser.RateLimit, generation, deadline_ms)
+    update.FocusUsername -> browser.focus_username()
+    update.FocusComposer -> browser.focus_composer()
+    update.ScrollChatToEnd -> browser.scroll_chat_to_end()
+    update.RenderScene -> effect.none()
+  }
+}
+
+/// Decodes socket text at the transport boundary before dispatching it to the
+/// reducer. Unknown event types are safe payload-free values; malformed frames
+/// and binary frames fail closed as generation-scoped protocol messages.
+pub fn socket_fact_to_msg(fact: socket.Fact) -> update.Msg {
+  case fact {
+    socket.Opened(generation) -> update.SocketOpened(generation)
+    socket.Message(generation, received_at_ms, payload) ->
+      case protocol.decode_server_event(payload) {
+        Ok(domain.MessageSent(room_id, message)) ->
+          update.AcceptedMessage(
+            generation,
+            room_id,
+            message,
+            browser.chat_log_near_bottom(),
+          )
+        Ok(event) -> update.ServerEvent(generation, received_at_ms, event)
+        Error(_) -> update.ServerDecodeFailed(generation)
+      }
+    socket.NonTextFrame(generation) -> update.ServerDecodeFailed(generation)
+    socket.Error(generation, random_unit) ->
+      update.SocketError(generation, random_unit)
+    socket.Closed(generation, deliberate, random_unit) ->
+      update.SocketClosed(generation, deliberate, random_unit)
+  }
+}

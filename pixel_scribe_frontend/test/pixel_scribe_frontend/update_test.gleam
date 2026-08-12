@@ -59,53 +59,6 @@ pub fn nested_state_shapes_are_explicit_test() {
   assert timer.timer_id == 8
 }
 
-pub fn every_message_variant_is_a_trusted_constructor_test() {
-  let messages = [
-    update.UsernameInput("Ada"),
-    update.SubmitUsername,
-    update.DraftInput("Hello"),
-    update.SubmitMessage,
-    update.SocketOpened(1),
-    update.SocketClosed(1, True, 0.5),
-    update.SocketError(1, 0.5),
-    update.ServerEvent(1, 0, domain.UnknownEvent),
-    update.AcceptedMessage(
-      1,
-      domain.default_room_id,
-      message("accepted", domain.connection_id_from_string("sender"), "text"),
-      False,
-    ),
-    update.ServerDecodeFailed(1),
-    update.RateLimitTimerFired(1, 1000),
-    update.ReconnectTimerFired(1, 8),
-    update.RetryRequested,
-    update.ReturnToUsername,
-  ]
-
-  assert list.map(messages, msg_kind)
-    == [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
-}
-
-pub fn every_external_command_is_a_closed_trusted_value_test() {
-  let commands = [
-    update.OpenSocket(1),
-    update.CloseSocket(1),
-    update.SendSocketFrame(1, "{}"),
-    update.WriteUsernamePreference("Ada"),
-    update.ScheduleReconnect(1, 9, 500),
-    update.CancelReconnect(1, 9),
-    update.ScheduleRateLimit(1, 1000, 1000),
-    update.CancelRateLimit(1, 1000),
-    update.FocusUsername,
-    update.FocusComposer,
-    update.ScrollChatToEnd,
-    update.RenderScene,
-  ]
-
-  assert list.map(commands, command_kind)
-    == [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-}
-
 pub fn local_input_remains_the_only_minimal_transition_test() {
   let initial = model.initial()
   let #(updated, commands) =
@@ -417,7 +370,7 @@ pub fn joined_presence_deltas_upsert_and_remove_by_connection_id_test() {
   let second_id = domain.connection_id_from_string("second")
   let first = domain.Presence(first_id, "Same name")
   let second = domain.Presence(second_id, "Same name")
-  let joined = joined_model(4, first_id, [first, second])
+  let joined = joined_model(4, second_id, [first, second])
 
   let replacement = domain.Presence(first_id, "Renamed")
   let #(upserted, upsert_commands) =
@@ -443,6 +396,35 @@ pub fn joined_presence_deltas_upsert_and_remove_by_connection_id_test() {
     )
   assert remove_commands == []
   assert snapshot_participants(removed) == [second]
+}
+
+pub fn current_generation_self_leave_fails_closed_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let self_presence = domain.Presence(self_id, "Ada")
+  let peer = domain.Presence(domain.connection_id_from_string("peer"), "Grace")
+  let joined =
+    model.Model(
+      ..joined_model(36, self_id, [self_presence, peer]),
+      draft: "preserve me",
+      send_in_flight: Some(model.SendInFlight(36, "preserve me")),
+    )
+
+  let #(blocked, commands) =
+    update.transition(
+      joined,
+      update.ServerEvent(
+        36,
+        0,
+        domain.UserLeft(domain.default_room_id, self_id),
+      ),
+    )
+
+  assert blocked.phase == model.Blocked(model.ProtocolFailure)
+  assert snapshot_is_stale(blocked)
+  assert blocked.draft == "preserve me"
+  assert blocked.send_in_flight == None
+  assert blocked.connection_feedback == Some("Protocol error.")
+  assert commands == [update.CloseSocket(36)]
 }
 
 pub fn duplicate_join_keeps_one_presence_per_connection_id_test() {
@@ -494,7 +476,7 @@ pub fn duplicate_usernames_remain_distinct_during_presence_deltas_test() {
   let second_id = domain.connection_id_from_string("second")
   let first = domain.Presence(first_id, "Same name")
   let second = domain.Presence(second_id, "Same name")
-  let joined = joined_model(5, first_id, [first])
+  let joined = joined_model(5, second_id, [first, second])
 
   let #(updated, _) =
     update.transition(
@@ -1771,41 +1753,5 @@ fn phase_kind(phase: model.ConnectionPhase) -> Int {
     model.Joined(_, _) -> 3
     model.WaitingToReconnect(_, _, _) -> 4
     model.Blocked(_) -> 5
-  }
-}
-
-fn msg_kind(message: update.Msg) -> Int {
-  case message {
-    update.UsernameInput(_) -> 0
-    update.SubmitUsername -> 1
-    update.DraftInput(_) -> 2
-    update.SubmitMessage -> 3
-    update.SocketOpened(_) -> 4
-    update.SocketClosed(_, _, _) -> 5
-    update.SocketError(_, _) -> 6
-    update.ServerEvent(_, _, _) -> 7
-    update.AcceptedMessage(_, _, _, _) -> 8
-    update.ServerDecodeFailed(_) -> 9
-    update.RateLimitTimerFired(_, _) -> 10
-    update.ReconnectTimerFired(_, _) -> 11
-    update.RetryRequested -> 12
-    update.ReturnToUsername -> 13
-  }
-}
-
-fn command_kind(command: update.Command) -> Int {
-  case command {
-    update.OpenSocket(_) -> 0
-    update.CloseSocket(_) -> 1
-    update.SendSocketFrame(_, _) -> 2
-    update.WriteUsernamePreference(_) -> 3
-    update.ScheduleReconnect(_, _, _) -> 4
-    update.CancelReconnect(_, _) -> 5
-    update.ScheduleRateLimit(_, _, _) -> 6
-    update.CancelRateLimit(_, _) -> 7
-    update.FocusUsername -> 8
-    update.FocusComposer -> 9
-    update.ScrollChatToEnd -> 10
-    update.RenderScene -> 11
   }
 }

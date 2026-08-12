@@ -8,6 +8,7 @@ import lustre/effect.{type Effect}
 pub type Fact {
   Opened(generation: Int)
   Message(generation: Int, received_at_ms: Int, payload: String)
+  NonTextFrame(generation: Int)
   Error(generation: Int, random_unit: Float)
   Closed(generation: Int, deliberate: Bool, random_unit: Float)
 }
@@ -24,6 +25,7 @@ fn open_socket_ffi(
   url: String,
   on_open: fn(Int) -> Nil,
   on_message: fn(Int, String) -> Nil,
+  on_non_text_frame: fn(Int) -> Nil,
   on_error: fn(Int) -> Nil,
   on_close: fn(Int, Bool) -> Nil,
 ) -> Nil
@@ -66,6 +68,7 @@ pub fn open(generation: Int) -> Effect(Fact) {
       fn(callback_generation, payload) {
         dispatch(Message(callback_generation, now_ms_ffi(), payload))
       },
+      fn(callback_generation) { dispatch(NonTextFrame(callback_generation)) },
       fn(callback_generation) {
         dispatch(Error(callback_generation, random_unit_ffi()))
       },

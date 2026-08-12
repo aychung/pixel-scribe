@@ -9,13 +9,14 @@ import lustre/element
 import pixel_scribe_frontend/browser
 import pixel_scribe_frontend/domain
 import pixel_scribe_frontend/model
+import pixel_scribe_frontend/runtime
 import pixel_scribe_frontend/update
 import pixel_scribe_frontend/view
 
 pub fn username_input_allows_32_graphemes_without_utf16_maxlength_test() {
   let username = string.repeat("😀", 32)
   let #(model, _) =
-    update.update(model.initial(), update.UsernameInput(username))
+    update.transition(model.initial(), update.UsernameInput(username))
   let rendered = element.to_string(view.view(model))
 
   assert string.contains(rendered, username)
@@ -475,7 +476,7 @@ fn joined_simulation() {
   simulate.start(
     simulate.application(
       init: fn(_args: Nil) { #(model.initial(), effect.none()) },
-      update: update.update,
+      update: runtime.update,
       view: view.view,
     ),
     Nil,

@@ -105,6 +105,7 @@ export function open_socket(
   url,
   onOpen,
   onMessage,
+  onNonTextFrame,
   onError,
   onClose,
 ) {
@@ -113,6 +114,7 @@ export function open_socket(
     !validText(url) ||
     typeof onOpen !== "function" ||
     typeof onMessage !== "function" ||
+    typeof onNonTextFrame !== "function" ||
     typeof onError !== "function" ||
     typeof onClose !== "function"
   ) {
@@ -158,8 +160,14 @@ export function open_socket(
   };
 
   entry.onMessage = (event) => {
-    if (current(entry) && typeof event?.data === "string") {
+    if (!current(entry)) {
+      return;
+    }
+
+    if (typeof event?.data === "string") {
       invoke(onMessage, generation, event.data);
+    } else {
+      invoke(onNonTextFrame, generation);
     }
   };
 

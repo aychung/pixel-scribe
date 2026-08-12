@@ -1,12 +1,9 @@
 import gleam/list
 import gleam/option.{type Option, None, Some}
-import lustre/effect.{type Effect}
-import pixel_scribe_frontend/browser
 import pixel_scribe_frontend/domain
 import pixel_scribe_frontend/model.{type Model}
 import pixel_scribe_frontend/protocol
 import pixel_scribe_frontend/reconnect
-import pixel_scribe_frontend/socket
 import pixel_scribe_frontend/validation
 
 /// Trusted application inputs and decoded server events. Raw browser payloads
@@ -283,7 +280,7 @@ fn server_event(
           if expected_generation == generation
           && room_id != domain.default_room_id
         -> protocol_failure(model, generation)
-        _, _ -> dispatch_server_event(model, generation, received_at_ms, event)
+        _, _ -> dispatch_server_event(model, generation, event)
       }
   }
 }
@@ -311,7 +308,6 @@ fn room_id_for_event(event: domain.ServerEvent) -> Option(domain.RoomId) {
 fn dispatch_server_event(
   model: Model,
   generation: Int,
-  received_at_ms: Int,
   event: domain.ServerEvent,
 ) -> #(Model, List(Command)) {
   case event {
@@ -365,6 +361,12 @@ fn dispatch_server_event(
       }
     domain.UserLeft(room_id, connection_id) ->
       case model.phase, model.room_snapshot {
+        model.Joined(expected_generation, self_id), Some(snapshot)
+          if expected_generation == generation
+          && room_id == snapshot.room_id
+          && !snapshot.stale
+          && connection_id == self_id
+        -> protocol_failure(model, generation)
         model.Joined(expected_generation, _), Some(snapshot)
           if expected_generation == generation
           && room_id == snapshot.room_id
@@ -384,9 +386,10 @@ fn dispatch_server_event(
       }
     domain.MessageSent(room_id, message) ->
       accepted_message(model, generation, room_id, message, False)
-    domain.ServerError(error) ->
-      server_error(model, generation, received_at_ms, error)
     domain.UnknownEvent -> #(model, [])
+    // ServerError is handled by server_event before reaching this dispatcher.
+    // Naming it here keeps new ServerEvent variants compiler-checked.
+    domain.ServerError(_) -> #(model, [])
   }
 }
 
@@ -1116,78 +1119,4 @@ fn has_unique_presence_ids(
         False -> has_unique_presence_ids(rest, [first.connection_id, ..seen])
       }
   }
-}
-
-fn interpret_command(command: Command) -> Effect(Msg) {
-  case command {
-    OpenSocket(generation) ->
-      effect.map(socket.open(generation), socket_fact_to_msg)
-    CloseSocket(generation) -> socket.close(generation)
-    SendSocketFrame(generation, frame) -> socket.send(generation, frame)
-    WriteUsernamePreference(username) ->
-      effect.from(fn(_dispatch) { browser.write_username_preference(username) })
-    ScheduleReconnect(generation, timer_id, delay_ms) ->
-      browser.schedule_timer(
-        browser.Reconnect,
-        generation,
-        timer_id,
-        delay_ms,
-        ReconnectTimerFired,
-      )
-    CancelReconnect(generation, timer_id) ->
-      browser.cancel_timer(browser.Reconnect, generation, timer_id)
-    ScheduleRateLimit(generation, deadline_ms, delay_ms) ->
-      browser.schedule_timer(
-        browser.RateLimit,
-        generation,
-        deadline_ms,
-        delay_ms,
-        RateLimitTimerFired,
-      )
-    CancelRateLimit(generation, deadline_ms) ->
-      browser.cancel_timer(browser.RateLimit, generation, deadline_ms)
-    FocusUsername -> browser.focus_username()
-    FocusComposer -> browser.focus_composer()
-    ScrollChatToEnd -> browser.scroll_chat_to_end()
-    RenderScene -> effect.none()
-  }
-}
-
-/// Maps one transport fact to a trusted application message.
-///
-/// Socket text is decoded here, inside the effect mapping, before Lustre can
-/// dispatch it to the application update function. Unknown event types become
-/// a payload-free domain value; malformed JSON or malformed known event shapes
-/// become the generation-scoped protocol failure message.
-pub fn socket_fact_to_msg(fact: socket.Fact) -> Msg {
-  case fact {
-    socket.Opened(generation) -> SocketOpened(generation)
-    socket.Message(generation, received_at_ms, payload) ->
-      case protocol.decode_server_event(payload) {
-        Ok(domain.MessageSent(room_id, message)) ->
-          AcceptedMessage(
-            generation,
-            room_id,
-            message,
-            browser.chat_log_near_bottom(),
-          )
-        Ok(event) -> ServerEvent(generation, received_at_ms, event)
-        Error(_) -> ServerDecodeFailed(generation)
-      }
-    socket.Error(generation, random_unit) ->
-      SocketError(generation, random_unit)
-    socket.Closed(generation, deliberate, random_unit) ->
-      SocketClosed(generation, deliberate, random_unit)
-  }
-}
-
-fn interpret_commands(commands: List(Command)) -> Effect(Msg) {
-  commands
-  |> list.map(interpret_command)
-  |> effect.batch
-}
-
-pub fn update(model: Model, message: Msg) -> #(Model, Effect(Msg)) {
-  let #(updated, commands) = transition(model, message)
-  #(updated, interpret_commands(commands))
 }

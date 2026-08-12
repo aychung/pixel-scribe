@@ -4,6 +4,7 @@ import lustre/effect
 import lustre/element
 import pixel_scribe_frontend/browser
 import pixel_scribe_frontend/model
+import pixel_scribe_frontend/runtime
 import pixel_scribe_frontend/update
 import pixel_scribe_frontend/view as app_view
 
@@ -45,7 +46,7 @@ fn app_update(
       effect.none(),
     )
     Application(message) -> {
-      let #(updated, next_effect) = update.update(model, message)
+      let #(updated, next_effect) = runtime.update(model, message)
       let focus_effect = case message, model.phase, updated.feedback {
         update.SubmitUsername, model.ChoosingUsername, Some(_) ->
           browser.focus_username()

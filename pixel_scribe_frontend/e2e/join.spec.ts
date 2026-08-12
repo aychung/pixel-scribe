@@ -240,6 +240,46 @@ test.describe("username join", () => {
     expect(pageErrors).toEqual([]);
   });
 
+  test("blocks a binary frame and closes the socket", async ({ page }) => {
+    const consoleErrors: string[] = [];
+    const pageErrors: string[] = [];
+    const joinFrames: string[] = [];
+    let socketCount = 0;
+    let closeCount = 0;
+
+    page.on("console", (message) => {
+      if (message.type() === "error") consoleErrors.push(message.text());
+    });
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await page.routeWebSocket("/ws", (socket) => {
+      socketCount += 1;
+      socket.onMessage(collectTextFrames(joinFrames));
+      socket.onClose(() => {
+        closeCount += 1;
+      });
+      socket.send(
+        Buffer.from(
+          '{"type":"room_state","room_id":"default","self_id":"connection-ada","users":[],"messages":[]}',
+        ),
+      );
+    });
+    await page.goto("/");
+
+    const username = page.getByRole("textbox", { name: "Display name" });
+    await username.fill("Ada");
+    await username.press("Enter");
+    await expect(page.getByRole("status")).toHaveText(
+      "The office is unavailable.",
+    );
+    await expect.poll(() => closeCount).toBe(1);
+    expect(joinFrames).toEqual([
+      '{"type":"join_room","room_id":"default","username":"Ada"}',
+    ]);
+    expect(socketCount).toBe(1);
+    expect(consoleErrors).toEqual([]);
+    expect(pageErrors).toEqual([]);
+  });
+
   test("fails closed when a matching snapshot omits its self presence", async ({
     page,
   }) => {
