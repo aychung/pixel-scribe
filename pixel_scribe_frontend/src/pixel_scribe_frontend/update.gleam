@@ -95,6 +95,10 @@ fn route_accepted_message(
   reader_was_near_bottom: Bool,
 ) -> #(Model, List(Command)) {
   case current_phase_generation(model.phase) {
+    Some(expected_generation) if expected_generation != generation -> #(
+      model,
+      [],
+    )
     Some(expected_generation)
       if expected_generation == generation && room_id != domain.default_room_id
     -> protocol_failure(model, generation)
@@ -271,16 +275,23 @@ fn server_event(
   received_at_ms: Int,
   event: domain.ServerEvent,
 ) -> #(Model, List(Command)) {
-  case event {
-    domain.ServerError(error) ->
-      server_error(model, generation, received_at_ms, error)
+  case current_phase_generation(model.phase) {
+    Some(expected_generation) if expected_generation != generation -> #(
+      model,
+      [],
+    )
     _ ->
-      case room_id_for_event(event), current_phase_generation(model.phase) {
-        Some(room_id), Some(expected_generation)
-          if expected_generation == generation
-          && room_id != domain.default_room_id
-        -> protocol_failure(model, generation)
-        _, _ -> dispatch_server_event(model, generation, event)
+      case event {
+        domain.ServerError(error) ->
+          server_error(model, generation, received_at_ms, error)
+        _ ->
+          case room_id_for_event(event), current_phase_generation(model.phase) {
+            Some(room_id), Some(expected_generation)
+              if expected_generation == generation
+              && room_id != domain.default_room_id
+            -> protocol_failure(model, generation)
+            _, _ -> dispatch_server_event(model, generation, event)
+          }
       }
   }
 }

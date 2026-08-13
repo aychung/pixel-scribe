@@ -463,6 +463,7 @@ fn composer_description_ids(feedback: Option(String)) -> String {
 
 fn username_retry_controls(model: Model) -> Element(Msg) {
   case model.phase {
+    model.WaitingToReconnect(_, _, _) -> retry_button("Retry now")
     model.Blocked(_) -> retry_button("Retry connection")
     _ -> element.none()
   }
@@ -470,10 +471,20 @@ fn username_retry_controls(model: Model) -> Element(Msg) {
 
 fn retry_controls(model: Model) -> Element(Msg) {
   case model.phase {
-    model.WaitingToReconnect(_, _, _) -> retry_button("Retry now")
-    model.Blocked(_) -> retry_button("Retry connection")
+    model.WaitingToReconnect(_, _, _) -> recovery_buttons("Retry now")
+    model.Blocked(_) -> recovery_buttons("Retry connection")
     _ -> element.none()
   }
+}
+
+fn recovery_buttons(retry_label: String) -> Element(Msg) {
+  html.div([attribute.class("connection-actions")], [
+    retry_button(retry_label),
+    html.button(
+      [attribute.type_("button"), event.on_click(update.ReturnToUsername)],
+      [html.text("Return to username")],
+    ),
+  ])
 }
 
 fn retry_button(label: String) -> Element(Msg) {
