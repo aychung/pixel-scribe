@@ -50,6 +50,25 @@ function sendMessageFrame(text: string) {
   return JSON.stringify({ type: "send_message", room_id: "default", text });
 }
 
+async function installDeterminism(page: Page) {
+  await page.addInitScript(() => {
+    Object.defineProperty(Math, "random", { value: () => 0.5 });
+    const nativeGetRandomValues = globalThis.crypto.getRandomValues.bind(
+      globalThis.crypto,
+    );
+    Object.defineProperty(globalThis.crypto, "getRandomValues", {
+      value: (values: Uint32Array) => {
+        if (values instanceof Uint32Array && values.length === 1) {
+          values[0] = 2147483648;
+          return values;
+        }
+        return nativeGetRandomValues(values);
+      },
+    });
+  });
+  await page.clock.install({ time: new Date("2026-08-13T12:00:00Z") });
+}
+
 async function routePage(page: Page) {
   const sessions: Session[] = [];
   await page.routeWebSocket("/ws", (socket) => {
@@ -99,8 +118,8 @@ test("two routed pages exchange chat and rejoin with a fresh snapshot", async ({
   const adaPage = await context.newPage();
   const secondAdaPage = await context.newPage();
   await Promise.all([
-    adaPage.clock.install({ time: new Date("2026-08-13T12:00:00Z") }),
-    secondAdaPage.clock.install({ time: new Date("2026-08-13T12:00:00Z") }),
+    installDeterminism(adaPage),
+    installDeterminism(secondAdaPage),
   ]);
   const assertAdaIsClean = observeBrowserErrors(adaPage);
   const assertSecondAdaIsClean = observeBrowserErrors(secondAdaPage);
