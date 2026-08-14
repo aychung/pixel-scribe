@@ -492,11 +492,14 @@ fn apply_server_error(
       rate_limited_error(model, generation, received_at_ms, error)
     domain.JoinRequired -> join_required_error(model, generation, error)
     domain.AlreadyJoined -> connection_feedback(model, error)
-    domain.InvalidRoomId -> office_unavailable_error(model, generation, error)
-    domain.RoomNotFound -> office_unavailable_error(model, generation, error)
+    domain.InvalidRoomId ->
+      terminal_blocked_error(model, generation, model.OfficeUnavailable, error)
+    domain.RoomNotFound ->
+      terminal_blocked_error(model, generation, model.OfficeUnavailable, error)
     domain.RoomMismatch -> room_mismatch_error(model, error)
     domain.InvalidEvent -> protocol_failure(model, generation)
-    domain.RoomFull -> room_full_error(model, generation, error)
+    domain.RoomFull ->
+      terminal_blocked_error(model, generation, model.RoomFull, error)
     domain.RoomUnavailable -> room_unavailable_error(model, generation, error)
   }
 }
@@ -648,33 +651,16 @@ fn room_mismatch_error(
   )
 }
 
-fn office_unavailable_error(
+fn terminal_blocked_error(
   model: Model,
   generation: Int,
+  reason: model.BlockReason,
   error: domain.ErrorEvent,
 ) -> #(Model, List(Command)) {
   let updated =
     model.Model(
       ..model,
-      phase: model.Blocked(model.OfficeUnavailable),
-      room_snapshot: mark_snapshot_stale(model.room_snapshot),
-      send_in_flight: None,
-      rate_limit_until: None,
-      feedback: None,
-      connection_feedback: Some(error.message),
-    )
-  #(updated, [CloseSocket(generation), ..cancel_rate_limit(model, generation)])
-}
-
-fn room_full_error(
-  model: Model,
-  generation: Int,
-  error: domain.ErrorEvent,
-) -> #(Model, List(Command)) {
-  let updated =
-    model.Model(
-      ..model,
-      phase: model.Blocked(model.RoomFull),
+      phase: model.Blocked(reason),
       room_snapshot: mark_snapshot_stale(model.room_snapshot),
       send_in_flight: None,
       rate_limit_until: None,
