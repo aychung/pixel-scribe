@@ -29,7 +29,7 @@ a later task merely because a nearby file is already open.
 
 ## Visual direction
 
-- [ ] [Task 10 — Office world and camera](todo-10-office.md)
+- [x] [Task 10 — Office world and camera](todo-10-office.md)
 - [ ] [Task 11 — Canvas renderer and assets](todo-11-canvas.md)
 - [ ] [Task 12 — Temporary speech bubbles](todo-12-bubbles.md)
 - [ ] [Visual direction checkpoint](todo-checkpoint-visual-direction.md)

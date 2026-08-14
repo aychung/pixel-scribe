@@ -8,7 +8,7 @@ assets in this task.
 
 ### Work units
 
-- [ ] **Task 10A — Define world metadata, coordinate types, and anchors.**
+- [x] **Task 10A — Define world metadata, coordinate types, and anchors.**
   - **Done when:** tile/world/avatar/bubble constants use named coordinate records
     and at least 50 curated anchors are unique, integral, in bounds, and outside
     declared furniture/edge exclusions.
@@ -17,7 +17,7 @@ assets in this task.
   - **Verify:** failing metadata/anchor validation tests first, then all Gleam
     checks; inspect imports for browser/socket/view modules.
   - **Depends:** Tasks 5E and 7D.
-- [ ] **Task 10B — Implement seeded placement and reconciliation.**
+- [x] **Task 10B — Implement seeded placement and reconciliation.**
   - **Done when:** hash-plus-linear-probing allocation is deterministic, retains
     survivors, frees departures, ignores username/order for identity, fills 0-50
     unique anchors, and returns an explicit exhaustion result.
@@ -26,7 +26,7 @@ assets in this task.
   - **Verify:** empty/full/shuffled/churn/duplicate-name/same-seed/different-seed/
     exhaustion tests plus all Gleam checks.
   - **Depends:** Task 10A.
-- [ ] **Task 10C — Implement self-centered camera transforms.**
+- [x] **Task 10C — Implement self-centered camera transforms.**
   - **Done when:** even viewport extents, unclamped origin, forward/inverse
     transforms, resize, missing self, reconnect target, and world-edge cases are
     pure; peer-only changes cannot change camera origin.
@@ -34,7 +34,7 @@ assets in this task.
     `test/pixel_scribe_frontend/camera_test.gleam`.
   - **Verify:** failing table tests for every named case, then all Gleam checks.
   - **Depends:** Task 10B.
-- [ ] **Task 10D — Build stable renderer-independent draw data.**
+- [x] **Task 10D — Build stable renderer-independent draw data.**
   - **Done when:** avatar variant derives from the seed independently of anchor,
     draw passes are explicit, and avatars sort by bottom Y then connection ID with
     no Canvas/browser value in the output.
@@ -65,24 +65,24 @@ assets in this task.
 
 **Acceptance criteria:**
 
-- [ ] Sets from 0 through 50 unique connections receive unique, in-bounds,
+- [x] Sets from 0 through 50 unique connections receive unique, in-bounds,
   furniture-safe anchors; the same seed/input produces the same result.
-- [ ] Snapshot/join/leave reconciliation retains survivors, frees departures,
+- [x] Snapshot/join/leave reconciliation retains survivors, frees departures,
   handles duplicate usernames, and never writes coordinates to protocol state.
-- [ ] Camera/world-to-viewport transforms are pure and keep the self avatar at
+- [x] Camera/world-to-viewport transforms are pure and keep the self avatar at
   the exact viewport center after initial placement, self relocation, new
   reconnect `self_id`, resize, and world-edge placement; peer churn does not pan.
 
 **Verification:**
 
-- [ ] Property/table tests cover empty, full-50, shuffled input, churn, same name,
+- [x] Property/table tests cover empty, full-50, shuffled input, churn, same name,
   same seed, different seed, and anchor exhaustion behavior.
-- [ ] Camera tests cover even/odd canvas extents, self target changes, peer-only
+- [x] Camera tests cover even/odd canvas extents, self target changes, peer-only
   changes, viewport resize, world corners, inverse transforms, and missing self.
-- [ ] `gleam format --check src test`
-- [ ] `gleam build`
-- [ ] `gleam test`
-- [ ] Review module imports: no socket, Lustre view, FFI, or browser module.
+- [x] `gleam format --check src test`
+- [x] `gleam build`
+- [x] `gleam test`
+- [x] Review module imports: no socket, Lustre view, FFI, or browser module.
 
 **Dependencies:** Tasks 5 and 7.
 
@@ -95,4 +95,3 @@ assets in this task.
 - `test/pixel_scribe_frontend/camera_test.gleam`
 
 **Estimated scope:** Medium, 5 files.
-
