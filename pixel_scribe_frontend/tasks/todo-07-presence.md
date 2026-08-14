@@ -7,14 +7,14 @@ visible and testable.
 
 ### Work units
 
-- [ ] **Task 7A — Render the joined semantic workspace.**
+- [x] **Task 7A — Render the joined semantic workspace.**
   - **Done when:** joined view exposes status, participant count/list, canvas
     placeholder, empty chat log, labeled composer, and correct disabled/busy
     semantics before/during recovery.
   - **Files:** `src/pixel_scribe_frontend/view.gleam`, `assets/styles.css`.
   - **Verify:** focused view assertions plus format, build, test, and bundle.
   - **Depends:** Task 6E.
-- [ ] **Task 7B — Apply presence deltas by connection ID.**
+- [x] **Task 7B — Apply presence deltas by connection ID.**
   - **Done when:** snapshot/join/leave upsert or remove only opaque IDs, duplicate
     usernames remain distinct, duplicate joins are idempotent, unknown leaves are
     harmless, and wrong-room deltas follow protocol-failure policy.
@@ -22,7 +22,7 @@ visible and testable.
     `test/pixel_scribe_frontend/update_test.gleam`.
   - **Verify:** focused failing presence tests plus all Gleam checks.
   - **Depends:** Task 7A.
-- [ ] **Task 7C — Render participant identity safely.**
+- [x] **Task 7C — Render participant identity safely.**
   - **Done when:** participant DOM keys by connection ID, only `self_id` receives
     “You”, raw IDs are not user-facing, and duplicate/XSS-like/long labels remain
     literal text without altering roles.
@@ -30,7 +30,7 @@ visible and testable.
     `test/pixel_scribe_frontend/view_test.gleam`.
   - **Verify:** focused view tests plus all Gleam checks.
   - **Depends:** Task 7B.
-- [ ] **Task 7D — Prove joined presence in the browser.**
+- [x] **Task 7D — Prove joined presence in the browser.**
   - **Done when:** routed snapshots and deltas produce exact visible counts/lists
     at 320px and 1024px, duplicate labels stay distinct, and joined-state axe plus
     console/page-error checks pass.
@@ -57,22 +57,22 @@ visible and testable.
 
 **Acceptance criteria:**
 
-- [ ] Snapshot users plus join/leave deltas produce the exact participant count
+- [x] Snapshot users plus join/leave deltas produce the exact participant count
   and list by opaque ID, including duplicate labels and self marker.
-- [ ] Joined layout exposes status, participants, message-log empty state, and a
+- [x] Joined layout exposes status, participants, message-log empty state, and a
   labeled enabled composer through semantic DOM while canvas remains optional.
-- [ ] User strings render literally as text and cannot change document structure
+- [x] User strings render literally as text and cannot change document structure
   or accessible roles.
 
 **Verification:**
 
-- [ ] Update/view tests cover snapshot replacement, duplicate names, idempotent
+- [x] Update/view tests cover snapshot replacement, duplicate names, idempotent
   join/leave, self marker, roles, labels, and safe text.
-- [ ] `gleam format --check src test`
-- [ ] `gleam build`
-- [ ] `gleam test`
-- [ ] Playwright routed-socket presence tests pass at 320px and 1024px.
-- [ ] Axe joined-state scan has no A/AA violations.
+- [x] `gleam format --check src test`
+- [x] `gleam build`
+- [x] `gleam test`
+- [x] Playwright routed-socket presence tests pass at 320px and 1024px.
+- [x] Axe joined-state scan has no A/AA violations.
 
 **Dependencies:** Task 6.
 
@@ -85,4 +85,3 @@ visible and testable.
 - `e2e/presence.spec.ts`
 
 **Estimated scope:** Medium, 5 files.
-
