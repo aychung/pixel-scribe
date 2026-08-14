@@ -190,6 +190,57 @@ test.describe("reconnect and terminal error recovery", () => {
     assertClean();
   });
 
+  test("lets a no-snapshot reconnect return to username before editing", async ({
+    page,
+  }) => {
+    await installDeterminism(page);
+    const assertClean = await assertNoBrowserErrors(page);
+    const sessions = await routeSessions(page);
+    await enterOffice(page, sessions);
+
+    await sessions[0].socket.close();
+    await expect(page.getByRole("status")).toHaveText(
+      "Connection lost. Reconnecting…",
+    );
+    await page.getByRole("button", { name: "Return to username" }).click();
+
+    const username = page.getByRole("textbox", { name: "Display name" });
+    await username.fill("Bea");
+    await username.press("Enter");
+    await expect.poll(() => sessions).toHaveLength(2);
+    await expect.poll(() => sessions[1].clientFrames).toEqual([
+      '{"type":"join_room","room_id":"default","username":"Bea"}',
+    ]);
+    assertClean();
+  });
+
+  test("lets a no-snapshot blocked state return to username before editing", async ({
+    page,
+  }) => {
+    await installDeterminism(page);
+    const assertClean = await assertNoBrowserErrors(page);
+    const sessions = await routeSessions(page);
+    await enterOffice(page, sessions);
+
+    sessions[0].socket.send(
+      errorFrame("room_full", "The office is full.", false),
+    );
+    await sessions[0].socket.close();
+    await expect(page.getByRole("status")).toHaveText(
+      "The office is full right now.",
+    );
+    await page.getByRole("button", { name: "Return to username" }).click();
+
+    const username = page.getByRole("textbox", { name: "Display name" });
+    await username.fill("Bea");
+    await username.press("Enter");
+    await expect.poll(() => sessions).toHaveLength(2);
+    await expect.poll(() => sessions[1].clientFrames).toEqual([
+      '{"type":"join_room","room_id":"default","username":"Bea"}',
+    ]);
+    assertClean();
+  });
+
   test("cancels the timer for immediate retry and rejects the old generation", async ({
     page,
   }) => {

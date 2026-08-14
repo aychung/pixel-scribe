@@ -431,6 +431,30 @@ pub fn stale_joined_workspace_disables_composer_and_exposes_recovery_status_test
   assert string.contains(rendered, "Unavailable")
 }
 
+pub fn no_snapshot_recovery_offers_return_to_username_in_one_action_row_test() {
+  let assert #(entered, []) =
+    update.transition(model.initial(), update.UsernameInput("Ada"))
+  let #(connecting, _) = update.transition(entered, update.SubmitUsername)
+  let #(waiting, _) =
+    update.transition(connecting, update.SocketClosed(1, False, 0.5))
+  let waiting_rendered = element.to_string(view.view(waiting))
+
+  assert string.contains(waiting_rendered, "Return to username")
+  assert count_substring(waiting_rendered, "class=\"connection-actions\"") == 1
+
+  let blocked_error =
+    domain.ErrorEvent(None, domain.InvalidEvent, "Protocol error.", False)
+  let #(blocked, _) =
+    update.transition(
+      connecting,
+      update.ServerEvent(1, 0, domain.ServerError(blocked_error)),
+    )
+  let blocked_rendered = element.to_string(view.view(blocked))
+
+  assert string.contains(blocked_rendered, "Return to username")
+  assert count_substring(blocked_rendered, "class=\"connection-actions\"") == 1
+}
+
 fn joined_model(
   participants: List(domain.Presence),
   self_id: domain.ConnectionId,

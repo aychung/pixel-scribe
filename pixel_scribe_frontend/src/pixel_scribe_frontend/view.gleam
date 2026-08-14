@@ -463,8 +463,8 @@ fn composer_description_ids(feedback: Option(String)) -> String {
 
 fn username_retry_controls(model: Model) -> Element(Msg) {
   case model.phase {
-    model.WaitingToReconnect(_, _, _) -> retry_button("Retry now")
-    model.Blocked(_) -> retry_button("Retry connection")
+    model.WaitingToReconnect(_, _, _) -> recovery_buttons("Retry now")
+    model.Blocked(_) -> recovery_buttons("Retry connection")
     _ -> element.none()
   }
 }
@@ -488,10 +488,8 @@ fn recovery_buttons(retry_label: String) -> Element(Msg) {
 }
 
 fn retry_button(label: String) -> Element(Msg) {
-  html.div([attribute.class("connection-actions")], [
-    html.button(
-      [attribute.type_("button"), event.on_click(update.RetryRequested)],
-      [html.text(label)],
-    ),
-  ])
+  html.button(
+    [attribute.type_("button"), event.on_click(update.RetryRequested)],
+    [html.text(label)],
+  )
 }
