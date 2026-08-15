@@ -19,7 +19,10 @@ an original or explicitly licensed top-down office/avatar baseline for review.
     content box/DPR, dispatch ready/resize/error, and dispose observers/listeners/
     frames/image references idempotently.
   - **Files:** `src/pixel_scribe_frontend/canvas.gleam`,
-    `src/pixel_scribe_frontend/canvas_ffi.mjs`.
+    `src/pixel_scribe_frontend/canvas_ffi.mjs`,
+    `src/pixel_scribe_frontend/view.gleam`,
+    `src/pixel_scribe_frontend/runtime.gleam`,
+    `src/pixel_scribe_frontend/update.gleam`.
   - **Verify:** format/build; review the complete FFI export and handle lifecycle;
     add only boundary tests supported without production test globals.
   - **Depends:** Task 11A.
@@ -29,7 +32,11 @@ an original or explicitly licensed top-down office/avatar baseline for review.
     fallback and reports only safe typed status.
   - **Files:** `src/pixel_scribe_frontend/canvas.gleam`,
     `src/pixel_scribe_frontend/canvas_ffi.mjs`,
-    `src/pixel_scribe_frontend/scene.gleam`.
+    `src/pixel_scribe_frontend/scene.gleam`,
+    `src/pixel_scribe_frontend/model.gleam`,
+    `src/pixel_scribe_frontend/update.gleam`,
+    `src/pixel_scribe_frontend/runtime.gleam`,
+    `src/pixel_scribe_frontend/view.gleam`, `e2e/canvas.spec.ts`.
   - **Verify:** all Gleam checks, production bundle, and focused fallback/layer
     browser assertions.
   - **Depends:** Task 11B.
@@ -38,7 +45,10 @@ an original or explicitly licensed top-down office/avatar baseline for review.
     off, device geometry is rounded, crop/backdrop behavior is correct at edges,
     and offscreen entities are culled without leaving semantic DOM.
   - **Files:** `src/pixel_scribe_frontend/canvas.gleam`,
-    `src/pixel_scribe_frontend/canvas_ffi.mjs`, `e2e/canvas.spec.ts`.
+    `src/pixel_scribe_frontend/canvas_ffi.mjs`,
+    `src/pixel_scribe_frontend/model.gleam`,
+    `src/pixel_scribe_frontend/update.gleam`,
+    `src/pixel_scribe_frontend/runtime.gleam`, `e2e/canvas.spec.ts`.
   - **Verify:** fixed-seed DPR 1/2 tests for center invariance, resize, peer churn,
     reconnect target, and edge backdrop.
   - **Depends:** Task 11C.
