@@ -1,5 +1,6 @@
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import pixel_scribe_frontend/canvas
 import pixel_scribe_frontend/domain
 import pixel_scribe_frontend/model.{type Model}
 import pixel_scribe_frontend/protocol
@@ -24,6 +25,9 @@ pub type Msg {
     reader_was_near_bottom: Bool,
   )
   ServerDecodeFailed(generation: Int)
+  CanvasReady(width: Int, height: Int, dpr: Float)
+  CanvasResized(width: Int, height: Int, dpr: Float)
+  CanvasFailed(reason: canvas.Error)
   ReconnectTimerFired(generation: Int, timer_id: Int)
   RateLimitTimerFired(generation: Int, deadline_ms: Int)
   RetryRequested
@@ -78,6 +82,9 @@ pub fn transition(model: Model, message: Msg) -> #(Model, List(Command)) {
         reader_was_near_bottom,
       )
     ServerDecodeFailed(generation) -> server_decode_failed(model, generation)
+    CanvasReady(_, _, _) -> #(model, [])
+    CanvasResized(_, _, _) -> #(model, [])
+    CanvasFailed(_) -> #(model, [])
     RateLimitTimerFired(generation, deadline_ms) ->
       rate_limit_timer_fired(model, generation, deadline_ms)
     ReconnectTimerFired(generation, timer_id) ->

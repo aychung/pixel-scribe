@@ -1,6 +1,8 @@
 import gleam/list
+import gleam/option.{None, Some}
 import lustre/effect.{type Effect}
 import pixel_scribe_frontend/browser
+import pixel_scribe_frontend/canvas
 import pixel_scribe_frontend/domain
 import pixel_scribe_frontend/model.{type Model}
 import pixel_scribe_frontend/protocol
@@ -17,7 +19,24 @@ pub fn update(
   message: update.Msg,
 ) -> #(Model, Effect(update.Msg)) {
   let #(updated, commands) = update.transition(model, message)
-  #(updated, interpret_commands(commands))
+  let command_effect = interpret_commands(commands)
+  let canvas_effect = canvas_lifecycle(model, updated)
+  #(updated, effect.batch([command_effect, canvas_effect]))
+}
+
+fn canvas_lifecycle(before: Model, after: Model) -> Effect(update.Msg) {
+  case canvas_visible(before), canvas_visible(after) {
+    False, True -> effect.map(canvas.initialize(), canvas_fact_to_msg)
+    True, False -> canvas.dispose()
+    _, _ -> effect.none()
+  }
+}
+
+fn canvas_visible(model: Model) -> Bool {
+  case model.room_snapshot {
+    Some(_) -> True
+    None -> False
+  }
 }
 
 fn interpret_commands(commands: List(update.Command)) -> Effect(update.Msg) {
@@ -58,6 +77,15 @@ fn interpret_command(command: update.Command) -> Effect(update.Msg) {
     update.FocusComposer -> browser.focus_composer()
     update.ScrollChatToEnd -> browser.scroll_chat_to_end()
     update.RenderScene -> effect.none()
+  }
+}
+
+fn canvas_fact_to_msg(fact: canvas.Fact) -> update.Msg {
+  case fact {
+    canvas.Ready(width, height, dpr) -> update.CanvasReady(width, height, dpr)
+    canvas.Resized(width, height, dpr) ->
+      update.CanvasResized(width, height, dpr)
+    canvas.Failed(reason) -> update.CanvasFailed(reason)
   }
 }
 

@@ -9,6 +9,7 @@ import lustre/element/html
 import lustre/element/keyed
 import lustre/event
 import pixel_scribe_frontend/browser
+import pixel_scribe_frontend/canvas
 import pixel_scribe_frontend/domain
 import pixel_scribe_frontend/model.{type Model}
 import pixel_scribe_frontend/update.{type Msg}
@@ -163,6 +164,7 @@ fn office_stage() -> Element(Msg) {
       ]),
       html.figure([attribute.class("canvas-placeholder")], [
         html.canvas([
+          attribute.id(canvas.canvas_id),
           attribute.class("office-canvas"),
           attribute.role("img"),
           attribute.aria_label("Pixel-art office canvas"),
