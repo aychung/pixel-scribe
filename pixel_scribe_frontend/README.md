@@ -11,8 +11,9 @@ existing backend remains the authority for the JSON `/ws` contract.
 
 The foundation and real-time chat slices are implemented: the browser-only
 Lustre shell, protocol codecs, pure connection state machine, username
-preference, same-origin native WebSocket, joined presence workspace, and
-accepted-message chat and reconnect recovery are in place. The office renderer,
+preference, same-origin native WebSocket, joined presence workspace,
+accepted-message chat, reconnect recovery, and the renderer-independent office
+world, camera, local placement, and draw data are in place. The Canvas renderer,
 approved art, and real-backend browser acceptance remain in later MVP tasks.
 
 ## MVP
@@ -28,10 +29,10 @@ The frontend must let a visitor:
 6. Understand connecting, reconnecting, validation, rate-limit, room-full, and
    unavailable states.
 
-Authentication, multiple active rooms, avatar coordinates, movement, durable
-chat, offline delivery, voice, video, and screen sharing are outside the MVP.
-The canvas is therefore a local visual scene for now; no backend event currently
-drives objects or coordinates on it.
+Authentication, multiple active rooms, server-synchronized avatar coordinates,
+movement, durable chat, offline delivery, voice, video, and screen sharing are
+outside the MVP. The scene state and placement are local to each browser; no
+backend event currently drives objects or coordinates on the canvas.
 
 ## Basic UX flow
 

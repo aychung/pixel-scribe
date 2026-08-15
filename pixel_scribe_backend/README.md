@@ -117,7 +117,8 @@ image. It does not perform browser, WebSocket, or full UI acceptance:
 ## Frontend artifact boundary
 
 The frontend package currently builds the Lustre shell, native WebSocket join,
-presence workspace, and accepted-message chat slices, not the completed
+presence workspace, accepted-message chat slices, and the renderer-independent
+office world, camera, local placement, and draw data, but not the completed
 real-time office UI:
 
 ```sh

@@ -474,7 +474,7 @@ the unit names the package-manager command that produces them.
 
 ### Phase 3: Pixel office
 
-- [ ] Task 10 (10A-10D): Define the pure world, camera, and local placement.
+- [x] Task 10 (10A-10D): Define the pure world, camera, and local placement.
 - [ ] Task 11 (11A-11F): Deliver the Canvas renderer and approved assets.
 - [ ] Task 12 (12A-12D): Connect accepted messages to speech bubbles.
 

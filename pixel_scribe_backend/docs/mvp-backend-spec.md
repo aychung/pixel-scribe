@@ -15,9 +15,10 @@ passed acceptance.
 
 The frontend package currently provides the Lustre shell, username preference,
 protocol validation, pure connection-state behavior, browser WebSocket effect,
-joined presence/chat workspace, and reconnect recovery. It does not yet provide
-the office world, Canvas renderer, or approved art assets; its scene state
-remains a placeholder.
+joined presence/chat workspace, reconnect recovery, and a renderer-independent
+office world with camera transforms, seeded local placement/reconciliation, and
+stable draw data. It does not yet provide the Canvas renderer or approved art
+assets, so the browser-facing visual scene remains incomplete.
 
 From `pixel_scribe_frontend/`, the verified bundle command is:
 
