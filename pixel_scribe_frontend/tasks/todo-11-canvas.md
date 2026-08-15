@@ -6,7 +6,7 @@ an original or explicitly licensed top-down office/avatar baseline for review.
 
 ### Work units
 
-- [ ] **Task 11A — Establish original/licensed assets and provenance.**
+- [x] **Task 11A — Establish original/licensed assets and provenance.**
   - **Done when:** the source tile/avatar assets have creator, source, license,
     modifications, tile size, and distribution permission recorded; no Pixel
     Agents artwork is copied without an asset-specific compatible license.
@@ -113,4 +113,3 @@ an original or explicitly licensed top-down office/avatar baseline for review.
 - `e2e/canvas.spec.ts`
 
 **Estimated scope:** Medium, 4 code/test areas plus small reviewed assets.
-
