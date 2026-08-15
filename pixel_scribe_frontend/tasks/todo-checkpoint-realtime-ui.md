@@ -6,4 +6,4 @@
 - [x] Draft preservation and absence of optimistic/offline replay are visible in
   browser tests.
 - [x] Format, build, Gleam tests, bundle, and Chromium suite pass.
-- [ ] Human reviews real-time UX before canvas work is connected.
+- [x] Human reviews real-time UX before canvas work is connected.
