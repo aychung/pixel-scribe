@@ -198,7 +198,7 @@ pub const curated_anchors = [
   Anchor(46, WorldPoint(992, 832)),
   Anchor(47, WorldPoint(1136, 832)),
   Anchor(48, WorldPoint(1280, 832)),
-  Anchor(49, WorldPoint(1424, 832)),
+  Anchor(99, WorldPoint(1424, 832)),
 ]
 
 pub fn anchor_points() -> List(WorldPoint) {

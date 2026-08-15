@@ -111,16 +111,14 @@ fn find_free_anchor(
   case probe >= anchor_count {
     True -> Error(Nil)
     False -> {
-      let index =
+      let position =
         positive_mod(start_index(seed, connection_id) + probe, anchor_count)
 
-      case scene_anchor_at_index(index) {
-        Ok(anchor) ->
-          case anchor_is_occupied(anchor, assigned) {
-            True -> find_free_anchor(seed, connection_id, assigned, probe + 1)
-            False -> Ok(anchor)
-          }
-        Error(_) -> find_free_anchor(seed, connection_id, assigned, probe + 1)
+      let assert [anchor, ..] = list.drop(scene.curated_anchors, position)
+
+      case anchor_is_occupied(anchor, assigned) {
+        True -> find_free_anchor(seed, connection_id, assigned, probe + 1)
+        False -> Ok(anchor)
       }
     }
   }
@@ -148,7 +146,7 @@ fn positive_mod(value: Int, divisor: Int) -> Int {
   }
 }
 
-fn scene_anchor_at_index(index: Int) -> Result(scene.Anchor, Nil) {
+fn scene_anchor_by_id(index: Int) -> Result(scene.Anchor, Nil) {
   list.find(scene.curated_anchors, fn(anchor) { anchor.index == index })
 }
 
@@ -175,7 +173,7 @@ fn has_placement(
 fn canonical_previous(previous: List(Placement)) -> List(Placement) {
   previous
   |> list.filter_map(fn(placement) {
-    case scene_anchor_at_index(placement.anchor.index) {
+    case scene_anchor_by_id(placement.anchor.index) {
       Ok(anchor) -> Ok(Placement(placement.connection_id, anchor))
       Error(_) -> Error(Nil)
     }
