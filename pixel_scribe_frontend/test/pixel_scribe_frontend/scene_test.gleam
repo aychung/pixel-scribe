@@ -279,6 +279,88 @@ pub fn accepted_live_message_creates_duplicate_safe_bubble_and_leave_clears_test
   assert left_data.bubbles == []
 }
 
+pub fn bubble_layout_splits_explicit_lines_before_wrapping_and_preserves_text_test() {
+  let sender_id = domain.connection_id_from_string("bubble-lines")
+  let data =
+    scene.render_data(17, sender_id, [avatar_input("bubble-lines", "Ada", 128)])
+  let message = chat_message("lines", sender_id, "first line\nsecond line")
+  let assert [bubble] = scene.add_bubble(data, message, 0).bubbles
+
+  let layout =
+    scene.layout_bubble(bubble, scene.ViewportPoint(x: 80, y: 80), 200, 120)
+
+  assert layout.lines == ["first line", "second line"]
+  assert layout.truncated == False
+  assert bubble.text == "first line\nsecond line"
+}
+
+pub fn bubble_layout_caps_visual_lines_and_uses_ellipsis_only_when_truncated_test() {
+  let sender_id = domain.connection_id_from_string("bubble-truncate")
+  let data =
+    scene.render_data(17, sender_id, [
+      avatar_input("bubble-truncate", "Ada", 128),
+    ])
+  let message =
+    chat_message(
+      "truncate",
+      sender_id,
+      "one two three four five six seven eight nine ten eleven twelve thirteen",
+    )
+  let assert [bubble] = scene.add_bubble(data, message, 0).bubbles
+
+  let layout =
+    scene.layout_bubble(bubble, scene.ViewportPoint(x: 80, y: 80), 200, 120)
+
+  assert list.length(layout.lines) == scene.bubble_limits.max_lines
+  assert layout.truncated
+  let assert Ok(last_line) = list.last(layout.lines)
+  assert string.ends_with(last_line, "...")
+  assert bubble.text == message.text
+
+  let short =
+    scene.layout_bubble(
+      scene.Bubble(
+        message.message_id,
+        message.sender_id,
+        message.username,
+        "short",
+        0,
+        scene.bubble_lifetime_ms,
+      ),
+      scene.ViewportPoint(x: 80, y: 80),
+      200,
+      120,
+    )
+  assert short.truncated == False
+  assert list.all(short.lines, fn(line) { !string.ends_with(line, "...") })
+}
+
+pub fn bubble_layout_is_emoji_safe_and_clamped_to_every_viewport_edge_test() {
+  let sender_id = domain.connection_id_from_string("bubble-emoji")
+  let data =
+    scene.render_data(17, sender_id, [avatar_input("bubble-emoji", "Ada", 128)])
+  let emoji_text = string.repeat("🙂", 50)
+  let message = chat_message("emoji", sender_id, emoji_text)
+  let assert [bubble] = scene.add_bubble(data, message, 0).bubbles
+
+  let left =
+    scene.layout_bubble(bubble, scene.ViewportPoint(x: 0, y: 0), 200, 120)
+  let right =
+    scene.layout_bubble(bubble, scene.ViewportPoint(x: 200, y: 120), 200, 120)
+
+  assert list.length(left.lines) <= scene.bubble_limits.max_lines
+  assert list.all(left.lines, fn(line) { string.length(line) <= 18 })
+  assert left.rectangle.left >= 0
+  assert left.rectangle.top >= 0
+  assert left.rectangle.left + left.rectangle.width <= 200
+  assert left.rectangle.top + left.rectangle.height <= 120
+  assert right.rectangle.left >= 0
+  assert right.rectangle.top >= 0
+  assert right.rectangle.left + right.rectangle.width <= 200
+  assert right.rectangle.top + right.rectangle.height <= 120
+  assert bubble.text == emoji_text
+}
+
 fn chat_message(
   message_id: String,
   sender_id: domain.ConnectionId,

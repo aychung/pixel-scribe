@@ -155,6 +155,26 @@ pub type Bubble {
   )
 }
 
+/// The viewport-space rectangle used to draw a bubble. Coordinates are in
+/// logical canvas pixels, before any device-pixel scaling.
+pub type BubbleRect {
+  BubbleRect(left: Int, top: Int, width: Int, height: Int)
+}
+
+/// Pure, renderer-independent bubble text and placement.
+///
+/// `lines` is only the bounded visual representation. The source message is
+/// intentionally not copied or changed here: `Bubble.text` remains the full
+/// accepted value for the accessible DOM chat log.
+pub type BubbleLayout {
+  BubbleLayout(
+    lines: List(String),
+    rectangle: BubbleRect,
+    anchor: ViewportPoint,
+    truncated: Bool,
+  )
+}
+
 pub type SceneRenderData {
   SceneRenderData(
     passes: List(DrawPass),
@@ -170,6 +190,24 @@ pub const bubble_visible_ms = 5000
 pub const bubble_fade_ms = 1000
 
 pub const bubble_lifetime_ms = 6000
+
+/// Bubble layout uses a fixed logical glyph advance. Grapheme clusters are
+/// counted rather than UTF-8 bytes or codepoints, so emoji and combining marks
+/// are never split by a visual line break.
+pub const bubble_glyph_width = 8
+
+pub const bubble_horizontal_padding = 8
+
+pub const bubble_vertical_padding = 4
+
+pub const bubble_line_height = 12
+
+pub const bubble_anchor_gap = 4
+
+// Keep these derived token values literal because Gleam constants cannot use
+// arithmetic expressions. They intentionally match the public layout tokens:
+// (160 - 8 - 8) / 8 = 18 grapheme clusters.
+const bubble_max_graphemes_per_line = 18
 
 /// Fifty hand-authored, tile-aligned bottom-center positions in open floor.
 /// The index is stable so placement can refer to an anchor without using a
@@ -333,6 +371,119 @@ pub fn add_bubble(
       )
     }
   }
+}
+
+/// Lay out a bubble in logical viewport pixels.
+///
+/// Explicit LF boundaries are split first, then each resulting line is
+/// wrapped into grapheme-safe chunks. At most three visual lines are retained;
+/// only that visual projection receives an ellipsis. The rectangle is centred
+/// over the owning avatar anchor and clamped against all viewport edges.
+pub fn layout_bubble(
+  bubble: Bubble,
+  anchor: ViewportPoint,
+  viewport_width: Int,
+  viewport_height: Int,
+) -> BubbleLayout {
+  let explicit_lines = string.split(bubble.text, on: "\n")
+  let wrapped_lines = wrap_explicit_lines(explicit_lines)
+  let #(lines, truncated) = truncate_visual_lines(wrapped_lines)
+  let line_count = int.max(1, list.length(lines))
+  let longest_line_width =
+    lines
+    |> list.map(fn(line) { string.length(line) * bubble_glyph_width })
+    |> list.fold(0, int.max)
+  let width =
+    int.min(
+      bubble_limits.max_width,
+      int.max(
+        bubble_glyph_width,
+        longest_line_width + bubble_horizontal_padding * 2,
+      ),
+    )
+  let height = line_count * bubble_line_height + bubble_vertical_padding * 2
+  let safe_viewport_width = int.max(0, viewport_width)
+  let safe_viewport_height = int.max(0, viewport_height)
+  let rectangle_width = int.min(width, safe_viewport_width)
+  let rectangle_height = int.min(height, safe_viewport_height)
+  let ViewportPoint(anchor_x, anchor_y) = anchor
+  let left =
+    clamp(
+      anchor_x - rectangle_width / 2,
+      0,
+      safe_viewport_width - rectangle_width,
+    )
+  let top =
+    clamp(
+      anchor_y - bubble_anchor_gap - rectangle_height,
+      0,
+      safe_viewport_height - rectangle_height,
+    )
+
+  BubbleLayout(
+    lines,
+    BubbleRect(left, top, rectangle_width, rectangle_height),
+    anchor,
+    truncated,
+  )
+}
+
+fn wrap_explicit_lines(lines: List(String)) -> List(String) {
+  list.fold(lines, [], fn(acc, line) { list.append(acc, wrap_line(line)) })
+}
+
+fn wrap_line(line: String) -> List(String) {
+  case string.is_empty(line) {
+    True -> [""]
+    False -> wrap_graphemes(string.to_graphemes(line), [], [])
+  }
+}
+
+fn wrap_graphemes(
+  remaining: List(String),
+  current: List(String),
+  finished: List(String),
+) -> List(String) {
+  case remaining {
+    [] ->
+      case current {
+        [] -> list.reverse(finished)
+        _ ->
+          list.reverse([
+            string.join(list.reverse(current), with: ""),
+            ..finished
+          ])
+      }
+    [grapheme, ..rest] ->
+      case list.length(current) >= bubble_max_graphemes_per_line {
+        True ->
+          wrap_graphemes(rest, [grapheme], [
+            string.join(list.reverse(current), with: ""),
+            ..finished
+          ])
+        False -> wrap_graphemes(rest, [grapheme, ..current], finished)
+      }
+  }
+}
+
+fn truncate_visual_lines(lines: List(String)) -> #(List(String), Bool) {
+  case list.length(lines) <= bubble_limits.max_lines {
+    True -> #(lines, False)
+    False -> {
+      let kept = list.take(lines, bubble_limits.max_lines)
+      let assert Ok(last) = list.last(kept)
+      let ellipsis = "..."
+      let prefix_length =
+        int.max(0, bubble_max_graphemes_per_line - string.length(ellipsis))
+      let visual_last = string.slice(last, 0, prefix_length) <> ellipsis
+      let without_last = list.take(kept, bubble_limits.max_lines - 1)
+      #(list.append(without_last, [visual_last]), True)
+    }
+  }
+}
+
+fn clamp(value: Int, minimum: Int, maximum: Int) -> Int {
+  int.max(minimum, int.min(value, maximum))
 }
 
 /// Clear the current bubble for a participant that left the room.

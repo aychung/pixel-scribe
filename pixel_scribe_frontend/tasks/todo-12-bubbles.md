@@ -17,7 +17,7 @@ to JavaScript.
   - **Verify:** failing ownership/snapshot/replace/leave tests first, then all
     Gleam checks.
   - **Depends:** Tasks 8E and 11F.
-- [ ] **Task 12B — Implement explicit-line bubble layout.**
+- [x] **Task 12B — Implement explicit-line bubble layout.**
   - **Done when:** layout splits LF before wrapping, caps at three visual lines,
     adds ellipsis only when truncated, anchors over the avatar, and clamps within
     every tested camera edge while preserving full DOM text.
