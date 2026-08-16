@@ -42,9 +42,27 @@ fn canvas_visible(model: Model) -> Bool {
 
 fn scene_lifecycle(before: Model, after: Model) -> Effect(update.Msg) {
   case before.room_snapshot, after.room_snapshot {
-    Some(_), Some(_) if before.scene != after.scene ->
-      render_current_scene(after)
+    Some(_), Some(_) ->
+      case scene_render_changed(before.scene, after.scene) {
+        True -> render_current_scene(after)
+        False -> effect.none()
+      }
     _, _ -> effect.none()
+  }
+}
+
+/// Renderer feedback is state for the accessible fallback message, not a
+/// scene invalidation. Only data or camera changes need another draw. Keeping
+/// this predicate pure gives the lifecycle decision a browser-free test seam.
+pub fn scene_render_changed(
+  before: model.SceneState,
+  after: model.SceneState,
+) -> Bool {
+  case before, after {
+    model.Ready(_, _, _, before_data, before_camera, _),
+      model.Ready(_, _, _, after_data, after_camera, _)
+    -> before_data != after_data || before_camera != after_camera
+    _, _ -> False
   }
 }
 
@@ -94,8 +112,6 @@ fn interpret_command(command: update.Command) -> Effect(update.Msg) {
     update.FocusUsername -> browser.focus_username()
     update.FocusComposer -> browser.focus_composer()
     update.ScrollChatToEnd -> browser.scroll_chat_to_end()
-    update.RenderScene(data, camera) ->
-      effect.map(canvas.render(data, camera), canvas_fact_to_msg)
   }
 }
 

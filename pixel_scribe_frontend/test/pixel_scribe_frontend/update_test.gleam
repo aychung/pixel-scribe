@@ -2,8 +2,10 @@ import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/string
+import pixel_scribe_frontend/canvas
 import pixel_scribe_frontend/domain
 import pixel_scribe_frontend/model
+import pixel_scribe_frontend/runtime
 import pixel_scribe_frontend/update
 
 pub fn initial_model_explicitly_owns_connection_state_test() {
@@ -237,6 +239,51 @@ pub fn only_matching_default_room_snapshot_enters_joined_test() {
     )
   assert ignored_after_join == joined
   assert ignored_commands == []
+}
+
+pub fn canvas_lifecycle_facts_do_not_emit_direct_draw_commands_test() {
+  let self_id = domain.connection_id_from_string("canvas-self")
+  let self_presence = domain.Presence(self_id, "Ada")
+  let awaiting =
+    model.Model(
+      ..model.initial(),
+      phase: model.AwaitingRoomState(2, 0),
+      socket_generation: 2,
+      placement_seed: Some(7),
+    )
+
+  let #(joined, join_commands) =
+    update.transition(
+      awaiting,
+      update.ServerEvent(
+        2,
+        0,
+        domain.RoomState(domain.default_room_id, self_id, [self_presence], []),
+      ),
+    )
+  assert join_commands == []
+
+  let #(ready, ready_commands) =
+    update.transition(joined, update.CanvasReady(320, 240, 2.0))
+  assert ready_commands == []
+  assert runtime.scene_render_changed(joined.scene, ready.scene)
+
+  let #(resized, resize_commands) =
+    update.transition(ready, update.CanvasResized(640, 320, 2.0))
+  assert resize_commands == []
+  assert runtime.scene_render_changed(ready.scene, resized.scene)
+
+  let #(failed, failure_commands) =
+    update.transition(resized, update.CanvasFailed(canvas.AssetUnavailable))
+  assert failure_commands == []
+  assert failed.scene != resized.scene
+  let assert model.Ready(_, _, _, resized_data, resized_camera, None) =
+    resized.scene
+  let assert model.Ready(_, _, _, failed_data, failed_camera, Some(_)) =
+    failed.scene
+  assert failed_data == resized_data
+  assert failed_camera == resized_camera
+  assert !runtime.scene_render_changed(resized.scene, failed.scene)
 }
 
 pub fn snapshot_missing_self_presence_fails_closed_test() {

@@ -52,7 +52,6 @@ pub type Command {
   FocusUsername
   FocusComposer
   ScrollChatToEnd
-  RenderScene(data: office_scene.SceneRenderData, camera: camera.Camera)
 }
 
 /// The pure transition seam used by state-machine work. Browser effects are
@@ -88,11 +87,11 @@ pub fn transition(model: Model, message: Msg) -> #(Model, List(Command)) {
     CanvasReady(width, height, _) -> {
       let camera_ready = update_camera(model, width, height)
       let recovered = clear_renderer_feedback(camera_ready)
-      #(recovered, render_command(recovered))
+      #(recovered, [])
     }
     CanvasResized(width, height, _) -> {
       let resized = update_camera(model, width, height)
-      #(resized, render_command(resized))
+      #(resized, [])
     }
     CanvasFailed(reason) -> #(
       record_renderer_feedback(model, canvas_status(reason)),
@@ -866,14 +865,6 @@ fn reconcile_scene(model: Model, snapshot: model.RoomSnapshot) -> Model {
       )
     }
     Error(_) -> model.Model(..model, scene: model.Placeholder)
-  }
-}
-
-fn render_command(model: Model) -> List(Command) {
-  case model.scene {
-    model.Ready(_, _, _, data, Some(camera), _) -> [RenderScene(data, camera)]
-    model.Placeholder | model.Failed(_) -> []
-    model.Ready(_, _, _, _, None, _) -> []
   }
 }
 
