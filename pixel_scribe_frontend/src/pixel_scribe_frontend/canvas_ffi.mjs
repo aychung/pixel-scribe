@@ -210,7 +210,7 @@ function measureAndApply(state, entry, initial) {
   state.deviceHeight = deviceHeight;
 
   safeCall(initial ? state.onReady : state.onResize, Math.round(size.width), Math.round(size.height), dpr);
-  drawCurrent(state);
+  scheduleFrame(state);
 }
 
 function reportSceneError(state, code) {
@@ -320,7 +320,7 @@ function markAssetFailed(state, name) {
   if (state.disposed || activeRenderer !== state || !state.assets) return;
   state.assets[name] = { status: "failed", image: null };
   reportSceneError(state, ASSET_UNAVAILABLE);
-  drawCurrent(state);
+  scheduleFrame(state);
 }
 
 function startAsset(state, name, url) {
@@ -342,7 +342,7 @@ function startAsset(state, name, url) {
     image.onload = () => {
       if (state.disposed || activeRenderer !== state || !state.assets) return;
       state.assets[name] = { status: "loaded", image };
-      drawCurrent(state);
+      scheduleFrame(state);
     };
     image.onerror = () => markAssetFailed(state, name);
     image.src = url;
@@ -363,6 +363,43 @@ function canvasSize(state) {
     width: Math.max(1, Number.isFinite(width) ? width : 1),
     height: Math.max(1, Number.isFinite(height) ? height : 1),
   };
+}
+
+function scheduleFrame(state) {
+  if (state.disposed || activeRenderer !== state || state.pendingFrame !== null) return;
+
+  const request = readProperty(globalThis, "requestAnimationFrame");
+  if (request === FAILED || typeof request !== "function") {
+    failRenderer(state, INITIALIZATION_FAILED);
+    return;
+  }
+
+  const pendingSentinel = {};
+  state.pendingFrame = pendingSentinel;
+  const frame = call(globalThis, "requestAnimationFrame", (timestamp) => {
+    state.pendingFrame = null;
+    if (state.disposed || activeRenderer !== state) return;
+
+    let now = timestamp;
+    try {
+      if (!Number.isFinite(now)) now = state.lastFrameTime ?? 0;
+    } catch (_) {
+      now = state.lastFrameTime ?? 0;
+    }
+    const previous = state.lastFrameTime;
+    state.lastFrameTime = now;
+    state.lastFrameDelta =
+      previous === null ? 0 : Math.min(100, Math.max(0, now - previous));
+    drawCurrent(state);
+    if (state.animationActive) scheduleFrame(state);
+  });
+
+  if (frame === FAILED) {
+    if (state.pendingFrame === pendingSentinel) state.pendingFrame = null;
+    failRenderer(state, INITIALIZATION_FAILED);
+    return;
+  }
+  if (state.pendingFrame === pendingSentinel) state.pendingFrame = frame;
 }
 
 function drawCurrent(state) {
@@ -686,6 +723,9 @@ export function initialize_canvas(onReady, onResize, onError) {
     },
     camera: null,
     lastScene: null,
+    lastFrameTime: null,
+    lastFrameDelta: 0,
+    animationActive: false,
     onSceneError: null,
     sceneErrorReported: false,
     disposed: false,
@@ -750,7 +790,7 @@ export function render_canvas(sceneJson, cameraJson, onError) {
   if (!scene || !camera) {
     state.lastScene = { avatars: [] };
     state.camera = camera;
-    drawFallback(state, [], camera);
+    scheduleFrame(state);
     reportSceneError(state, SCENE_UNAVAILABLE);
     return;
   }
@@ -758,5 +798,5 @@ export function render_canvas(sceneJson, cameraJson, onError) {
   state.lastScene = scene;
   state.camera = camera;
   ensureAssets(state);
-  drawScene(state, scene);
+  scheduleFrame(state);
 }

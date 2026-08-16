@@ -4,6 +4,8 @@ import {
   type Page,
   type WebSocketRoute,
 } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 const selfId = "connection-self";
 const peerId = "connection-peer";
@@ -51,6 +53,172 @@ async function installDeterminism(page: Page) {
       },
     });
   }, fixedSeed);
+}
+
+async function installRafProbe(page: Page) {
+  await page.addInitScript(() => {
+    const callbacks = new Map<
+      number,
+      { callback: FrameRequestCallback; nativeId?: number }
+    >();
+    const canceledCallbacks: FrameRequestCallback[] = [];
+    const nativeRequest = globalThis.requestAnimationFrame.bind(globalThis);
+    const nativeCancel = globalThis.cancelAnimationFrame.bind(globalThis);
+    const nativeMin = Math.min;
+    let nextId = 1;
+    const probe = {
+      hold: false,
+      requested: 0,
+      canceled: 0,
+      fired: 0,
+      pending: 0,
+      clears: 0,
+      images: [] as unknown[],
+      clampValues: [] as number[][],
+      flush(timestamp: number) {
+        const queued = [...callbacks.entries()].filter(([, entry]) => entry.nativeId === undefined);
+        for (const [id, entry] of queued) {
+          callbacks.delete(id);
+          this.pending -= 1;
+          this.fired += 1;
+          entry.callback(timestamp);
+        }
+      },
+      invokeCanceled(timestamp: number) {
+        for (const callback of canceledCallbacks) callback(timestamp);
+      },
+    };
+    Object.defineProperty(globalThis, "__canvasRafProbe", {
+      configurable: true,
+      value: probe,
+    });
+    Object.defineProperty(globalThis, "requestAnimationFrame", {
+      configurable: true,
+      value: (callback: FrameRequestCallback) => {
+        const id = nextId;
+        nextId += 1;
+        probe.requested += 1;
+        probe.pending += 1;
+        if (probe.hold) {
+          callbacks.set(id, { callback });
+          return id;
+        }
+        const nativeId = nativeRequest((timestamp) => {
+          callbacks.delete(id);
+          probe.pending -= 1;
+          probe.fired += 1;
+          callback(timestamp);
+        });
+        callbacks.set(id, { callback, nativeId });
+        return id;
+      },
+    });
+    Object.defineProperty(globalThis, "cancelAnimationFrame", {
+      configurable: true,
+      value: (id: number) => {
+        const entry = callbacks.get(id);
+        if (entry) {
+          callbacks.delete(id);
+          probe.pending -= 1;
+          canceledCallbacks.push(entry.callback);
+          if (entry.nativeId !== undefined) nativeCancel(entry.nativeId);
+        }
+        probe.canceled += 1;
+      },
+    });
+    const contextPrototype = CanvasRenderingContext2D.prototype;
+    const nativeClearRect = contextPrototype.clearRect;
+    Object.defineProperty(contextPrototype, "clearRect", {
+      configurable: true,
+      value(this: CanvasRenderingContext2D, ...arguments_: Parameters<typeof nativeClearRect>) {
+        probe.clears += 1;
+        return nativeClearRect.apply(this, arguments_);
+      },
+    });
+    Object.defineProperty(Math, "min", {
+      configurable: true,
+      value: (...values: number[]) => {
+        if (values[0] === 100 && values.length === 2) probe.clampValues.push(values);
+        return nativeMin(...values);
+      },
+    });
+  });
+}
+
+async function rafMetrics(page: Page) {
+  return page.evaluate(() => {
+    const probe = (globalThis as typeof globalThis & {
+      __canvasRafProbe: {
+        requested: number;
+        canceled: number;
+        fired: number;
+        pending: number;
+        clears: number;
+        clampValues: number[][];
+      };
+    }).__canvasRafProbe;
+    return {
+      requested: probe.requested,
+      canceled: probe.canceled,
+      fired: probe.fired,
+      pending: probe.pending,
+      clears: probe.clears,
+      clampValues: [...probe.clampValues],
+    };
+  });
+}
+
+async function installFfiModule(page: Page) {
+  const source = readFileSync(
+    resolve(process.cwd(), "src/pixel_scribe_frontend/canvas_ffi.mjs"),
+    "utf8",
+  );
+  await page.route("**/__canvas_ffi_test__.mjs", async (route) => {
+    await route.fulfill({
+      contentType: "text/javascript",
+      body: source,
+    });
+  });
+}
+
+async function prepareDirectFfi(page: Page) {
+  await installRafProbe(page);
+  await installFfiModule(page);
+  await page.goto("/");
+  await page.evaluate(() => {
+    document.body.innerHTML =
+      '<canvas id="office-canvas" style="display:block;width:320px;height:720px"></canvas>';
+  });
+  await expect.poll(async () => (await rafMetrics(page)).pending).toBe(0);
+  await page.evaluate(async () => {
+    const probe = (globalThis as typeof globalThis & {
+      __canvasRafProbe: { hold: boolean; images: unknown[] };
+    }).__canvasRafProbe;
+    class FakeImage {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      set src(_url: string) {
+        probe.images.push(this);
+      }
+    }
+    Object.defineProperty(globalThis, "Image", {
+      configurable: true,
+      value: FakeImage,
+    });
+    probe.hold = true;
+    const ffi = await import("/__canvas_ffi_test__.mjs");
+    ffi.initialize_canvas(() => {}, () => {}, () => {});
+    ffi.render_canvas(
+      JSON.stringify({ avatars: [] }),
+      JSON.stringify({
+        origin_x: 0,
+        origin_y: 0,
+        viewport_width: 320,
+        viewport_height: 720,
+      }),
+      () => {},
+    );
+  });
 }
 
 async function joinOffice(
@@ -187,6 +355,112 @@ async function canvasInk(page: Page) {
 }
 
 test.describe("canvas office scene", () => {
+  test("coalesces dirty frames, clamps delay, and settles a static scene", async ({ page }) => {
+    await prepareDirectFfi(page);
+    await expect.poll(async () => (await rafMetrics(page)).pending).toBe(1);
+    await page.evaluate(() => {
+      const probe = (globalThis as typeof globalThis & {
+        __canvasRafProbe: { flush: (timestamp: number) => void };
+      }).__canvasRafProbe;
+      probe.flush(16);
+    });
+    const baseline = await rafMetrics(page);
+    expect(baseline.pending).toBe(0);
+    await page.evaluate(() => {
+      const probe = (globalThis as typeof globalThis & {
+        __canvasRafProbe: { images: Array<{ onload: (() => void) | null }> };
+      }).__canvasRafProbe;
+      for (const image of probe.images) image.onload?.();
+    });
+    await expect.poll(async () => (await rafMetrics(page)).pending).toBe(1);
+    await expect.poll(async () => (await rafMetrics(page)).clears).toBe(baseline.clears);
+    await page.evaluate(() => {
+      const probe = (globalThis as typeof globalThis & {
+        __canvasRafProbe: { hold: boolean; flush: (timestamp: number) => void };
+      }).__canvasRafProbe;
+      probe.hold = false;
+      probe.flush(10_000);
+    });
+    await expect.poll(async () => (await rafMetrics(page)).pending).toBe(0);
+    await expect.poll(async () => (await canvasInk(page)).opaque).toBeGreaterThan(500);
+    await expect.poll(async () => (await rafMetrics(page)).clears).toBeGreaterThan(baseline.clears);
+    const settled = await rafMetrics(page);
+    expect(settled.clampValues).toContainEqual([100, 9984]);
+    await expect.poll(async () => (await rafMetrics(page)).requested).toBe(settled.requested);
+    await expect.poll(async () => (await rafMetrics(page)).pending).toBe(0);
+
+    await page.evaluate(async () => {
+      const ffi = await import("/__canvas_ffi_test__.mjs");
+      const probe = (globalThis as typeof globalThis & {
+        __canvasRafProbe: { hold: boolean };
+      }).__canvasRafProbe;
+      probe.hold = true;
+      ffi.render_canvas(
+        JSON.stringify({ avatars: [] }),
+        JSON.stringify({
+          origin_x: 0,
+          origin_y: 0,
+          viewport_width: 320,
+          viewport_height: 720,
+        }),
+        () => {},
+      );
+      ffi.render_canvas(
+        JSON.stringify({ avatars: [] }),
+        JSON.stringify({
+          origin_x: 0,
+          origin_y: 0,
+          viewport_width: 320,
+          viewport_height: 720,
+        }),
+        () => {},
+      );
+    });
+    await expect.poll(async () => (await rafMetrics(page)).pending).toBe(1);
+    await page.evaluate(() => {
+      const probe = (globalThis as typeof globalThis & {
+        __canvasRafProbe: { hold: boolean; flush: (timestamp: number) => void };
+      }).__canvasRafProbe;
+      probe.hold = false;
+      probe.flush(10_100);
+    });
+    await expect.poll(async () => (await rafMetrics(page)).pending).toBe(0);
+  });
+
+  test("cancels a queued frame and ignores its late callback after disposal", async ({ page }) => {
+    await prepareDirectFfi(page);
+    await expect.poll(async () => (await rafMetrics(page)).pending).toBe(1);
+    const before = await rafMetrics(page);
+    await page.evaluate(async () => {
+      const probe = (globalThis as typeof globalThis & {
+        __canvasRafProbe: {
+          images: Array<{
+            onload: (() => void) | null;
+            onerror: (() => void) | null;
+          }>;
+          invokeCanceled: (timestamp: number) => void;
+        };
+      }).__canvasRafProbe;
+      const lateCallbacks = probe.images.map((image) => ({
+        onload: image.onload,
+        onerror: image.onerror,
+      }));
+      const ffi = await import("/__canvas_ffi_test__.mjs");
+      ffi.dispose_canvas();
+      probe.invokeCanceled(10_000);
+      for (const callbacks of lateCallbacks) {
+        callbacks.onload?.();
+        callbacks.onerror?.();
+      }
+    });
+    await expect.poll(async () => (await rafMetrics(page)).pending).toBe(0);
+    await expect.poll(async () => (await rafMetrics(page)).canceled).toBeGreaterThan(0);
+    const after = await rafMetrics(page);
+    expect(after.clears).toBe(before.clears);
+    expect(after.requested).toBe(before.requested);
+    expect(after.pending).toBe(0);
+  });
+
   test("draws the layered office and avatar scene after joining", async ({ page }) => {
     const assertNoBrowserErrors = observeBrowserErrors(page);
     const assetLoads = observeAssetLoads(page);
