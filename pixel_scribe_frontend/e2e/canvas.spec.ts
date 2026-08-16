@@ -524,6 +524,93 @@ test.describe("canvas office scene", () => {
     );
     assertNoBrowserErrors();
   });
+
+  test.describe("visual baselines", () => {
+    test.use({
+      viewport: { width: 320, height: 720 },
+      deviceScaleFactor: 1,
+    });
+
+    test("captures the joined office at 320px", async ({ page }) => {
+      const assertNoBrowserErrors = observeBrowserErrors(page);
+      const assetLoads = observeAssetLoads(page);
+      await installDeterminism(page);
+      await joinOffice(page, false, peerId, "Lin");
+
+      await expect(
+        page.getByRole("region", { name: "Participants" }).getByText("2 participants", {
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect.poll(() => assetLoads.tiles).toBe(1);
+      await expect.poll(() => assetLoads.avatars).toBe(1);
+      await expect.poll(async () => (await canvasInk(page)).colors).toBeGreaterThan(8);
+      await expect(page.locator("#canvas-status")).toHaveText("");
+      await expect(page.locator(".canvas-placeholder")).toHaveScreenshot(
+        "office-joined-320.png",
+        { animations: "disabled", caret: "hide" },
+      );
+      assertNoBrowserErrors();
+    });
+
+    test("captures a readable desktop crowd of 50 avatars", async ({ page }) => {
+      const assertNoBrowserErrors = observeBrowserErrors(page);
+      const assetLoads = observeAssetLoads(page);
+      await installDeterminism(page);
+      await page.setViewportSize({ width: 1280, height: 800 });
+      const socket = await joinOffice(page, false, peerId, "Lin", selfId, false);
+
+      for (let index = 0; index < 49; index += 1) {
+        const suffix = String(index).padStart(2, "0");
+        socket.send(
+          JSON.stringify({
+            type: "user_joined",
+            room_id: "default",
+            user: {
+              connection_id: `crowd-${suffix}`,
+              username: `Visitor ${suffix}`,
+            },
+          }),
+        );
+      }
+      const participants = page.getByRole("region", { name: "Participants" });
+      await expect(participants.getByText("50 participants", { exact: true })).toBeVisible();
+      await expect(participants.getByRole("listitem")).toHaveCount(50);
+      await expect.poll(() => assetLoads.tiles).toBe(1);
+      await expect.poll(() => assetLoads.avatars).toBe(1);
+      await expect.poll(async () => (await canvasInk(page)).colors).toBeGreaterThan(8);
+      await expect(page.locator("#canvas-status")).toHaveText("");
+      await expect(page.locator(".canvas-placeholder")).toHaveScreenshot(
+        "office-crowded-desktop.png",
+        { animations: "disabled", caret: "hide" },
+      );
+      assertNoBrowserErrors();
+    });
+
+    test("captures useful fallback geometry when art fails", async ({ page }) => {
+      const assertNoBrowserErrors = observeBrowserErrors(page);
+      const assetLoads = observeAssetLoads(page);
+      await installDeterminism(page);
+      await joinOffice(page, true, peerId, "Lin");
+
+      await expect(
+        page.getByRole("region", { name: "Participants" }).getByText("2 participants", {
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(page.locator("#canvas-status")).toHaveText(
+        "Office art unavailable; showing fallback geometry.",
+      );
+      await expect.poll(() => assetLoads.tiles).toBe(1);
+      await expect.poll(() => assetLoads.avatars).toBe(1);
+      await expect.poll(async () => (await canvasInk(page)).opaque).toBeGreaterThan(500);
+      await expect(page.locator(".canvas-placeholder")).toHaveScreenshot(
+        "office-fallback-320.png",
+        { animations: "disabled", caret: "hide" },
+      );
+      assertNoBrowserErrors();
+    });
+  });
 });
 
 for (const dpr of [1, 2] as const) {
