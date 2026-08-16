@@ -2,8 +2,10 @@ import gleam/int
 import gleam/list
 import gleam/string
 import pixel_scribe_frontend/domain
+import pixel_scribe_frontend/model
 import pixel_scribe_frontend/placement
 import pixel_scribe_frontend/scene
+import pixel_scribe_frontend/update
 
 pub fn world_metadata_has_named_logical_extents_test() {
   assert scene.tile_size == 16
@@ -120,6 +122,175 @@ pub fn renderer_avatars_sort_by_bottom_y_then_connection_id_test() {
   assert second.is_self
   assert first.is_self == False
   assert data.avatars == permuted_data.avatars
+}
+
+pub fn live_bubbles_are_owned_replaced_and_cleared_by_connection_id_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let peer_id = domain.connection_id_from_string("peer")
+  let data =
+    scene.render_data(17, self_id, [
+      avatar_input("self", "Ada", 128),
+      avatar_input("peer", "Bea", 304),
+    ])
+  let first = chat_message("first", peer_id, "hello")
+  let replacement = chat_message("second", peer_id, "new hello")
+
+  let with_first = scene.add_bubble(data, first, 1000)
+  assert with_first.bubbles
+    == [
+      scene.Bubble(
+        first.message_id,
+        first.sender_id,
+        first.username,
+        first.text,
+        1000,
+        7000,
+      ),
+    ]
+
+  let with_replacement = scene.add_bubble(with_first, replacement, 2000)
+  assert with_replacement.bubbles
+    == [
+      scene.Bubble(
+        replacement.message_id,
+        replacement.sender_id,
+        replacement.username,
+        replacement.text,
+        2000,
+        8000,
+      ),
+    ]
+
+  let cleared = scene.clear_bubble(with_replacement, peer_id)
+  assert cleared.bubbles == []
+}
+
+pub fn duplicate_or_unknown_sender_bubbles_do_nothing_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let peer_id = domain.connection_id_from_string("peer")
+  let absent_id = domain.connection_id_from_string("absent")
+  let data =
+    scene.render_data(17, self_id, [
+      avatar_input("self", "Ada", 128),
+      avatar_input("peer", "Bea", 304),
+    ])
+  let first = chat_message("same-id", peer_id, "hello")
+  let duplicate = chat_message("same-id", self_id, "different owner")
+  let unknown = chat_message("unknown", absent_id, "not present")
+
+  let with_first = scene.add_bubble(data, first, 1000)
+  assert scene.add_bubble(with_first, duplicate, 2000) == with_first
+  assert scene.add_bubble(with_first, unknown, 2000) == with_first
+}
+
+pub fn room_snapshot_history_never_creates_bubbles_test() {
+  let self_id = domain.connection_id_from_string("snapshot-self")
+  let peer_id = domain.connection_id_from_string("snapshot-peer")
+  let awaiting =
+    model.Model(
+      ..model.initial(),
+      phase: model.AwaitingRoomState(41, 0),
+      socket_generation: 41,
+    )
+  let history = chat_message("history", peer_id, "old message")
+  let peer = domain.Presence(peer_id, "Bea")
+  let self_presence = domain.Presence(self_id, "Ada")
+
+  let #(joined, _) =
+    update.transition(
+      awaiting,
+      update.ServerEvent(
+        41,
+        0,
+        domain.RoomState(
+          domain.default_room_id,
+          self_id,
+          [self_presence, peer],
+          [history],
+        ),
+      ),
+    )
+
+  let assert model.Ready(_, _, _, render_data, _, _) = joined.scene
+  assert render_data.bubbles == []
+}
+
+pub fn accepted_live_message_creates_duplicate_safe_bubble_and_leave_clears_test() {
+  let self_id = domain.connection_id_from_string("live-self")
+  let peer_id = domain.connection_id_from_string("live-peer")
+  let peer = domain.Presence(peer_id, "Bea")
+  let self_presence = domain.Presence(self_id, "Ada")
+  let awaiting =
+    model.Model(
+      ..model.initial(),
+      phase: model.AwaitingRoomState(42, 0),
+      socket_generation: 42,
+    )
+  let #(joined, _) =
+    update.transition(
+      awaiting,
+      update.ServerEvent(
+        42,
+        0,
+        domain.RoomState(
+          domain.default_room_id,
+          self_id,
+          [self_presence, peer],
+          [],
+        ),
+      ),
+    )
+  let accepted = chat_message("live", peer_id, "live message")
+  let #(with_bubble, _) =
+    update.transition(
+      joined,
+      update.AcceptedMessage(42, domain.default_room_id, accepted, False),
+    )
+  let assert model.Ready(_, _, _, with_data, _, _) = with_bubble.scene
+  assert with_data.bubbles
+    == [
+      scene.Bubble(
+        accepted.message_id,
+        accepted.sender_id,
+        accepted.username,
+        accepted.text,
+        0,
+        scene.bubble_lifetime_ms,
+      ),
+    ]
+
+  let assert #(duplicate, []) =
+    update.transition(
+      with_bubble,
+      update.AcceptedMessage(42, domain.default_room_id, accepted, False),
+    )
+  assert duplicate == with_bubble
+
+  let assert #(left, []) =
+    update.transition(
+      with_bubble,
+      update.ServerEvent(
+        42,
+        0,
+        domain.UserLeft(domain.default_room_id, peer_id),
+      ),
+    )
+  let assert model.Ready(_, _, _, left_data, _, _) = left.scene
+  assert left_data.bubbles == []
+}
+
+fn chat_message(
+  message_id: String,
+  sender_id: domain.ConnectionId,
+  text: String,
+) -> domain.ChatMessage {
+  domain.ChatMessage(
+    domain.message_id_from_string(message_id),
+    sender_id,
+    "Sender",
+    text,
+    "2026-08-10T12:00:00Z",
+  )
 }
 
 fn avatar_input(

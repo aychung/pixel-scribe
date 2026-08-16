@@ -379,7 +379,7 @@ fn dispatch_server_event(
                   connection_feedback: None,
                 )
               #(
-                reconcile_scene(updated_model, snapshot),
+                reconcile_scene(updated_model, snapshot, False),
                 cancel_reconnect(model),
               )
             }
@@ -403,6 +403,7 @@ fn dispatch_server_event(
             reconcile_scene(
               model.Model(..model, room_snapshot: Some(updated_snapshot)),
               updated_snapshot,
+              True,
             )
           #(updated_model, [])
         }
@@ -433,6 +434,7 @@ fn dispatch_server_event(
             reconcile_scene(
               model.Model(..model, room_snapshot: Some(updated_snapshot)),
               updated_snapshot,
+              True,
             )
           case updated_snapshot.participants == snapshot.participants {
             True -> #(model, [])
@@ -781,12 +783,14 @@ fn accepted_message(
             True -> [ScrollChatToEnd]
             False -> []
           }
+          let scene = add_live_bubble(model.scene, message)
           #(
             model.Model(
               ..model,
               room_snapshot: Some(updated_snapshot),
               draft: draft,
               send_in_flight: send_in_flight,
+              scene: scene,
             ),
             scroll,
           )
@@ -827,7 +831,11 @@ fn append_message(
   |> latest_50
 }
 
-fn reconcile_scene(model: Model, snapshot: model.RoomSnapshot) -> Model {
+fn reconcile_scene(
+  model: Model,
+  snapshot: model.RoomSnapshot,
+  preserve_bubbles: Bool,
+) -> Model {
   let seed = case model.placement_seed {
     Some(value) -> value
     None -> 0
@@ -861,7 +869,21 @@ fn reconcile_scene(model: Model, snapshot: model.RoomSnapshot) -> Model {
             Error(_) -> Error(Nil)
           }
         })
-      let render_data = office_scene.render_data(seed, snapshot.self_id, inputs)
+      let next_render_data =
+        office_scene.render_data(seed, snapshot.self_id, inputs)
+      let render_data = case preserve_bubbles {
+        True ->
+          case model.scene {
+            model.Ready(_, _, _, previous_data, _, _) ->
+              office_scene.retain_bubbles(
+                previous_data,
+                next_render_data,
+                snapshot.participants,
+              )
+            _ -> next_render_data
+          }
+        False -> next_render_data
+      }
       let camera_state =
         reconcile_camera(model.scene, snapshot.self_id, placements)
       model.Model(
@@ -877,6 +899,24 @@ fn reconcile_scene(model: Model, snapshot: model.RoomSnapshot) -> Model {
       )
     }
     Error(_) -> model.Model(..model, scene: model.Placeholder)
+  }
+}
+
+fn add_live_bubble(
+  scene_state: model.SceneState,
+  message: domain.ChatMessage,
+) -> model.SceneState {
+  case scene_state {
+    model.Ready(seed, self_id, placements, data, camera_state, feedback) ->
+      model.Ready(
+        seed,
+        self_id,
+        placements,
+        office_scene.add_bubble(data, message, 0),
+        camera_state,
+        feedback,
+      )
+    model.Placeholder | model.Failed(_) -> scene_state
   }
 }
 

@@ -7,7 +7,7 @@ to JavaScript.
 
 ### Work units
 
-- [ ] **Task 12A — Add bubble ownership to pure scene/update state.**
+- [x] **Task 12A — Add bubble ownership to pure scene/update state.**
   - **Done when:** only unique live accepted messages after room state create a
     sender-ID-owned bubble, newer message replaces it, leave clears it, duplicate
     event does nothing, and snapshot history never creates bubbles.
@@ -91,4 +91,3 @@ to JavaScript.
 - `e2e/bubbles.spec.ts`
 
 **Estimated scope:** Medium, 5 files.
-

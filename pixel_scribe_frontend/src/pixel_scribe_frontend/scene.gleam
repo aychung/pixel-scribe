@@ -142,9 +142,34 @@ pub type AvatarDraw {
   )
 }
 
-pub type SceneRenderData {
-  SceneRenderData(passes: List(DrawPass), avatars: List(AvatarDraw))
+/// A temporary, sender-owned message overlay. The message ID is the event
+/// identity; sender ID is the ownership key used for replacement and leave.
+pub type Bubble {
+  Bubble(
+    message_id: domain.MessageId,
+    sender_id: domain.ConnectionId,
+    username: String,
+    text: String,
+    started_at_ms: Int,
+    expires_at_ms: Int,
+  )
 }
+
+pub type SceneRenderData {
+  SceneRenderData(
+    passes: List(DrawPass),
+    avatars: List(AvatarDraw),
+    bubbles: List(Bubble),
+  )
+}
+
+/// Bubble visibility is six seconds: five seconds fully visible and one
+/// second reserved for the later fade renderer.
+pub const bubble_visible_ms = 5000
+
+pub const bubble_fade_ms = 1000
+
+pub const bubble_lifetime_ms = 6000
 
 /// Fifty hand-authored, tile-aligned bottom-center positions in open floor.
 /// The index is stable so placement can refer to an anchor without using a
@@ -265,13 +290,88 @@ pub fn render_data(
   SceneRenderData(
     passes: draw_passes,
     avatars: list.sort(draws, by: compare_avatar_draws),
+    bubbles: [],
+  )
+}
+
+/// Add one live accepted message to the scene. Only a currently present sender
+/// may own a bubble. Message IDs are idempotent, while a newer message from
+/// the same sender replaces that sender's bubble.
+pub fn add_bubble(
+  data: SceneRenderData,
+  message: domain.ChatMessage,
+  started_at_ms: Int,
+) -> SceneRenderData {
+  let SceneRenderData(passes, avatars, bubbles) = data
+  let sender_present =
+    list.any(avatars, fn(avatar) { avatar.connection_id == message.sender_id })
+  case
+    sender_present,
+    list.any(bubbles, fn(bubble) { bubble.message_id == message.message_id })
+  {
+    False, _ -> data
+    _, True -> data
+    True, False -> {
+      let next =
+        Bubble(
+          message.message_id,
+          message.sender_id,
+          message.username,
+          message.text,
+          started_at_ms,
+          started_at_ms + bubble_lifetime_ms,
+        )
+      SceneRenderData(
+        passes,
+        avatars,
+        list.append(
+          list.filter(bubbles, fn(bubble) {
+            bubble.sender_id != message.sender_id
+          }),
+          [next],
+        ),
+      )
+    }
+  }
+}
+
+/// Clear the current bubble for a participant that left the room.
+pub fn clear_bubble(
+  data: SceneRenderData,
+  sender_id: domain.ConnectionId,
+) -> SceneRenderData {
+  let SceneRenderData(passes, avatars, bubbles) = data
+  SceneRenderData(
+    passes,
+    avatars,
+    list.filter(bubbles, fn(bubble) { bubble.sender_id != sender_id }),
+  )
+}
+
+/// Keep existing bubbles only for participants still present. Room snapshots
+/// intentionally call `render_data` and therefore start with no bubbles.
+pub fn retain_bubbles(
+  previous: SceneRenderData,
+  data: SceneRenderData,
+  participants: List(domain.Presence),
+) -> SceneRenderData {
+  let SceneRenderData(passes, avatars, _) = data
+  let SceneRenderData(_, _, previous_bubbles) = previous
+  SceneRenderData(
+    passes,
+    avatars,
+    list.filter(previous_bubbles, fn(bubble) {
+      list.any(participants, fn(participant) {
+        participant.connection_id == bubble.sender_id
+      })
+    }),
   )
 }
 
 /// Serialize only the bounded, trusted render facts needed by the native
 /// boundary. The renderer still validates this JSON before using it.
 pub fn render_data_json(data: SceneRenderData) -> String {
-  let SceneRenderData(_, avatars) = data
+  let SceneRenderData(_, avatars, _) = data
 
   json.object([
     #("avatars", json.array(avatars, avatar_json)),
