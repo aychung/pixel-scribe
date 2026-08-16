@@ -9,6 +9,7 @@ import lustre/element/html
 import lustre/element/keyed
 import lustre/event
 import pixel_scribe_frontend/browser
+import pixel_scribe_frontend/camera
 import pixel_scribe_frontend/canvas
 import pixel_scribe_frontend/domain
 import pixel_scribe_frontend/model.{type Model}
@@ -157,10 +158,13 @@ fn office_stage(model: Model) -> Element(Msg) {
     ],
     [
       html.header([attribute.class("office-stage-header")], [
-        html.h2([attribute.id("office-stage-label")], [html.text("Office")]),
-        html.p([attribute.class("office-stage-note")], [
-          html.text("A shared space for the people in this room."),
+        html.div([attribute.class("office-stage-copy")], [
+          html.h2([attribute.id("office-stage-label")], [html.text("Office")]),
+          html.p([attribute.class("office-stage-note")], [
+            html.text("A shared space for the people in this room."),
+          ]),
         ]),
+        zoom_controls(model),
       ]),
       html.figure([attribute.class("canvas-placeholder")], [
         html.canvas([
@@ -178,6 +182,68 @@ fn office_stage(model: Model) -> Element(Msg) {
       ]),
     ],
   )
+}
+
+fn zoom_controls(model: Model) -> Element(Msg) {
+  let zoom = zoom_percent(model)
+  let can_zoom_out = zoom > camera.minimum_zoom * 100
+  let can_zoom_in = zoom < camera.maximum_zoom * 100
+  let can_reset = zoom != camera.default_zoom * 100
+  html.div(
+    [
+      attribute.class("zoom-controls"),
+      attribute.role("group"),
+      attribute.aria_label("Canvas zoom"),
+    ],
+    [
+      html.button(
+        [
+          attribute.type_("button"),
+          attribute.class("zoom-button"),
+          attribute.aria_label("Zoom out"),
+          attribute.aria_disabled(!can_zoom_out),
+          attribute.disabled(!can_zoom_out),
+          event.on_click(update.ZoomOut),
+        ],
+        [html.text("−")],
+      ),
+      html.button(
+        [
+          attribute.type_("button"),
+          attribute.class("zoom-value"),
+          attribute.aria_label("Reset zoom"),
+          attribute.aria_disabled(!can_reset),
+          attribute.disabled(!can_reset),
+          event.on_click(update.ZoomReset),
+        ],
+        [
+          html.span(
+            [attribute.id("office-zoom-value"), attribute.aria_live("polite")],
+            [html.text(int.to_string(zoom) <> "%")],
+          ),
+        ],
+      ),
+      html.button(
+        [
+          attribute.type_("button"),
+          attribute.class("zoom-button"),
+          attribute.aria_label("Zoom in"),
+          attribute.aria_disabled(!can_zoom_in),
+          attribute.disabled(!can_zoom_in),
+          event.on_click(update.ZoomIn),
+        ],
+        [html.text("+")],
+      ),
+    ],
+  )
+}
+
+fn zoom_percent(model: Model) -> Int {
+  case model.scene {
+    model.Ready(_, _, _, _, Some(camera_state), _) ->
+      camera.zoom_percent(camera_state)
+    _ -> camera.default_zoom * 100
+  }
 }
 
 fn canvas_status(model: Model) -> Element(Msg) {

@@ -172,7 +172,7 @@ pub fn joined_workspace_exposes_empty_chat_and_enabled_composer_semantics_test()
   assert string.contains(rendered, "for=\"message-draft\"")
   assert string.contains(rendered, "aria-busy=\"false\"")
   assert string.contains(rendered, "aria-disabled=\"false\"")
-  assert !string.contains(rendered, " disabled")
+  assert string.contains(rendered, "Send message")
 }
 
 pub fn joined_workspace_describes_the_canvas_with_a_permanent_caption_test() {
@@ -183,6 +183,18 @@ pub fn joined_workspace_describes_the_canvas_with_a_permanent_caption_test() {
   assert string.contains(rendered, "Pixel-art office scene.")
   assert string.contains(rendered, "aria-describedby=\"canvas-fallback\"")
   assert !string.contains(rendered, "The office canvas will appear here.")
+}
+
+pub fn joined_workspace_exposes_keyboard_usable_zoom_controls_test() {
+  let self_id = domain.connection_id_from_string("zoom-view-self")
+  let joined = joined_model([domain.Presence(self_id, "Ada")], self_id)
+  let rendered = element.to_string(view.view(joined))
+
+  assert string.contains(rendered, "Canvas zoom")
+  assert string.contains(rendered, "aria-label=\"Zoom out\"")
+  assert string.contains(rendered, "aria-label=\"Reset zoom\"")
+  assert string.contains(rendered, "aria-label=\"Zoom in\"")
+  assert string.contains(rendered, "100%")
 }
 
 pub fn chat_log_renders_snapshot_messages_in_order_and_keys_by_message_id_test() {

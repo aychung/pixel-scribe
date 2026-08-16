@@ -14,7 +14,8 @@ Lustre shell, protocol codecs, pure connection state machine, username
 preference, same-origin native WebSocket, joined presence workspace,
 accepted-message chat, reconnect recovery, the renderer-independent office world,
 camera, local placement, draw data, and the Canvas renderer are in place. The
-baseline office assets are original with recorded provenance. Task 11F human
+baseline office assets are original with recorded provenance; the renderer uses
+the v2 tile atlas and all 32 cells of the avatar atlas. Task 11F human
 visual/provenance approval and real-backend browser acceptance remain open in
 later MVP checkpoints.
 
@@ -53,6 +54,8 @@ backend event currently drives objects or coordinates on the canvas.
 5. Once joined, show the office canvas and chat workspace. The chat area contains
    connection status, a participant list/count, the message log, validation or
    connection feedback, and the composer.
+   The office header exposes keyboard-usable `−`, zoom percentage/reset, and `+`
+   controls; zoom keeps the current browser's avatar centered.
    Use a multiline composer: Enter sends, Shift+Enter inserts a line break, and
    an Enter key event must not send while an input-method composition is active.
 6. Update presence from `user_joined` and `user_left`. Append an accepted message

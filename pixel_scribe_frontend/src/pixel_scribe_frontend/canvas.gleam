@@ -84,12 +84,15 @@ fn camera_json(state: camera.Camera) -> String {
     camera.ViewportExtent(width, height),
     scene.WorldPoint(origin_x, origin_y),
     _,
+    zoom,
+    _,
   ) = state
   json.object([
     #("origin_x", json.int(origin_x)),
     #("origin_y", json.int(origin_y)),
     #("viewport_width", json.int(width)),
     #("viewport_height", json.int(height)),
+    #("zoom", json.int(zoom)),
   ])
   |> json.to_string
 }

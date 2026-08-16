@@ -307,7 +307,7 @@ fn status_name(status: AvatarStatus) -> String {
   }
 }
 
-const avatar_variant_count = 4
+const avatar_variant_count = 32
 
 const avatar_variant_domain = 73
 

@@ -31,7 +31,7 @@ function observeAssetLoads(page: Page) {
   const loads = { tiles: 0, avatars: 0 };
   page.on("requestfinished", (request) => {
     const path = new URL(request.url()).pathname;
-    if (path.endsWith("/pixel-art/office-tiles-16.png")) loads.tiles += 1;
+    if (path.endsWith("/pixel-art/office-tiles-v2-16.png")) loads.tiles += 1;
     if (path.endsWith("/pixel-art/office-avatars-16.png")) loads.avatars += 1;
   });
   return loads;
@@ -77,6 +77,7 @@ async function installRafProbe(page: Page) {
       restores: 0,
       throwOnClip: false,
       avatarSourceXs: [] as number[],
+      avatarSourceYs: [] as number[],
       images: [] as unknown[],
       clampValues: [] as number[][],
       flush(timestamp: number) {
@@ -170,6 +171,7 @@ async function installRafProbe(page: Page) {
         const image = arguments_[0] as { kind?: string } | undefined;
         if (image?.kind === "avatars") {
           probe.avatarSourceXs.push(arguments_[1] as number);
+          probe.avatarSourceYs.push(arguments_[2] as number);
           return;
         }
         if (image?.kind === "tiles") return;
@@ -594,6 +596,47 @@ test.describe("canvas FFI boundaries", () => {
       .toEqual([0, 16]);
   });
 
+  test("samples avatar variants from every atlas row", async ({ page }) => {
+    await installRafProbe(page);
+    await installFfiModule(page);
+    await page.goto("/");
+    await page.evaluate(() => {
+      document.body.innerHTML =
+        '<canvas id="office-canvas" style="display:block;width:320px;height:240px"></canvas>';
+    });
+    await page.evaluate(async () => {
+      class FakeImage {
+        kind = "";
+        onload: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        set src(url: string) {
+          this.kind = url.includes("avatars") ? "avatars" : "tiles";
+          this.onload?.();
+        }
+      }
+      Object.defineProperty(globalThis, "Image", { configurable: true, value: FakeImage });
+      const ffi = await import("/__canvas_ffi_test__.mjs");
+      ffi.initialize_canvas(() => {}, () => {}, () => {});
+      ffi.render_canvas(
+        JSON.stringify({
+          avatars: [{ id: "self", username: "Ada", x: 160, y: 120, variant: 31, self: true, status: "online" }],
+        }),
+        JSON.stringify({ origin_x: 0, origin_y: 0, viewport_width: 320, viewport_height: 240 }),
+        () => {},
+      );
+    });
+    await expect
+      .poll(() => page.evaluate(() => (globalThis as typeof globalThis & {
+        __canvasRafProbe: { avatarSourceXs: number[]; avatarSourceYs: number[] };
+      }).__canvasRafProbe.avatarSourceXs))
+      .toEqual([112]);
+    await expect
+      .poll(() => page.evaluate(() => (globalThis as typeof globalThis & {
+        __canvasRafProbe: { avatarSourceYs: number[] };
+      }).__canvasRafProbe.avatarSourceYs))
+      .toEqual([48]);
+  });
+
   test("rejects unsorted avatar input and reports no avatar draw", async ({ page }) => {
     await prepareDirectFfi(page);
     await page.evaluate(async () => {
@@ -929,6 +972,24 @@ for (const dpr of [1, 2] as const) {
       expect(resized.height).toBe(Math.round(resized.cssHeight * dpr));
       expect(Math.abs(resized.centerGoldCenter.x - resized.cssWidth / 2)).toBeLessThan(1.1);
       expect(Math.abs(resized.centerGoldCenter.y - resized.cssHeight / 2)).toBeLessThan(1.1);
+    });
+
+    test("zooms the office around the self visual center", async ({ page }) => {
+      await joinOffice(page, false);
+      await expect.poll(async () => (await canvasMetrics(page)).centerGold).toBeGreaterThan(0);
+
+      const before = await canvasMetrics(page);
+      await page.getByRole("button", { name: "Zoom in" }).click();
+      await expect(page.locator("#office-zoom-value")).toHaveText("200%");
+      await expect.poll(async () => (await canvasMetrics(page)).centerGold).toBeGreaterThan(0);
+
+      const zoomed = await canvasMetrics(page);
+      expect(Math.abs(zoomed.centerGoldCenter.x - zoomed.cssWidth / 2)).toBeLessThan(1.1);
+      expect(Math.abs(zoomed.centerGoldCenter.y - zoomed.cssHeight / 2)).toBeLessThan(1.1);
+      expect(zoomed.fingerprint).not.toBe(before.fingerprint);
+
+      await page.getByRole("button", { name: "Reset zoom" }).click();
+      await expect(page.locator("#office-zoom-value")).toHaveText("100%");
     });
 
     test("keeps offscreen participants semantic while culling their canvas work", async ({

@@ -107,6 +107,63 @@ pub fn camera_resize_recenters_the_same_self_target_test() {
     == scene.ViewportPoint(x: 55, y: 45)
 }
 
+pub fn camera_zoom_keeps_self_centered_while_shrinking_world_view_test() {
+  let self = participant("self")
+  let placements = assigned([self])
+  let self_id = domain.connection_id_from_string("self")
+  let assert Ok(initial) = camera.new(100, 80, self_id, placements)
+  let assert Ok(zoomed) = camera.zoom_in(initial, placements)
+  let assert Ok(self_placement) = placement.anchor_for(self_id, placements)
+  let visual_center = scene.avatar_visual_center(self_placement.position)
+
+  assert camera.zoom_level(initial) == 1
+  assert camera.zoom_percent(initial) == 100
+  assert camera.zoom_level(zoomed) == 2
+  assert camera.zoom_percent(zoomed) == 200
+  assert zoomed.viewport == camera.ViewportExtent(width: 50, height: 40)
+  assert camera.world_to_viewport(zoomed, visual_center)
+    == scene.ViewportPoint(x: 25, y: 20)
+}
+
+pub fn camera_zoom_reset_restores_the_original_view_test() {
+  let self = participant("self")
+  let placements = assigned([self])
+  let self_id = domain.connection_id_from_string("self")
+  let assert Ok(initial) = camera.new(100, 80, self_id, placements)
+  let assert Ok(zoomed) = camera.zoom_in(initial, placements)
+  let assert Ok(reset) = camera.reset_zoom(zoomed, placements)
+
+  assert reset == initial
+}
+
+pub fn camera_resize_retains_the_selected_zoom_level_test() {
+  let self = participant("self")
+  let placements = assigned([self])
+  let self_id = domain.connection_id_from_string("self")
+  let assert Ok(initial) = camera.new(100, 80, self_id, placements)
+  let assert Ok(zoomed) = camera.zoom_in(initial, placements)
+  let assert Ok(resized) = camera.resize(zoomed, 140, 100, placements)
+
+  assert camera.zoom_level(resized) == 2
+  assert resized.viewport == camera.ViewportExtent(width: 70, height: 50)
+}
+
+pub fn camera_zoom_stops_at_supported_limits_test() {
+  let self = participant("self")
+  let placements = assigned([self])
+  let self_id = domain.connection_id_from_string("self")
+  let assert Ok(initial) = camera.new(100, 80, self_id, placements)
+  let assert Ok(zoomed_once) = camera.zoom_in(initial, placements)
+  let assert Ok(zoomed_twice) = camera.zoom_in(zoomed_once, placements)
+  let assert Ok(zoomed_three_times) = camera.zoom_in(zoomed_twice, placements)
+  let assert Ok(zoomed_out) = camera.zoom_out(initial, placements)
+
+  assert camera.zoom_level(zoomed_once) == 2
+  assert camera.zoom_level(zoomed_twice) == 3
+  assert zoomed_three_times == zoomed_twice
+  assert zoomed_out == initial
+}
+
 pub fn camera_retarget_and_reconnect_self_id_immediately_recenters_test() {
   let self = participant("self")
   let peer = participant("peer")

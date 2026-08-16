@@ -2,6 +2,7 @@ import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/string
+import pixel_scribe_frontend/camera
 import pixel_scribe_frontend/canvas
 import pixel_scribe_frontend/domain
 import pixel_scribe_frontend/model
@@ -284,6 +285,38 @@ pub fn canvas_lifecycle_facts_do_not_emit_direct_draw_commands_test() {
   assert failed_data == resized_data
   assert failed_camera == resized_camera
   assert !runtime.scene_render_changed(resized.scene, failed.scene)
+}
+
+pub fn zoom_actions_update_only_the_camera_without_commands_test() {
+  let self_id = domain.connection_id_from_string("zoom-self")
+  let self_presence = domain.Presence(self_id, "Ada")
+  let awaiting =
+    model.Model(
+      ..model.initial(),
+      phase: model.AwaitingRoomState(2, 0),
+      socket_generation: 2,
+      placement_seed: Some(7),
+    )
+  let #(joined, _) =
+    update.transition(
+      awaiting,
+      update.ServerEvent(
+        2,
+        0,
+        domain.RoomState(domain.default_room_id, self_id, [self_presence], []),
+      ),
+    )
+  let #(ready, _) = update.transition(joined, update.CanvasReady(320, 240, 2.0))
+
+  let #(zoomed, zoom_commands) = update.transition(ready, update.ZoomIn)
+  let assert model.Ready(_, _, _, _, Some(zoomed_camera), _) = zoomed.scene
+  assert zoom_commands == []
+  assert camera.zoom_level(zoomed_camera) == 2
+
+  let #(reset, reset_commands) = update.transition(zoomed, update.ZoomReset)
+  let assert model.Ready(_, _, _, _, Some(reset_camera), _) = reset.scene
+  assert reset_commands == []
+  assert camera.zoom_level(reset_camera) == 1
 }
 
 pub fn snapshot_missing_self_presence_fails_closed_test() {

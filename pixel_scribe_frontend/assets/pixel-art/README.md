@@ -1,31 +1,34 @@
-# Pixel Scribe pixel-art baseline
+# Pixel Scribe pixel-art assets
 
-These two PNGs are the Task 11A baseline assets. They are original, small
-pixel-art atlases commissioned for Pixel Scribe and are not copied from Pixel
-Agents or any other named game, asset pack, or copyrighted collection.
+These PNGs are original, small pixel-art atlases commissioned for Pixel Scribe.
+They are not copied from Pixel Agents or any other named game, asset pack, or
+copyrighted collection.
 
 ## Files and layout
 
 | File | Final size | Cell layout | Intended cell size |
 | --- | ---: | --- | ---: |
 | `office-tiles-16.png` | 128 × 128 px | 8 columns × 8 rows | 16 × 16 px |
+| `office-tiles-v2-16.png` | 128 × 128 px | 8 columns × 8 rows | 16 × 16 px |
 | `office-avatars-16.png` | 128 × 64 px | 8 columns × 4 rows | 16 × 16 px |
 
-The tile atlas contains floors, wall pieces, windows, a doorway, desks,
-seating, tables, plants, lamps, storage, office equipment, rugs, and simple
-decor. The avatar atlas contains 32 fixed-pose office avatars with varied
-hair, skin tones, clothing, and accessories. Both sheets use a uniform deep
-navy backdrop in unused cell space and have no labels, grid lines, or gutters.
-The renderer should use nearest-neighbor sampling to keep the 16 px grid
-crisp.
+The current renderer uses `office-tiles-v2-16.png`, whose cells contain floor
+variants, walls, windows, desks, seating, plants, storage, office equipment,
+rugs, and decor. `office-tiles-16.png` is retained as the original baseline.
+The avatar atlas contains 32 fixed-pose office avatars with varied hair, skin
+tones, clothing, and accessories. All sheets use a uniform deep navy backdrop
+in unused cell space and have no labels, grid lines, or gutters. The renderer
+uses nearest-neighbor sampling to keep the 16 px grid crisp.
 
 ## Provenance and permission
 
 - Creator: OpenAI built-in image generation tool, commissioned by the Pixel
-  Scribe project through Codex on 2026-08-15. The project team selected and
-  prepared the final atlas files.
-- Source: two fresh, prompt-only generations; no reference images, existing
-  art, Pixel Agents artwork, or third-party asset pack was supplied.
+  Scribe project through Codex on 2026-08-15 and 2026-08-16. The project team
+  selected and prepared the final atlas files.
+- Source: three fresh, prompt-only generations; no reference images, existing
+  art, Pixel Agents artwork, or third-party asset pack was supplied. The
+  current tile atlas is the 2026-08-16 generation; the avatar atlas remains
+  the original 2026-08-15 generation.
 - Generation mode: built-in `image_gen` tool, generate mode (not CLI; no edit
   target or reference image).
 - License: CC0 1.0 dedication for these final atlas files by the Pixel Scribe
@@ -33,14 +36,15 @@ crisp.
   redistributed without attribution.
 - Distribution permission: explicitly permitted in this repository, in the
   compiled frontend, and in redistributed source or binary deployments.
-- Modifications: each generated PNG was resized with ImageMagick using the
-  point/nearest-neighbor filter only: the tile source (1254 × 1254 px) became
-  128 × 128 px and the avatar source (1774 × 887 px) became 128 × 64 px. No
-  pixels were painted procedurally, no objects were added or removed, and no
-  source artwork was copied.
+- Modifications: the current tile source (1254 × 1254 px) was resized with
+  ImageMagick using the point/nearest-neighbor filter only to become 128 × 128
+  px. The baseline tile source (1254 × 1254 px) and avatar source (1774 × 887
+  px) were prepared the same way. No pixels were painted procedurally, no
+  objects were added or removed, and no source artwork was copied.
 - Source-generation records: tile generation output
-  `exec-4658ffe7-4e5b-44eb-9cd6-1e193a8e9d66.png`; avatar generation output
-  `exec-378b5f5f-6cff-4688-bfe7-01a1fa3ac1b6.png` (both retained by the
+  `exec-5f16c136-6850-4b4a-a4e3-0ec09786c519.png` for the current atlas;
+  baseline tile output `exec-4658ffe7-4e5b-44eb-9cd6-1e193a8e9d66.png`; avatar
+  output `exec-378b5f5f-6cff-4688-bfe7-01a1fa3ac1b6.png` (all retained by the
   built-in image-generation workspace record).
 
 ## Exact final prompts
@@ -48,6 +52,24 @@ crisp.
 The following are the final prompts sent to the built-in tool. They are part
 of the provenance record and intentionally call for original work rather than
 matching any existing asset set.
+
+### Current tile atlas (v2)
+
+```text
+Use case: stylized-concept
+Asset type: original pixel-art tile atlas for a browser virtual-office canvas
+Primary request: Create a completely original high-resolution master tile atlas for a cozy, busy top-down pixel-art office. Arrange exactly 8 columns by 8 rows of equal square cells. Every cell contains exactly one tile or one small piece of office furniture/decor, fully contained in its cell. Include multiple warm wood and muted carpet floor variants, wall and corner pieces, windows, doorway, desks, chairs, monitors, bookshelves, filing cabinets, plants, lamps, sofas, coffee table, rug pieces, whiteboard, clock, and a few deliberately empty cells.
+Scene/backdrop: one perfectly uniform deep navy background (#12182a) filling all unused space in every cell
+Subject: compact top-down office tile atlas, one asset per cell, designed to be reduced to 16x16 logical pixels
+Style/medium: crisp hand-authored pixel art, hard-edged clusters, strong dark outlines, limited palette, readable silhouettes, classic 16-bit game asset discipline
+Composition/framing: exact 8x8 equal-cell atlas, orthogonal top-down view, centered assets with generous padding, no asset crosses a cell boundary
+Lighting/mood: warm, playful, lived-in shared office; tiny highlights on wood, glass, screens, and leaves
+Color palette: walnut brown, dusty terracotta, slate blue, sage green, cream, mustard, charcoal navy outlines, restrained contrast
+Materials/textures: simple intentional pixel clusters; wood grain, carpet flecks, paper stacks, plant leaves, monitor glow
+Text (verbatim): ""
+Constraints: original work; redistributable; no brands, logos, named characters, copyrighted art, game imitation, UI, labels, or watermark; preserve exact equal cell boundaries; must remain legible after nearest-neighbor reduction to 16x16 per cell
+Avoid: visible grid lines, gutters, seams, borders, uneven cells, perspective, gradients, blur, anti-aliasing, photorealism, text, watermark
+```
 
 ### Tile atlas
 

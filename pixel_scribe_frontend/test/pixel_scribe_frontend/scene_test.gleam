@@ -92,6 +92,12 @@ pub fn avatar_variant_is_seeded_by_opaque_id_not_anchor_or_username_test() {
   assert first_draw.bottom_anchor != moved_draw.bottom_anchor
 }
 
+pub fn avatar_variant_uses_the_full_atlas_domain_test() {
+  let connection_id = domain.connection_id_from_string("connection-a")
+
+  assert scene.avatar_variant(17, connection_id) == scene.AvatarVariant(28)
+}
+
 pub fn renderer_avatars_sort_by_bottom_y_then_connection_id_test() {
   let self_id = domain.connection_id_from_string("b")
   let avatars = [

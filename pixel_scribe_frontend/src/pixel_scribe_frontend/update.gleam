@@ -31,6 +31,9 @@ pub type Msg {
   CanvasReady(width: Int, height: Int, dpr: Float)
   CanvasResized(width: Int, height: Int, dpr: Float)
   CanvasFailed(reason: canvas.Error)
+  ZoomOut
+  ZoomReset
+  ZoomIn
   ReconnectTimerFired(generation: Int, timer_id: Int)
   RateLimitTimerFired(generation: Int, deadline_ms: Int)
   RetryRequested
@@ -97,6 +100,9 @@ pub fn transition(model: Model, message: Msg) -> #(Model, List(Command)) {
       record_renderer_feedback(model, canvas_status(reason)),
       [],
     )
+    ZoomOut -> update_zoom(model, ZoomDecrease)
+    ZoomReset -> update_zoom(model, ZoomDefault)
+    ZoomIn -> update_zoom(model, ZoomIncrease)
     RateLimitTimerFired(generation, deadline_ms) ->
       rate_limit_timer_fired(model, generation, deadline_ms)
     ReconnectTimerFired(generation, timer_id) ->
@@ -104,6 +110,12 @@ pub fn transition(model: Model, message: Msg) -> #(Model, List(Command)) {
     RetryRequested -> retry_requested(model)
     ReturnToUsername -> return_to_username(model)
   }
+}
+
+type ZoomAction {
+  ZoomDecrease
+  ZoomDefault
+  ZoomIncrease
 }
 
 fn route_accepted_message(
@@ -905,7 +917,7 @@ fn reconcile_camera(
 ) -> Option(camera.Camera) {
   case state {
     model.Ready(_, _, _, _, Some(existing), _) -> {
-      let camera.Camera(_, _, previous_self_id) = existing
+      let camera.Camera(_, _, previous_self_id, _, _) = existing
       let result = case previous_self_id == self_id {
         True -> camera.update(existing, placements)
         False -> camera.retarget(existing, self_id, placements)
@@ -916,6 +928,36 @@ fn reconcile_camera(
       }
     }
     _ -> None
+  }
+}
+
+fn update_zoom(model: Model, action: ZoomAction) -> #(Model, List(Command)) {
+  case model.scene {
+    model.Ready(seed, self_id, placements, data, Some(existing), feedback) -> {
+      let next = case action {
+        ZoomDecrease -> camera.zoom_out(existing, placements)
+        ZoomDefault -> camera.reset_zoom(existing, placements)
+        ZoomIncrease -> camera.zoom_in(existing, placements)
+      }
+      case next {
+        Ok(camera_state) -> #(
+          model.Model(
+            ..model,
+            scene: model.Ready(
+              seed,
+              self_id,
+              placements,
+              data,
+              Some(camera_state),
+              feedback,
+            ),
+          ),
+          [],
+        )
+        Error(_) -> #(model, [])
+      }
+    }
+    _ -> #(model, [])
   }
 }
 
