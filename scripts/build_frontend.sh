@@ -39,7 +39,11 @@ clean_directory() {
 
 require_directory "$frontend_dir"
 require_directory "$backend_dir"
-require_directory "$backend_dir/priv"
+if [ -e "$backend_dir/priv" ] || [ -L "$backend_dir/priv" ]; then
+  require_directory "$backend_dir/priv"
+else
+  mkdir "$backend_dir/priv"
+fi
 require_file "$frontend_dir/gleam.toml"
 require_file "$frontend_dir/manifest.toml"
 
@@ -53,15 +57,14 @@ printf 'Building frontend into %s\n' "$artifact_dir"
 clean_directory "$artifact_dir"
 (cd "$frontend_dir" && gleam run -m lustre/dev build)
 
-# Lustre's single-entry build contract is the complete root-level artifact set:
-# the generated HTML entry, generated JavaScript bundle, and copied stylesheet.
+# Lustre's build contract includes the generated entry files and copied assets.
 require_file "$artifact_dir/index.html"
 require_file "$artifact_dir/pixel_scribe_frontend.js"
 require_file "$artifact_dir/styles.css"
 
 while IFS= read -r -d '' artifact; do
   case "$(basename "$artifact")" in
-    index.html|pixel_scribe_frontend.js|styles.css) ;;
+    index.html|pixel_scribe_frontend.js|styles.css|pixel-art) ;;
     *) die "unexpected frontend artifact: $artifact" ;;
   esac
 done < <(find "$artifact_dir" -mindepth 1 -maxdepth 1 -print0)

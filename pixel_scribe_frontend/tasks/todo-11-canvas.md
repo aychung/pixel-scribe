@@ -61,7 +61,7 @@ an original or explicitly licensed top-down office/avatar baseline for review.
     `src/pixel_scribe_frontend/canvas_ffi.mjs`, `e2e/canvas.spec.ts`.
   - **Verify:** focused lifecycle browser tests plus all Gleam checks and bundle.
   - **Depends:** Task 11D.
-- [ ] **Task 11F — Capture and approve the baseline scene.**
+- [x] **Task 11F — Capture and approve the baseline scene.**
   - **Done when:** deterministic 320px/desktop and crowded screenshots show a
     recognizable original office, crisp sprite scale, useful fallback, and no
     invalid anchors; human approval and provenance review are recorded.
@@ -93,25 +93,25 @@ an original or explicitly licensed top-down office/avatar baseline for review.
 
 **Acceptance criteria:**
 
-- [ ] Approved assets/fallback render a recognizable Pixel-Agents-inspired but
+- [x] Approved assets/fallback render a recognizable Pixel-Agents-inspired but
   original office with up to 50 locally placed avatars and documented provenance.
-- [ ] Scene remains crisp/aspect-correct at DPR 1/2 and required viewport sizes;
+- [x] Scene remains crisp/aspect-correct at DPR 1/2 and required viewport sizes;
   resize does not accumulate observers/frames or blur coordinates.
-- [ ] Self stays centered while the world crop moves after self placement changes;
+- [x] Self stays centered while the world crop moves after self placement changes;
   peer changes do not move the crop, and edge positions show backdrop rather than
   displacing self. A static scene reaches zero pending animation frames.
 
 **Verification:**
 
-- [ ] Pure coordinate/layer tests pass and FFI has a narrow reviewed export list.
-- [ ] `gleam format --check src test`
-- [ ] `gleam build`
-- [ ] `gleam test`
-- [ ] `gleam run -m lustre/dev build`
-- [ ] Playwright uses fixed seed/DPR to capture a small set of approved 320px and
+- [x] Pure coordinate/layer tests pass and FFI has a narrow reviewed export list.
+- [x] `gleam format --check src test`
+- [x] `gleam build`
+- [x] `gleam test`
+- [x] `gleam run -m lustre/dev build`
+- [x] Playwright uses fixed seed/DPR to capture a small set of approved 320px and
   desktop screenshots; checks center invariance, self/peer placement changes,
   reconnect target, resize, edge backdrop, fallback, and no console/page errors.
-- [ ] Human approves scene, palette, sprite scale, crowded view, and provenance.
+- [x] Human approves scene, palette, sprite scale, crowded view, and provenance.
 
 **Dependencies:** Task 10 and real-time UI checkpoint.
 

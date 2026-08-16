@@ -25,12 +25,12 @@ a later task merely because a nearby file is already open.
 - [x] [Task 7 — Presence and status workspace](todo-07-presence.md)
 - [x] [Task 8 — Accepted-message chat](todo-08-chat.md)
 - [x] [Task 9 — Recovery behavior](todo-09-recovery.md)
-- [ ] [Real-time UI checkpoint](todo-checkpoint-realtime-ui.md)
+- [x] [Real-time UI checkpoint](todo-checkpoint-realtime-ui.md)
 
 ## Visual direction
 
 - [x] [Task 10 — Office world and camera](todo-10-office.md)
-- [ ] [Task 11 — Canvas renderer and assets](todo-11-canvas.md)
+- [x] [Task 11 — Canvas renderer and assets](todo-11-canvas.md)
 - [ ] [Task 12 — Temporary speech bubbles](todo-12-bubbles.md)
 - [ ] [Visual direction checkpoint](todo-checkpoint-visual-direction.md)
 
