@@ -12,9 +12,11 @@ existing backend remains the authority for the JSON `/ws` contract.
 The foundation and real-time chat slices are implemented: the browser-only
 Lustre shell, protocol codecs, pure connection state machine, username
 preference, same-origin native WebSocket, joined presence workspace,
-accepted-message chat, reconnect recovery, and the renderer-independent office
-world, camera, local placement, and draw data are in place. The Canvas renderer,
-approved art, and real-backend browser acceptance remain in later MVP tasks.
+accepted-message chat, reconnect recovery, the renderer-independent office world,
+camera, local placement, draw data, and the Canvas renderer are in place. The
+baseline office assets are original with recorded provenance. Task 11F human
+visual/provenance approval and real-backend browser acceptance remain open in
+later MVP checkpoints.
 
 ## MVP
 
@@ -325,8 +327,11 @@ pixel_scribe_frontend/
 ```
 
 The official Lustre development tools generate the HTML entry and browser bundle,
-copy `assets/`, and write to `dist/` by default. The reproducible integration step
-from that output into backend `priv/public` is not configured yet.
+copy `assets/`, and write to `dist/` by default. From the repository root, the
+implemented `./scripts/build_frontend.sh` staging command cleans and validates
+that artifact set, then copies it into `pixel_scribe_backend/priv/public`;
+generated output remains uncommitted. This staging step does not constitute
+Task 14 or full delivery acceptance.
 
 Once source and tests exist, the minimum Gleam checks are expected to be:
 

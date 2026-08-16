@@ -4,8 +4,8 @@
 
 Approved on 2026-08-08. Backend Tasks 0–11 artifact delivery are implemented in
 the current checkout and covered by automated package tests. Browser acceptance
-remains open because real-backend browser integration and later frontend visual
-slices are not complete.
+remains open because real-backend browser integration, Task 11F human
+visual/provenance approval, and later frontend acceptance slices are not complete.
 
 This document is still the canonical backend contract. The status above is an
 implementation boundary, not a claim that the final browser-facing MVP has
@@ -15,10 +15,12 @@ passed acceptance.
 
 The frontend package currently provides the Lustre shell, username preference,
 protocol validation, pure connection-state behavior, browser WebSocket effect,
-joined presence/chat workspace, reconnect recovery, and a renderer-independent
+joined presence/chat workspace, reconnect recovery, a renderer-independent
 office world with camera transforms, seeded local placement/reconciliation, and
-stable draw data. It does not yet provide the Canvas renderer or approved art
-assets, so the browser-facing visual scene remains incomplete.
+stable draw data, plus the Canvas renderer. The baseline office assets are
+original with recorded provenance. Task 11F human visual/provenance approval,
+real-backend browser acceptance, and later frontend acceptance slices remain
+open.
 
 From `pixel_scribe_frontend/`, the verified bundle command is:
 
