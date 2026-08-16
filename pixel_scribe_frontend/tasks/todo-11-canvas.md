@@ -48,7 +48,8 @@ an original or explicitly licensed top-down office/avatar baseline for review.
     `src/pixel_scribe_frontend/canvas_ffi.mjs`,
     `src/pixel_scribe_frontend/model.gleam`,
     `src/pixel_scribe_frontend/update.gleam`,
-    `src/pixel_scribe_frontend/runtime.gleam`, `e2e/canvas.spec.ts`.
+    `src/pixel_scribe_frontend/runtime.gleam`,
+    `src/pixel_scribe_frontend/view.gleam`, `e2e/canvas.spec.ts`.
   - **Verify:** fixed-seed DPR 1/2 tests for center invariance, resize, peer churn,
     reconnect target, and edge backdrop.
   - **Depends:** Task 11C.
