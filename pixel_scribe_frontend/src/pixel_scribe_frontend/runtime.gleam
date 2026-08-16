@@ -19,7 +19,7 @@ pub fn update(
   message: update.Msg,
 ) -> #(Model, Effect(update.Msg)) {
   let #(updated, commands) = update.transition(model, message)
-  let command_effect = interpret_commands(commands)
+  let command_effect = interpret_commands(commands, updated)
   let canvas_effect = canvas_lifecycle(model, updated)
   let scene_effect = scene_lifecycle(model, updated)
   #(updated, effect.batch([command_effect, canvas_effect, scene_effect]))
@@ -75,13 +75,19 @@ fn render_current_scene(model: Model) -> Effect(update.Msg) {
   }
 }
 
-fn interpret_commands(commands: List(update.Command)) -> Effect(update.Msg) {
+fn interpret_commands(
+  commands: List(update.Command),
+  model: Model,
+) -> Effect(update.Msg) {
   commands
-  |> list.map(interpret_command)
+  |> list.map(fn(command) { interpret_command(command, model) })
   |> effect.batch
 }
 
-fn interpret_command(command: update.Command) -> Effect(update.Msg) {
+fn interpret_command(
+  command: update.Command,
+  model: Model,
+) -> Effect(update.Msg) {
   case command {
     update.OpenSocket(generation) ->
       effect.map(socket.open(generation), socket_fact_to_msg)
@@ -109,6 +115,17 @@ fn interpret_command(command: update.Command) -> Effect(update.Msg) {
       )
     update.CancelRateLimit(generation, deadline_ms) ->
       browser.cancel_timer(browser.RateLimit, generation, deadline_ms)
+    update.ScheduleBubble(generation, timer_id, delay_ms) ->
+      browser.schedule_timer(
+        browser.Bubble,
+        generation,
+        timer_id,
+        delay_ms,
+        update.BubbleTimerFired,
+      )
+    update.CancelBubble(generation, timer_id) ->
+      browser.cancel_timer(browser.Bubble, generation, timer_id)
+    update.RenderScene -> render_current_scene(model)
     update.FocusUsername -> browser.focus_username()
     update.FocusComposer -> browser.focus_composer()
     update.ScrollChatToEnd -> browser.scroll_chat_to_end()
@@ -135,6 +152,7 @@ pub fn socket_fact_to_msg(fact: socket.Fact) -> update.Msg {
         Ok(domain.MessageSent(room_id, message)) ->
           update.AcceptedMessage(
             generation,
+            received_at_ms,
             room_id,
             message,
             browser.chat_log_near_bottom(),

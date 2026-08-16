@@ -7,6 +7,7 @@ import pixel_scribe_frontend/canvas
 import pixel_scribe_frontend/domain
 import pixel_scribe_frontend/model
 import pixel_scribe_frontend/runtime
+import pixel_scribe_frontend/scene
 import pixel_scribe_frontend/update
 
 pub fn initial_model_explicitly_owns_connection_state_test() {
@@ -875,7 +876,7 @@ pub fn unique_accepted_self_message_scrolls_even_when_reader_was_not_near_bottom
   let #(updated, commands) =
     update.transition(
       joined,
-      update.AcceptedMessage(31, domain.default_room_id, accepted, False),
+      update.AcceptedMessage(31, 0, domain.default_room_id, accepted, False),
     )
 
   assert snapshot_messages(updated) == [accepted]
@@ -891,7 +892,7 @@ pub fn unique_accepted_peer_message_scrolls_when_reader_was_near_bottom_test() {
   let #(updated, commands) =
     update.transition(
       joined,
-      update.AcceptedMessage(32, domain.default_room_id, accepted, True),
+      update.AcceptedMessage(32, 0, domain.default_room_id, accepted, True),
     )
 
   assert snapshot_messages(updated) == [accepted]
@@ -907,11 +908,146 @@ pub fn unique_accepted_peer_message_preserves_older_reader_position_test() {
   let #(updated, commands) =
     update.transition(
       joined,
-      update.AcceptedMessage(33, domain.default_room_id, accepted, False),
+      update.AcceptedMessage(33, 0, domain.default_room_id, accepted, False),
     )
 
   assert snapshot_messages(updated) == [accepted]
   assert commands == []
+}
+
+pub fn accepted_peer_message_schedules_only_the_next_bubble_boundary_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let peer_id = domain.connection_id_from_string("peer")
+  let joined =
+    joined_ready_model(36, self_id, [domain.Presence(peer_id, "Bea")])
+  let accepted = message("timed-peer", peer_id, "accepted")
+
+  let #(updated, commands) =
+    update.transition(
+      joined,
+      update.AcceptedMessage(
+        36,
+        10_000,
+        domain.default_room_id,
+        accepted,
+        False,
+      ),
+    )
+
+  assert updated.bubble_timer
+    == Some(model.BubbleTimer(36, 1, 15_000, accepted.message_id))
+  assert commands
+    == [
+      update.ScheduleBubble(36, 1, 5000),
+    ]
+}
+
+pub fn stale_bubble_timer_cannot_expire_a_replacement_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let peer_id = domain.connection_id_from_string("peer")
+  let joined =
+    joined_ready_model(37, self_id, [domain.Presence(peer_id, "Bea")])
+  let first = message("timer-old", peer_id, "old")
+  let replacement = message("timer-new", peer_id, "new")
+  let #(with_first, _) =
+    update.transition(
+      joined,
+      update.AcceptedMessage(37, 10_000, domain.default_room_id, first, False),
+    )
+  let #(with_replacement, replacement_commands) =
+    update.transition(
+      with_first,
+      update.AcceptedMessage(
+        37,
+        12_000,
+        domain.default_room_id,
+        replacement,
+        False,
+      ),
+    )
+
+  assert replacement_commands
+    == [
+      update.CancelBubble(37, 1),
+      update.ScheduleBubble(37, 2, 5000),
+    ]
+  let #(stale, stale_commands) =
+    update.transition(with_replacement, update.BubbleTimerFired(37, 1))
+  assert stale == with_replacement
+  assert stale_commands == []
+}
+
+pub fn bubble_timer_expiry_updates_pure_scene_and_schedules_render_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let peer_id = domain.connection_id_from_string("peer")
+  let joined =
+    joined_ready_model(38, self_id, [domain.Presence(peer_id, "Bea")])
+  let accepted = message("timer-expiry", peer_id, "accepted")
+  let #(with_bubble, _) =
+    update.transition(
+      joined,
+      update.AcceptedMessage(
+        38,
+        10_000,
+        domain.default_room_id,
+        accepted,
+        False,
+      ),
+    )
+  let #(after_fade_boundary, fade_commands) =
+    update.transition(with_bubble, update.BubbleTimerFired(38, 1))
+  assert fade_commands
+    == [
+      update.RenderScene,
+      update.ScheduleBubble(38, 2, 1000),
+    ]
+  let assert model.Ready(_, _, _, fade_data, _, _) = after_fade_boundary.scene
+  assert fade_data.bubbles
+    == [
+      scene.Bubble(
+        accepted.message_id,
+        accepted.sender_id,
+        accepted.username,
+        accepted.text,
+        10_000,
+        16_000,
+      ),
+    ]
+  let #(expired, expiry_commands) =
+    update.transition(after_fade_boundary, update.BubbleTimerFired(38, 2))
+  let assert model.Ready(_, _, _, expired_data, _, _) = expired.scene
+  assert expired_data.bubbles == []
+  assert expiry_commands == []
+  assert expired.bubble_timer == None
+}
+
+pub fn reduced_motion_schedules_expiry_without_a_fade_boundary_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let peer_id = domain.connection_id_from_string("peer")
+  let joined =
+    model.Model(
+      ..joined_ready_model(39, self_id, [domain.Presence(peer_id, "Bea")]),
+      reduced_motion: True,
+    )
+  let accepted = message("reduced-timer", peer_id, "accepted")
+  let #(updated, commands) =
+    update.transition(
+      joined,
+      update.AcceptedMessage(
+        39,
+        10_000,
+        domain.default_room_id,
+        accepted,
+        False,
+      ),
+    )
+
+  assert updated.bubble_timer
+    == Some(model.BubbleTimer(39, 1, 16_000, accepted.message_id))
+  assert commands
+    == [
+      update.ScheduleBubble(39, 1, 6000),
+    ]
 }
 
 pub fn duplicate_accepted_message_never_scrolls_test() {
@@ -934,6 +1070,7 @@ pub fn duplicate_accepted_message_never_scrolls_test() {
       joined,
       update.AcceptedMessage(
         34,
+        0,
         domain.default_room_id,
         message("duplicate", self_id, "different body"),
         True,
@@ -954,13 +1091,14 @@ pub fn stale_generation_and_wrong_room_accepted_messages_never_scroll_test() {
   let #(stale, stale_commands) =
     update.transition(
       joined,
-      update.AcceptedMessage(34, domain.default_room_id, accepted, True),
+      update.AcceptedMessage(34, 0, domain.default_room_id, accepted, True),
     )
   let #(wrong_room, wrong_room_commands) =
     update.transition(
       joined,
       update.AcceptedMessage(
         35,
+        0,
         other_room,
         message("wrong-room", peer_id, "elsewhere"),
         True,
@@ -1725,6 +1863,35 @@ fn joined_model(
       False,
     )),
   )
+}
+
+fn joined_ready_model(
+  generation: Int,
+  self_id: domain.ConnectionId,
+  participants: List(domain.Presence),
+) -> model.Model {
+  let awaiting =
+    model.Model(
+      ..model.initial(),
+      phase: model.AwaitingRoomState(generation, 0),
+      socket_generation: generation,
+      placement_seed: Some(7),
+    )
+  let #(joined, _) =
+    update.transition(
+      awaiting,
+      update.ServerEvent(
+        generation,
+        0,
+        domain.RoomState(
+          domain.default_room_id,
+          self_id,
+          [domain.Presence(self_id, "Ada"), ..participants],
+          [],
+        ),
+      ),
+    )
+  joined
 }
 
 fn model_for_phase(phase: model.ConnectionPhase) -> model.Model {

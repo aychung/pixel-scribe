@@ -193,6 +193,15 @@ export function chat_log_near_bottom() {
   }
 }
 
+export function prefers_reduced_motion() {
+  try {
+    if (typeof globalThis.matchMedia !== "function") return false;
+    return globalThis.matchMedia("(prefers-reduced-motion: reduce)")?.matches === true;
+  } catch (_error) {
+    return false;
+  }
+}
+
 export function read_document_cookie() {
   try {
     if (typeof document === "undefined") {

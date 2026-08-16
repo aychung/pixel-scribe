@@ -1,3 +1,4 @@
+import gleam/int
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import pixel_scribe_frontend/camera
@@ -23,6 +24,7 @@ pub type Msg {
   ServerEvent(generation: Int, received_at_ms: Int, event: domain.ServerEvent)
   AcceptedMessage(
     generation: Int,
+    received_at_ms: Int,
     room_id: domain.RoomId,
     message: domain.ChatMessage,
     reader_was_near_bottom: Bool,
@@ -36,6 +38,7 @@ pub type Msg {
   ZoomIn
   ReconnectTimerFired(generation: Int, timer_id: Int)
   RateLimitTimerFired(generation: Int, deadline_ms: Int)
+  BubbleTimerFired(generation: Int, timer_id: Int)
   RetryRequested
   ReturnToUsername
 }
@@ -52,6 +55,9 @@ pub type Command {
   CancelReconnect(generation: Int, timer_id: Int)
   ScheduleRateLimit(generation: Int, deadline_ms: Int, delay_ms: Int)
   CancelRateLimit(generation: Int, deadline_ms: Int)
+  ScheduleBubble(generation: Int, timer_id: Int, delay_ms: Int)
+  CancelBubble(generation: Int, timer_id: Int)
+  RenderScene
   FocusUsername
   FocusComposer
   ScrollChatToEnd
@@ -78,10 +84,17 @@ pub fn transition(model: Model, message: Msg) -> #(Model, List(Command)) {
       socket_error(model, generation, random_unit)
     ServerEvent(generation, received_at_ms, event) ->
       server_event(model, generation, received_at_ms, event)
-    AcceptedMessage(generation, room_id, accepted, reader_was_near_bottom) ->
+    AcceptedMessage(
+      generation,
+      received_at_ms,
+      room_id,
+      accepted,
+      reader_was_near_bottom,
+    ) ->
       route_accepted_message(
         model,
         generation,
+        received_at_ms,
         room_id,
         accepted,
         reader_was_near_bottom,
@@ -105,6 +118,8 @@ pub fn transition(model: Model, message: Msg) -> #(Model, List(Command)) {
     ZoomIn -> update_zoom(model, ZoomIncrease)
     RateLimitTimerFired(generation, deadline_ms) ->
       rate_limit_timer_fired(model, generation, deadline_ms)
+    BubbleTimerFired(generation, timer_id) ->
+      bubble_timer_fired(model, generation, timer_id)
     ReconnectTimerFired(generation, timer_id) ->
       reconnect_timer_fired(model, generation, timer_id)
     RetryRequested -> retry_requested(model)
@@ -121,6 +136,7 @@ type ZoomAction {
 fn route_accepted_message(
   model: Model,
   generation: Int,
+  received_at_ms: Int,
   room_id: domain.RoomId,
   message: domain.ChatMessage,
   reader_was_near_bottom: Bool,
@@ -137,6 +153,7 @@ fn route_accepted_message(
       accepted_message(
         model,
         generation,
+        received_at_ms,
         room_id,
         message,
         reader_was_near_bottom,
@@ -174,6 +191,10 @@ pub fn apply_browser_startup(
     username_input: username_input,
     placement_seed: Some(seed),
   )
+}
+
+pub fn set_reduced_motion(model: Model, reduced_motion: Bool) -> Model {
+  model.Model(..model, reduced_motion: reduced_motion)
 }
 
 fn submit_username(model: Model) -> #(Model, List(Command)) {
@@ -321,7 +342,8 @@ fn server_event(
               if expected_generation == generation
               && room_id != domain.default_room_id
             -> protocol_failure(model, generation)
-            _, _ -> dispatch_server_event(model, generation, event)
+            _, _ ->
+              dispatch_server_event(model, generation, received_at_ms, event)
           }
       }
   }
@@ -350,6 +372,7 @@ fn room_id_for_event(event: domain.ServerEvent) -> Option(domain.RoomId) {
 fn dispatch_server_event(
   model: Model,
   generation: Int,
+  received_at_ms: Int,
   event: domain.ServerEvent,
 ) -> #(Model, List(Command)) {
   case event {
@@ -378,9 +401,19 @@ fn dispatch_server_event(
                   reconnect_timer: None,
                   connection_feedback: None,
                 )
+              let reset = model.Model(..updated_model, bubble_timer: None)
+              let #(joined, bubble_commands) =
+                reconcile_bubble_timer(
+                  reconcile_scene(reset, snapshot, False),
+                  generation,
+                  received_at_ms,
+                )
               #(
-                reconcile_scene(updated_model, snapshot, False),
-                cancel_reconnect(model),
+                joined,
+                list.append(
+                  cancel_reconnect(model),
+                  list.append(cancel_bubble_timer(model), bubble_commands),
+                ),
               )
             }
             False -> protocol_failure(model, generation)
@@ -405,7 +438,9 @@ fn dispatch_server_event(
               updated_snapshot,
               True,
             )
-          #(updated_model, [])
+          let #(timed, bubble_commands) =
+            reconcile_bubble_timer(updated_model, generation, received_at_ms)
+          #(timed, bubble_commands)
         }
         _, _ -> #(model, [])
       }
@@ -438,13 +473,28 @@ fn dispatch_server_event(
             )
           case updated_snapshot.participants == snapshot.participants {
             True -> #(model, [])
-            False -> #(updated_model, [])
+            False -> {
+              let #(timed, bubble_commands) =
+                reconcile_bubble_timer(
+                  updated_model,
+                  generation,
+                  received_at_ms,
+                )
+              #(timed, bubble_commands)
+            }
           }
         }
         _, _ -> #(model, [])
       }
     domain.MessageSent(room_id, message) ->
-      accepted_message(model, generation, room_id, message, False)
+      accepted_message(
+        model,
+        generation,
+        received_at_ms,
+        room_id,
+        message,
+        False,
+      )
     domain.UnknownEvent -> #(model, [])
     // ServerError is handled by server_event before reaching this dispatcher.
     // Naming it here keeps new ServerEvent variants compiler-checked.
@@ -578,11 +628,18 @@ fn protocol_failure(model: Model, generation: Int) -> #(Model, List(Command)) {
       phase: model.Blocked(model.ProtocolFailure),
       room_snapshot: mark_snapshot_stale(model.room_snapshot),
       send_in_flight: None,
+      bubble_timer: None,
       rate_limit_until: None,
       feedback: None,
       connection_feedback: Some("Protocol error."),
     )
-  #(updated, [CloseSocket(generation), ..cancel_rate_limit(model, generation)])
+  #(updated, [
+    CloseSocket(generation),
+    ..list.append(
+      cancel_rate_limit(model, generation),
+      cancel_bubble_timer(model),
+    )
+  ])
 }
 
 fn invalid_username_error(
@@ -596,6 +653,7 @@ fn invalid_username_error(
       phase: model.ChoosingUsername,
       room_snapshot: None,
       send_in_flight: None,
+      bubble_timer: None,
       rate_limit_until: None,
       feedback: Some(error.message),
       connection_feedback: None,
@@ -603,6 +661,7 @@ fn invalid_username_error(
   let commands =
     [CloseSocket(generation)]
     |> list.append(cancel_rate_limit(model, generation))
+    |> list.append(cancel_bubble_timer(model))
     |> list.append([FocusUsername])
   #(updated, commands)
 }
@@ -664,6 +723,7 @@ fn join_required_error(
       room_snapshot: snapshot,
       send_in_flight: None,
       rate_limit_until: None,
+      bubble_timer: None,
       feedback: None,
       connection_feedback: Some(error.message),
     )
@@ -715,7 +775,13 @@ fn terminal_blocked_error(
       feedback: None,
       connection_feedback: Some(error.message),
     )
-  #(updated, [CloseSocket(generation), ..cancel_rate_limit(model, generation)])
+  #(updated, [
+    CloseSocket(generation),
+    ..list.append(
+      cancel_rate_limit(model, generation),
+      cancel_bubble_timer(model),
+    )
+  ])
 }
 
 fn room_unavailable_error(
@@ -729,10 +795,17 @@ fn room_unavailable_error(
       room_snapshot: mark_snapshot_stale(model.room_snapshot),
       send_in_flight: None,
       rate_limit_until: None,
+      bubble_timer: None,
       feedback: None,
       connection_feedback: Some(error.message),
     )
-  #(updated, cancel_rate_limit(model, generation))
+  #(
+    updated,
+    list.append(
+      cancel_rate_limit(model, generation),
+      cancel_bubble_timer(model),
+    ),
+  )
 }
 
 fn cancel_rate_limit(model: Model, generation: Int) -> List(Command) {
@@ -758,6 +831,7 @@ fn rate_limit_timer_fired(
 fn accepted_message(
   model: Model,
   generation: Int,
+  received_at_ms: Int,
   room_id: domain.RoomId,
   message: domain.ChatMessage,
   reader_was_near_bottom: Bool,
@@ -783,17 +857,18 @@ fn accepted_message(
             True -> [ScrollChatToEnd]
             False -> []
           }
-          let scene = add_live_bubble(model.scene, message)
-          #(
+          let scene = add_live_bubble(model.scene, message, received_at_ms)
+          let updated =
             model.Model(
               ..model,
               room_snapshot: Some(updated_snapshot),
               draft: draft,
               send_in_flight: send_in_flight,
               scene: scene,
-            ),
-            scroll,
-          )
+            )
+          let #(timed, timer_commands) =
+            reconcile_bubble_timer(updated, generation, received_at_ms)
+          #(timed, list.append(scroll, timer_commands))
         }
       }
     _, _ -> #(model, [])
@@ -905,6 +980,7 @@ fn reconcile_scene(
 fn add_live_bubble(
   scene_state: model.SceneState,
   message: domain.ChatMessage,
+  received_at_ms: Int,
 ) -> model.SceneState {
   case scene_state {
     model.Ready(seed, self_id, placements, data, camera_state, feedback) ->
@@ -912,11 +988,118 @@ fn add_live_bubble(
         seed,
         self_id,
         placements,
-        office_scene.add_bubble(data, message, 0),
+        office_scene.add_bubble(data, message, received_at_ms),
         camera_state,
         feedback,
       )
     model.Placeholder | model.Failed(_) -> scene_state
+  }
+}
+
+fn reconcile_bubble_timer(
+  model: Model,
+  generation: Int,
+  now_ms: Int,
+) -> #(Model, List(Command)) {
+  let next = case model.scene {
+    model.Ready(_, _, _, data, _, _) ->
+      office_scene.next_bubble_boundary(data, now_ms, model.reduced_motion)
+    model.Placeholder | model.Failed(_) -> None
+  }
+  case next, model.bubble_timer {
+    None, None -> #(model, [])
+    None, Some(previous) -> {
+      let model.BubbleTimer(previous_generation, previous_id, _, _) = previous
+      #(model.Model(..model, bubble_timer: None), [
+        CancelBubble(previous_generation, previous_id),
+      ])
+    }
+    Some(office_scene.BubbleDeadline(message_id, deadline_ms)), current -> {
+      let delay_ms = int.max(0, deadline_ms - now_ms)
+      let same = case current {
+        Some(model.BubbleTimer(
+          existing_generation,
+          existing_id,
+          existing_deadline,
+          existing_message,
+        )) ->
+          existing_generation == generation
+          && existing_id == model.bubble_timer_nonce
+          && existing_deadline == deadline_ms
+          && existing_message == message_id
+        None -> False
+      }
+      case same {
+        True -> #(model, [])
+        False -> {
+          let timer_id = model.bubble_timer_nonce + 1
+          let cancel = case current {
+            Some(model.BubbleTimer(previous_generation, previous_id, _, _)) -> [
+              CancelBubble(previous_generation, previous_id),
+            ]
+            None -> []
+          }
+          #(
+            model.Model(
+              ..model,
+              bubble_timer: Some(model.BubbleTimer(
+                generation,
+                timer_id,
+                deadline_ms,
+                message_id,
+              )),
+              bubble_timer_nonce: timer_id,
+            ),
+            list.append(cancel, [
+              ScheduleBubble(generation, timer_id, delay_ms),
+            ]),
+          )
+        }
+      }
+    }
+  }
+}
+
+fn expire_scene_bubbles(model: Model, now_ms: Int) -> Model {
+  case model.scene {
+    model.Ready(seed, self_id, placements, data, camera_state, feedback) ->
+      model.Model(
+        ..model,
+        scene: model.Ready(
+          seed,
+          self_id,
+          placements,
+          office_scene.expire_bubbles(data, now_ms, model.reduced_motion),
+          camera_state,
+          feedback,
+        ),
+      )
+    model.Placeholder | model.Failed(_) -> model
+  }
+}
+
+fn bubble_timer_fired(
+  model: Model,
+  generation: Int,
+  timer_id: Int,
+) -> #(Model, List(Command)) {
+  case model.bubble_timer {
+    Some(model.BubbleTimer(expected_generation, expected_id, deadline_ms, _))
+      if expected_generation == generation && expected_id == timer_id
+    -> {
+      let expired =
+        model.Model(..model, bubble_timer: None)
+        |> expire_scene_bubbles(deadline_ms)
+      let scene_changed = expired.scene != model.scene
+      let #(timed, timer_commands) =
+        reconcile_bubble_timer(expired, generation, deadline_ms)
+      let render_commands = case scene_changed {
+        True -> timer_commands
+        False -> [RenderScene, ..timer_commands]
+      }
+      #(timed, render_commands)
+    }
+    _ -> #(model, [])
   }
 }
 
@@ -1127,9 +1310,16 @@ fn cleanup_closed_socket(
       ..model,
       room_snapshot: mark_snapshot_stale(model.room_snapshot),
       send_in_flight: None,
+      bubble_timer: None,
       rate_limit_until: None,
     )
-  #(updated, cancel_rate_limit(model, generation))
+  #(
+    updated,
+    list.append(
+      cancel_rate_limit(model, generation),
+      cancel_bubble_timer(model),
+    ),
+  )
 }
 
 fn schedule_reconnect(
@@ -1150,9 +1340,12 @@ fn schedule_reconnect(
       reconnect_timer: Some(model.ReconnectTimer(next_generation, timer_id)),
       room_snapshot: mark_snapshot_stale(model.room_snapshot),
       send_in_flight: None,
+      bubble_timer: None,
       rate_limit_until: None,
     )
-  let commands = cancel_rate_limit(model, generation)
+  let commands =
+    cancel_rate_limit(model, generation)
+    |> list.append(cancel_bubble_timer(model))
   #(
     updated,
     list.append(commands, [
@@ -1209,13 +1402,17 @@ fn manual_retry(
       phase: model.Connecting(next_generation, attempt),
       socket_generation: next_generation,
       reconnect_timer: None,
+      bubble_timer: None,
       feedback: None,
       connection_feedback: None,
     )
-  #(updated, [
-    CancelReconnect(timer.generation, timer.timer_id),
-    OpenSocket(next_generation),
-  ])
+  #(
+    updated,
+    list.append(cancel_bubble_timer(model), [
+      CancelReconnect(timer.generation, timer.timer_id),
+      OpenSocket(next_generation),
+    ]),
+  )
 }
 
 fn manual_retry_active(
@@ -1238,6 +1435,7 @@ fn manual_retry_active(
   let commands =
     cancel_reconnect(model)
     |> list.append(cancel_rate_limit_for_model(model))
+    |> list.append(cancel_bubble_timer(model))
     |> list.append([CloseSocket(generation), OpenSocket(next_generation)])
   #(updated, commands)
 }
@@ -1250,10 +1448,11 @@ fn manual_retry_without_timer(model: Model) -> #(Model, List(Command)) {
       phase: model.Connecting(generation, model.reconnect_attempt),
       socket_generation: generation,
       reconnect_timer: None,
+      bubble_timer: None,
       feedback: None,
       connection_feedback: None,
     )
-  #(updated, [OpenSocket(generation)])
+  #(updated, list.append(cancel_bubble_timer(model), [OpenSocket(generation)]))
 }
 
 fn return_to_username(model: Model) -> #(Model, List(Command)) {
@@ -1264,6 +1463,7 @@ fn return_to_username(model: Model) -> #(Model, List(Command)) {
       room_snapshot: None,
       send_in_flight: None,
       reconnect_timer: None,
+      bubble_timer: None,
       rate_limit_until: None,
       feedback: None,
       connection_feedback: None,
@@ -1278,6 +1478,7 @@ fn return_to_username(model: Model) -> #(Model, List(Command)) {
     cancel_reconnect(model)
     |> list.append(commands)
     |> list.append(cancel_rate_limit_for_model(model))
+    |> list.append(cancel_bubble_timer(model))
     |> list.append([FocusUsername])
   #(updated, commands)
 }
@@ -1285,6 +1486,15 @@ fn return_to_username(model: Model) -> #(Model, List(Command)) {
 fn cancel_reconnect(model: Model) -> List(Command) {
   case model.reconnect_timer {
     Some(timer) -> [CancelReconnect(timer.generation, timer.timer_id)]
+    None -> []
+  }
+}
+
+fn cancel_bubble_timer(model: Model) -> List(Command) {
+  case model.bubble_timer {
+    Some(model.BubbleTimer(generation, timer_id, _, _)) -> [
+      CancelBubble(generation, timer_id),
+    ]
     None -> []
   }
 }

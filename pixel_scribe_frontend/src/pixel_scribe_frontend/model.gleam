@@ -39,6 +39,17 @@ pub type ReconnectTimer {
   ReconnectTimer(generation: Int, timer_id: Int)
 }
 
+/// The one globally earliest bubble lifecycle boundary owned by the reducer.
+/// The message identity prevents a stale callback from removing a replacement.
+pub type BubbleTimer {
+  BubbleTimer(
+    generation: Int,
+    timer_id: Int,
+    deadline_ms: Int,
+    message_id: domain.MessageId,
+  )
+}
+
 pub type SceneState {
   Placeholder
   Ready(
@@ -66,6 +77,9 @@ pub type Model {
     connection_feedback: Option(String),
     reconnect_attempt: Int,
     reconnect_timer: Option(ReconnectTimer),
+    bubble_timer: Option(BubbleTimer),
+    bubble_timer_nonce: Int,
+    reduced_motion: Bool,
     rate_limit_until: Option(Int),
     scene: SceneState,
   )
@@ -85,6 +99,9 @@ pub fn initial() -> Model {
     connection_feedback: None,
     reconnect_attempt: 0,
     reconnect_timer: None,
+    bubble_timer: None,
+    bubble_timer_nonce: 0,
+    reduced_motion: False,
     rate_limit_until: None,
     scene: Placeholder,
   )

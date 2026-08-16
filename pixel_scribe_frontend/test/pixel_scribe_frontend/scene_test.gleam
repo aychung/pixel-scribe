@@ -1,5 +1,6 @@
 import gleam/int
 import gleam/list
+import gleam/option.{None, Some}
 import gleam/string
 import pixel_scribe_frontend/domain
 import pixel_scribe_frontend/model
@@ -244,7 +245,7 @@ pub fn accepted_live_message_creates_duplicate_safe_bubble_and_leave_clears_test
   let #(with_bubble, _) =
     update.transition(
       joined,
-      update.AcceptedMessage(42, domain.default_room_id, accepted, False),
+      update.AcceptedMessage(42, 0, domain.default_room_id, accepted, False),
     )
   let assert model.Ready(_, _, _, with_data, _, _) = with_bubble.scene
   assert with_data.bubbles
@@ -262,11 +263,11 @@ pub fn accepted_live_message_creates_duplicate_safe_bubble_and_leave_clears_test
   let assert #(duplicate, []) =
     update.transition(
       with_bubble,
-      update.AcceptedMessage(42, domain.default_room_id, accepted, False),
+      update.AcceptedMessage(42, 0, domain.default_room_id, accepted, False),
     )
   assert duplicate == with_bubble
 
-  let assert #(left, []) =
+  let assert #(left, [update.CancelBubble(42, 1)]) =
     update.transition(
       with_bubble,
       update.ServerEvent(
@@ -359,6 +360,85 @@ pub fn bubble_layout_is_emoji_safe_and_clamped_to_every_viewport_edge_test() {
   assert right.rectangle.left + right.rectangle.width <= 200
   assert right.rectangle.top + right.rectangle.height <= 120
   assert bubble.text == emoji_text
+}
+
+pub fn bubble_lifecycle_is_visible_then_fades_then_expires_at_fixed_clock_test() {
+  let sender_id = domain.connection_id_from_string("bubble-clock")
+  let data =
+    scene.render_data(17, sender_id, [avatar_input("bubble-clock", "Ada", 128)])
+  let message = chat_message("clock", sender_id, "hello")
+  let assert [bubble] = scene.add_bubble(data, message, 10_000).bubbles
+
+  assert scene.bubble_visibility(bubble, 10_000, False) == scene.FullyVisible
+  assert scene.bubble_visibility(bubble, 14_999, False) == scene.FullyVisible
+  assert scene.bubble_visibility(bubble, 15_000, False) == scene.Fading(100)
+  assert scene.bubble_visibility(bubble, 15_500, False) == scene.Fading(50)
+  assert scene.bubble_visibility(bubble, 15_999, False) == scene.Fading(1)
+  assert scene.bubble_visibility(bubble, 16_000, False) == scene.Expired
+}
+
+pub fn bubble_lifecycle_reduced_motion_keeps_full_opacity_until_expiry_test() {
+  let sender_id = domain.connection_id_from_string("bubble-reduced")
+  let data =
+    scene.render_data(17, sender_id, [
+      avatar_input("bubble-reduced", "Ada", 128),
+    ])
+  let message = chat_message("reduced", sender_id, "hello")
+  let assert [bubble] = scene.add_bubble(data, message, 10_000).bubbles
+
+  assert scene.bubble_visibility(bubble, 15_999, True) == scene.FullyVisible
+  assert scene.bubble_visibility(bubble, 16_000, True) == scene.Expired
+}
+
+pub fn bubble_lifecycle_schedules_only_the_next_boundary_and_expiry_removes_it_test() {
+  let sender_id = domain.connection_id_from_string("bubble-deadline")
+  let data =
+    scene.render_data(17, sender_id, [
+      avatar_input("bubble-deadline", "Ada", 128),
+    ])
+  let message = chat_message("deadline", sender_id, "hello")
+  let assert [bubble] = scene.add_bubble(data, message, 10_000).bubbles
+  let with_bubble = scene.SceneRenderData(data.passes, data.avatars, [bubble])
+
+  assert scene.next_bubble_deadline(with_bubble, 10_001, False) == Some(15_000)
+  assert scene.next_bubble_deadline(with_bubble, 15_100, False) == Some(16_000)
+  assert scene.next_bubble_deadline(with_bubble, 15_100, True) == Some(16_000)
+  assert scene.next_bubble_deadline(with_bubble, 16_000, False) == None
+  assert scene.expire_bubbles(with_bubble, 15_999, False).bubbles == [bubble]
+  assert scene.expire_bubbles(with_bubble, 16_000, False).bubbles == []
+}
+
+pub fn replacing_a_bubble_makes_the_old_identity_ineligible_for_expiry_test() {
+  let sender_id = domain.connection_id_from_string("bubble-replace-clock")
+  let data =
+    scene.render_data(17, sender_id, [
+      avatar_input("bubble-replace-clock", "Ada", 128),
+    ])
+  let first = chat_message("old", sender_id, "old")
+  let replacement = chat_message("new", sender_id, "new")
+  let replaced =
+    scene.add_bubble(scene.add_bubble(data, first, 10_000), replacement, 12_000)
+
+  assert scene.expire_bubbles(replaced, 16_000, False).bubbles
+    == replaced.bubbles
+  assert scene.next_bubble_deadline(replaced, 16_000, False) == Some(17_000)
+}
+
+pub fn renderer_json_uses_canonical_bubble_lines_and_preserves_full_text_test() {
+  let sender_id = domain.connection_id_from_string("bubble-json")
+  let data =
+    scene.render_data(17, sender_id, [avatar_input("bubble-json", "Ada", 128)])
+  let message = chat_message("json", sender_id, "first line\nsecond line")
+  let with_bubble = scene.add_bubble(data, message, 10_000)
+  let assert [bubble] = with_bubble.bubbles
+  let rendered =
+    scene.render_data_json_for_viewport(with_bubble, 0, 0, 200, 120)
+
+  assert with_bubble.bubbles == [bubble]
+  assert string.contains(rendered, "\"lines\":[\"first line\",\"second line\"]")
+  assert !string.contains(rendered, "\"text\"")
+  assert string.contains(rendered, "\"left\":")
+  assert string.contains(rendered, "\"expires_at_ms\":16000")
 }
 
 fn chat_message(

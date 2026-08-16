@@ -17,6 +17,9 @@ pub fn initial_model_starts_in_username_choice_test() {
       connection_feedback: None,
       reconnect_attempt: 0,
       reconnect_timer: None,
+      bubble_timer: None,
+      bubble_timer_nonce: 0,
+      reduced_motion: False,
       rate_limit_until: None,
       scene: model.Placeholder,
     )
@@ -41,6 +44,9 @@ pub fn username_input_updates_only_the_username_input_test() {
       connection_feedback: None,
       reconnect_attempt: 0,
       reconnect_timer: None,
+      bubble_timer: None,
+      bubble_timer_nonce: 0,
+      reduced_motion: False,
       rate_limit_until: None,
       scene: model.Placeholder,
     )

@@ -1,6 +1,7 @@
 import gleam/int
 import gleam/json
 import gleam/list
+import gleam/option.{type Option, None, Some}
 import gleam/order
 import gleam/string
 import pixel_scribe_frontend/domain
@@ -153,6 +154,19 @@ pub type Bubble {
     started_at_ms: Int,
     expires_at_ms: Int,
   )
+}
+
+/// The deterministic lifecycle projection used by the renderer boundary.
+/// `Fading` carries opacity as a percentage so fixed-clock tests do not need
+/// floating-point comparisons.
+pub type BubbleVisibility {
+  FullyVisible
+  Fading(opacity_percent: Int)
+  Expired
+}
+
+pub type BubbleDeadline {
+  BubbleDeadline(message_id: domain.MessageId, at_ms: Int)
 }
 
 /// The viewport-space rectangle used to draw a bubble. Coordinates are in
@@ -373,6 +387,102 @@ pub fn add_bubble(
   }
 }
 
+/// Return the lifecycle state at a fixed monotonic clock value.
+pub fn bubble_visibility(
+  bubble: Bubble,
+  now_ms: Int,
+  reduced_motion: Bool,
+) -> BubbleVisibility {
+  let Bubble(_, _, _, _, started_at_ms, expires_at_ms) = bubble
+  let fade_starts_at_ms = started_at_ms + bubble_visible_ms
+  case now_ms >= expires_at_ms {
+    True -> Expired
+    False ->
+      case reduced_motion || now_ms < fade_starts_at_ms {
+        True -> FullyVisible
+        False -> {
+          let elapsed_ms = now_ms - fade_starts_at_ms
+          let remaining_ms = bubble_fade_ms - elapsed_ms
+          let opacity_percent =
+            int.max(1, int.min(100, remaining_ms * 100 / bubble_fade_ms))
+          Fading(opacity_percent)
+        }
+      }
+  }
+}
+
+/// Find the one lifecycle boundary that can change the current projection.
+/// Expired bubbles have no deadline, allowing the renderer to go idle after
+/// its final cleanup draw.
+pub fn next_bubble_deadline(
+  data: SceneRenderData,
+  now_ms: Int,
+  reduced_motion: Bool,
+) -> Option(Int) {
+  case next_bubble_boundary(data, now_ms, reduced_motion) {
+    Some(BubbleDeadline(_, at_ms)) -> Some(at_ms)
+    None -> None
+  }
+}
+
+pub fn next_bubble_boundary(
+  data: SceneRenderData,
+  now_ms: Int,
+  reduced_motion: Bool,
+) -> Option(BubbleDeadline) {
+  let SceneRenderData(_, _, bubbles) = data
+  list.fold(bubbles, None, fn(current, bubble) {
+    let Bubble(_, _, _, _, started_at_ms, expires_at_ms) = bubble
+    let boundary = case bubble_visibility(bubble, now_ms, reduced_motion) {
+      Expired -> None
+      FullyVisible ->
+        case reduced_motion {
+          True -> Some(BubbleDeadline(bubble.message_id, expires_at_ms))
+          False ->
+            Some(BubbleDeadline(
+              bubble.message_id,
+              started_at_ms + bubble_visible_ms,
+            ))
+        }
+      Fading(_) -> Some(BubbleDeadline(bubble.message_id, expires_at_ms))
+    }
+    choose_earliest(current, boundary)
+  })
+}
+
+/// Remove bubbles whose expiry has been reached. Identity replacement is
+/// naturally safe: the old message is no longer present in this list, so a
+/// stale timer cannot remove the newer sender-owned bubble.
+pub fn expire_bubbles(
+  data: SceneRenderData,
+  now_ms: Int,
+  reduced_motion: Bool,
+) -> SceneRenderData {
+  let SceneRenderData(passes, avatars, bubbles) = data
+  SceneRenderData(
+    passes,
+    avatars,
+    list.filter(bubbles, fn(bubble) {
+      bubble_visibility(bubble, now_ms, reduced_motion) != Expired
+    }),
+  )
+}
+
+fn choose_earliest(
+  current: Option(BubbleDeadline),
+  candidate: Option(BubbleDeadline),
+) -> Option(BubbleDeadline) {
+  case current, candidate {
+    None, value -> value
+    value, None -> value
+    Some(existing), Some(next) ->
+      case int.compare(existing.at_ms, next.at_ms) {
+        order.Gt -> Some(next)
+        _ -> Some(existing)
+      }
+  }
+}
+
 /// Lay out a bubble in logical viewport pixels.
 ///
 /// Explicit LF boundaries are split first, then each resulting line is
@@ -522,12 +632,77 @@ pub fn retain_bubbles(
 /// Serialize only the bounded, trusted render facts needed by the native
 /// boundary. The renderer still validates this JSON before using it.
 pub fn render_data_json(data: SceneRenderData) -> String {
-  let SceneRenderData(_, avatars, _) = data
+  render_data_json_for_viewport(data, 0, 0, 8192, 8192)
+}
+
+pub fn render_data_json_for_viewport(
+  data: SceneRenderData,
+  origin_x: Int,
+  origin_y: Int,
+  viewport_width: Int,
+  viewport_height: Int,
+) -> String {
+  let SceneRenderData(_, avatars, bubbles) = data
+  let rendered_bubbles =
+    bubbles
+    |> list.filter_map(fn(bubble) {
+      bubble_layout_json(
+        bubble,
+        avatars,
+        origin_x,
+        origin_y,
+        viewport_width,
+        viewport_height,
+      )
+    })
 
   json.object([
     #("avatars", json.array(avatars, avatar_json)),
+    #("bubbles", json.array(rendered_bubbles, fn(value) { value })),
   ])
   |> json.to_string
+}
+
+fn bubble_layout_json(
+  bubble: Bubble,
+  avatars: List(AvatarDraw),
+  origin_x: Int,
+  origin_y: Int,
+  viewport_width: Int,
+  viewport_height: Int,
+) -> Result(json.Json, Nil) {
+  case
+    list.find(avatars, fn(avatar) { avatar.connection_id == bubble.sender_id })
+  {
+    Error(_) -> Error(Nil)
+    Ok(AvatarDraw(_, _, WorldPoint(anchor_x, anchor_y), _, _, _, _)) -> {
+      let layout =
+        layout_bubble(
+          bubble,
+          ViewportPoint(anchor_x - origin_x, anchor_y - origin_y),
+          viewport_width,
+          viewport_height,
+        )
+      let BubbleLayout(lines, BubbleRect(left, top, width, height), _, _) =
+        layout
+      Ok(
+        json.object([
+          #("id", json.string(domain.message_id_to_string(bubble.message_id))),
+          #(
+            "sender_id",
+            json.string(domain.connection_id_to_string(bubble.sender_id)),
+          ),
+          #("lines", json.array(lines, json.string)),
+          #("left", json.int(left)),
+          #("top", json.int(top)),
+          #("width", json.int(width)),
+          #("height", json.int(height)),
+          #("started_at_ms", json.int(bubble.started_at_ms)),
+          #("expires_at_ms", json.int(bubble.expires_at_ms)),
+        ]),
+      )
+    }
+  }
 }
 
 fn avatar_json(avatar: AvatarDraw) -> json.Json {

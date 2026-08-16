@@ -48,6 +48,9 @@ fn scroll_chat_to_end_ffi() -> Nil
 @external(javascript, "./browser_ffi.mjs", "chat_log_near_bottom")
 fn chat_log_near_bottom_ffi() -> Bool
 
+@external(javascript, "./browser_ffi.mjs", "prefers_reduced_motion")
+fn prefers_reduced_motion_ffi() -> Bool
+
 /// Namespaces for timers owned by separate application concerns. A timer ID
 /// is opaque within its namespace, so reconnect cleanup cannot cancel a
 /// rate-limit timer that happens to use the same integer.
@@ -164,6 +167,10 @@ pub fn scroll_chat_to_end() -> Effect(a) {
 /// boundary returns only this Bool; DOM handles and scroll metrics stay there.
 pub fn chat_log_near_bottom() -> Bool {
   chat_log_near_bottom_ffi()
+}
+
+pub fn prefers_reduced_motion() -> Bool {
+  prefers_reduced_motion_ffi()
 }
 
 fn timer_kind_code(kind: TimerKind) -> Int {

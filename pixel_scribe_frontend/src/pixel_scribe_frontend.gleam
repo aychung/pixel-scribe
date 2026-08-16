@@ -9,7 +9,7 @@ import pixel_scribe_frontend/update
 import pixel_scribe_frontend/view as app_view
 
 type AppMsg {
-  BrowserReady(Option(String), Int)
+  BrowserReady(Option(String), Int, Bool)
   Application(update.Msg)
 }
 
@@ -32,6 +32,7 @@ fn startup_effect() -> effect.Effect(AppMsg) {
     dispatch(BrowserReady(
       browser.read_username_preference(),
       browser.page_seed(),
+      browser.prefers_reduced_motion(),
     ))
   })
 }
@@ -41,8 +42,11 @@ fn app_update(
   message: AppMsg,
 ) -> #(model.Model, effect.Effect(AppMsg)) {
   case message {
-    BrowserReady(preference, seed) -> #(
-      update.apply_browser_startup(model, preference, seed),
+    BrowserReady(preference, seed, reduced_motion) -> #(
+      update.set_reduced_motion(
+        update.apply_browser_startup(model, preference, seed),
+        reduced_motion,
+      ),
       effect.none(),
     )
     Application(message) -> {

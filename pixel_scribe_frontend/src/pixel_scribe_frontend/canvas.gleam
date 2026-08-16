@@ -70,13 +70,30 @@ pub fn render(
   data: scene.SceneRenderData,
   state: camera.Camera,
 ) -> Effect(Fact) {
-  let scene_json = scene.render_data_json(data)
   let camera_json = camera_json(state)
+  let scene_json = scene_json(data, state)
   effect.from(fn(dispatch) {
     render_canvas_ffi(scene_json, camera_json, fn(code) {
       dispatch(Failed(error_from_code(code)))
     })
   })
+}
+
+fn scene_json(data: scene.SceneRenderData, state: camera.Camera) -> String {
+  let camera.Camera(
+    camera.ViewportExtent(viewport_width, viewport_height),
+    scene.WorldPoint(origin_x, origin_y),
+    _,
+    _,
+    _,
+  ) = state
+  scene.render_data_json_for_viewport(
+    data,
+    origin_x,
+    origin_y,
+    viewport_width,
+    viewport_height,
+  )
 }
 
 fn camera_json(state: camera.Camera) -> String {

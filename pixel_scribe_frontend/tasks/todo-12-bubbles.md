@@ -25,7 +25,7 @@ to JavaScript.
     `test/pixel_scribe_frontend/scene_test.gleam`.
   - **Verify:** multiline/wrap/truncate/emoji/edge tests plus all Gleam checks.
   - **Depends:** Task 12A.
-- [ ] **Task 12C — Implement bubble timing and reduced motion.**
+- [x] **Task 12C — Implement bubble timing and reduced motion.**
   - **Done when:** each bubble is fully visible 5s then fades 1s, replacement
     invalidates stale timers, reduced motion removes fade, only the next required
     frame/timer is scheduled, and renderer sleeps after expiry.

@@ -720,6 +720,115 @@ test.describe("canvas FFI boundaries", () => {
     const colors = await canvasColorCounts(page);
     expect(colors["114,183,161"] ?? 0).toBe(0);
   });
+
+  test("rejects oversized bubble geometry and settles without an animation loop", async ({ page }) => {
+    const assertNoBrowserErrors = observeBrowserErrors(page);
+    await prepareDirectFfi(page);
+    await page.evaluate(async () => {
+      const errors: number[] = [];
+      Object.defineProperty(globalThis, "__canvasSceneErrors", {
+        configurable: true,
+        value: errors,
+      });
+      const probe = (globalThis as typeof globalThis & {
+        __canvasRafProbe: { hold: boolean; flush: (timestamp: number) => void };
+      }).__canvasRafProbe;
+      const ffi = await import("/__canvas_ffi_test__.mjs");
+      probe.hold = true;
+      const startedAt = Date.now() - 5_500;
+      ffi.render_canvas(JSON.stringify({
+        avatars: [
+          { id: "sender", username: "Ada", x: 160, y: 120, variant: 0, self: false, status: "online" },
+        ],
+        bubbles: [{
+          id: "fading",
+          sender_id: "sender",
+          lines: ["fading"],
+          left: 0,
+          top: 0,
+          width: 48,
+          height: 20,
+          started_at_ms: startedAt,
+          expires_at_ms: startedAt + 6_000,
+        }],
+      }), JSON.stringify({ origin_x: 0, origin_y: 0, viewport_width: 320, viewport_height: 720 }), () => {});
+      ffi.render_canvas(JSON.stringify({
+        avatars: [
+          { id: "sender", username: "Ada", x: 160, y: 120, variant: 0, self: false, status: "online" },
+        ],
+        bubbles: [{
+          id: "bubble",
+          sender_id: "sender",
+          lines: ["hello"],
+          left: 0,
+          top: 0,
+          width: 161,
+          height: 20,
+          started_at_ms: 10_000,
+          expires_at_ms: 16_000,
+        }],
+      }), JSON.stringify({ origin_x: 0, origin_y: 0, viewport_width: 320, viewport_height: 720 }),
+      (code) => errors.push(code));
+      probe.hold = false;
+      probe.flush(32);
+    });
+    await expect.poll(async () => (await rafMetrics(page)).pending).toBe(0);
+    const errors = await page.evaluate(() => (globalThis as typeof globalThis & {
+      __canvasSceneErrors: number[];
+    }).__canvasSceneErrors);
+    expect(errors).toEqual([6]);
+    const before = await rafMetrics(page);
+    await page.waitForTimeout(50);
+    const after = await rafMetrics(page);
+    expect(after.pending).toBe(0);
+    expect(after.requested).toBe(before.requested);
+    assertNoBrowserErrors();
+  });
+
+  test("rejects noncanonical bubble lifetime and settles without an animation loop", async ({ page }) => {
+    await prepareDirectFfi(page);
+    await page.evaluate(async () => {
+      const errors: number[] = [];
+      Object.defineProperty(globalThis, "__canvasSceneErrors", {
+        configurable: true,
+        value: errors,
+      });
+      const probe = (globalThis as typeof globalThis & {
+        __canvasRafProbe: { hold: boolean; flush: (timestamp: number) => void };
+      }).__canvasRafProbe;
+      const ffi = await import("/__canvas_ffi_test__.mjs");
+      probe.hold = true;
+      ffi.render_canvas(JSON.stringify({
+        avatars: [
+          { id: "sender", username: "Ada", x: 160, y: 120, variant: 0, self: false, status: "online" },
+        ],
+        bubbles: [{
+          id: "bubble",
+          sender_id: "sender",
+          lines: ["hello"],
+          left: 0,
+          top: 0,
+          width: 40,
+          height: 20,
+          started_at_ms: 10_000,
+          expires_at_ms: 16_001,
+        }],
+      }), JSON.stringify({ origin_x: 0, origin_y: 0, viewport_width: 320, viewport_height: 720 }),
+      (code) => errors.push(code));
+      probe.hold = false;
+      probe.flush(32);
+    });
+    await expect.poll(async () => (await rafMetrics(page)).pending).toBe(0);
+    const errors = await page.evaluate(() => (globalThis as typeof globalThis & {
+      __canvasSceneErrors: number[];
+    }).__canvasSceneErrors);
+    expect(errors).toEqual([6]);
+    const before = await rafMetrics(page);
+    await page.waitForTimeout(50);
+    const after = await rafMetrics(page);
+    expect(after.pending).toBe(0);
+    expect(after.requested).toBe(before.requested);
+  });
 });
 
 test.describe("canvas office scene", () => {

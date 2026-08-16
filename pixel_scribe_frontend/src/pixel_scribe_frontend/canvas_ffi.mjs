@@ -27,6 +27,9 @@ const MAX_ZOOM = 3;
 // opaque IDs that are longer than the server's generated IDs.
 const MAX_RENDER_STRING_LENGTH = 8192;
 const MAX_VIEWPORT_EXTENT = 8192;
+const BUBBLE_LIFETIME_MS = 6000;
+const BUBBLE_MAX_WIDTH = 160;
+const BUBBLE_MAX_HEIGHT = 44;
 
 let activeRenderer = null;
 
@@ -339,7 +342,67 @@ function validScene(payload) {
       status: avatar.status,
     });
   }
-  return { avatars };
+  const parsedBubbles = parsed.bubbles === undefined ? [] : parsed.bubbles;
+  if (!Array.isArray(parsedBubbles) || parsedBubbles.length > 50) return null;
+
+  const bubbles = [];
+  const bubbleIds = new Set();
+  for (const bubble of parsedBubbles) {
+    if (!bubble || typeof bubble !== "object") return null;
+    if (
+      typeof bubble.id !== "string" ||
+      bubble.id.length === 0 ||
+      bubble.id.length > MAX_RENDER_STRING_LENGTH ||
+      bubbleIds.has(bubble.id) ||
+      typeof bubble.sender_id !== "string" ||
+      bubble.sender_id.length === 0 ||
+      bubble.sender_id.length > MAX_RENDER_STRING_LENGTH ||
+      !Array.isArray(bubble.lines) ||
+      bubble.lines.length < 1 ||
+      bubble.lines.length > 3 ||
+      !bubble.lines.every((line) =>
+        typeof line === "string" &&
+        line.length <= MAX_RENDER_STRING_LENGTH &&
+        !/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u.test(line)
+      ) ||
+      !Number.isSafeInteger(bubble.left) ||
+      !Number.isSafeInteger(bubble.top) ||
+      !Number.isSafeInteger(bubble.width) ||
+      !Number.isSafeInteger(bubble.height) ||
+      bubble.left < 0 ||
+      bubble.top < 0 ||
+      bubble.left > MAX_VIEWPORT_EXTENT ||
+      bubble.top > MAX_VIEWPORT_EXTENT ||
+      bubble.width <= 0 ||
+      bubble.width > BUBBLE_MAX_WIDTH ||
+      bubble.width > MAX_VIEWPORT_EXTENT ||
+      bubble.height <= 0 ||
+      bubble.height > BUBBLE_MAX_HEIGHT ||
+      bubble.height > MAX_VIEWPORT_EXTENT ||
+      bubble.left + bubble.width > MAX_VIEWPORT_EXTENT ||
+      bubble.top + bubble.height > MAX_VIEWPORT_EXTENT ||
+      !Number.isSafeInteger(bubble.started_at_ms) ||
+      !Number.isSafeInteger(bubble.expires_at_ms) ||
+      bubble.started_at_ms > Number.MAX_SAFE_INTEGER - BUBBLE_LIFETIME_MS ||
+      bubble.expires_at_ms !== bubble.started_at_ms + BUBBLE_LIFETIME_MS
+    ) {
+      return null;
+    }
+    if (!ids.has(bubble.sender_id)) return null;
+    bubbleIds.add(bubble.id);
+    bubbles.push({
+      id: bubble.id,
+      senderId: bubble.sender_id,
+      lines: bubble.lines,
+      left: bubble.left,
+      top: bubble.top,
+      width: bubble.width,
+      height: bubble.height,
+      startedAt: bubble.started_at_ms,
+      expiresAt: bubble.expires_at_ms,
+    });
+  }
+  return { avatars, bubbles };
 }
 
 function validCamera(payload) {
@@ -456,7 +519,10 @@ function scheduleFrame(state) {
     state.lastFrameDelta =
       previous === null ? 0 : Math.min(100, Math.max(0, now - previous));
     drawCurrent(state);
-    if (state.animationActive) scheduleFrame(state);
+    if (state.animationActive) {
+      if (hasFadingBubble(state)) scheduleFrame(state);
+      else state.animationActive = false;
+    }
   });
 
   if (frame === FAILED) {
@@ -465,6 +531,15 @@ function scheduleFrame(state) {
     return;
   }
   if (state.pendingFrame === pendingSentinel) state.pendingFrame = frame;
+}
+
+function hasFadingBubble(state) {
+  if (!state.lastScene) return false;
+  const now = wallClockNow();
+  const reducedMotion = prefersReducedMotion();
+  return state.lastScene.bubbles.some((bubble) =>
+    bubbleVisibility(bubble, now, reducedMotion)?.fading === true,
+  );
 }
 
 function drawCurrent(state) {
@@ -481,7 +556,7 @@ function drawScene(state, scene) {
   const hasAvatars = avatars.status === "loaded";
 
   if (!camera || !hasTiles || !hasAvatars) {
-    drawFallback(state, scene.avatars, camera);
+    drawFallback(state, scene, camera);
     return;
   }
 
@@ -504,7 +579,7 @@ function drawScene(state, scene) {
     drawFurniture(context, camera, tiles.image);
     drawAvatars(context, camera, scene.avatars, avatars.image);
     drawNamesAndAccents(context, camera, scene.avatars);
-    drawSpeechBubbles(context, camera, scene.avatars);
+    drawSpeechBubbles(context, camera, scene);
     context.restore();
   } catch (_) {
     try {
@@ -512,7 +587,7 @@ function drawScene(state, scene) {
     } catch (_) {
       // A broken browser context cannot be repaired here.
     }
-    drawFallback(state, scene.avatars, camera);
+    drawFallback(state, scene, camera);
     reportSceneError(state, SCENE_UNAVAILABLE);
   }
 }
@@ -747,9 +822,79 @@ function drawNamesAndAccents(context, camera, avatars) {
   }
 }
 
-function drawSpeechBubbles(_context, _camera, _avatars) {
-  // The pass is deliberately empty until chat bubbles have a bounded scene
-  // contract; keeping it explicit preserves the renderer's draw order.
+function drawSpeechBubbles(context, camera, scene) {
+  const now = wallClockNow();
+  const reducedMotion = prefersReducedMotion();
+  for (const bubble of scene.bubbles) {
+    const visibility = bubbleVisibility(bubble, now, reducedMotion);
+    if (!visibility) continue;
+    const alpha = visibility.opacity / 100;
+    let saved = false;
+    try {
+      context.save();
+      saved = true;
+      context.globalAlpha = alpha;
+      context.fillStyle = "#f2ead8";
+      context.strokeStyle = "#18232a";
+      context.lineWidth = Math.max(1, camera.zoom);
+      const left = bubble.left * camera.zoom;
+      const top = bubble.top * camera.zoom;
+      const width = bubble.width * camera.zoom;
+      const height = bubble.height * camera.zoom;
+      context.fillRect(left, top, width, height);
+      context.strokeRect(left, top, width, height);
+      context.fillStyle = "#18232a";
+      context.font = `${12 * camera.zoom}px monospace`;
+      context.textAlign = "left";
+      for (let index = 0; index < bubble.lines.length; index += 1) {
+        context.fillText(
+          bubble.lines[index],
+          left + 8 * camera.zoom,
+          top + (index + 1) * 12 * camera.zoom,
+        );
+      }
+    } catch (_) {
+      // A failed bubble draw should not tear down the avatar scene.
+    } finally {
+      if (saved) {
+        try {
+          context.restore();
+        } catch (_) {
+          // A broken browser context cannot be repaired here.
+        }
+      }
+    }
+  }
+}
+
+function wallClockNow() {
+  try {
+    const value = Date.now();
+    return Number.isSafeInteger(value) ? value : 0;
+  } catch (_) {
+    return 0;
+  }
+}
+
+function prefersReducedMotion() {
+  try {
+    const browser = browserObject("window");
+    const matchMedia = readProperty(browser, "matchMedia");
+    if (typeof matchMedia !== "function") return false;
+    const media = call(browser, "matchMedia", "(prefers-reduced-motion: reduce)");
+    return media !== FAILED && readProperty(media, "matches") === true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function bubbleVisibility(bubble, now, reducedMotion) {
+  if (now >= bubble.expiresAt) return null;
+  if (reducedMotion || now < bubble.startedAt + 5000) {
+    return { opacity: 100, fading: false };
+  }
+  const progress = Math.max(0, Math.min(100, (now - bubble.startedAt - 5000) / 1000));
+  return { opacity: Math.max(1, Math.round(100 - progress * 100)), fading: true };
 }
 
 function avatarPosition(avatar, camera) {
@@ -771,7 +916,8 @@ function rectVisible(x, y, width, height, camera, viewportCoordinates = false) {
   return x < right && x + width > left && y < bottom && y + height > top;
 }
 
-function drawFallback(state, avatars, camera) {
+function drawFallback(state, scene, camera) {
+  const avatars = scene.avatars;
   const { width, height } = canvasSize(state);
   const fallbackCamera = camera ?? {
     originX: 0,
@@ -830,6 +976,7 @@ function drawFallback(state, avatars, camera) {
         2 * fallbackCamera.zoom,
       );
     }
+    drawSpeechBubbles(context, fallbackCamera, scene);
   } catch (_) {
     // The browser context remains best-effort; the finally block still closes
     // the save scope when any drawing operation fails.
@@ -1077,8 +1224,9 @@ export function render_canvas(sceneJson, cameraJson, onError) {
   const camera = validCamera(cameraJson);
   state.onSceneError = onError;
   if (!scene || !camera) {
-    state.lastScene = { avatars: [] };
+    state.lastScene = { avatars: [], bubbles: [] };
     state.camera = camera;
+    state.animationActive = false;
     scheduleFrame(state);
     reportSceneError(state, SCENE_UNAVAILABLE);
     return;
@@ -1087,5 +1235,6 @@ export function render_canvas(sceneJson, cameraJson, onError) {
   state.lastScene = scene;
   state.camera = camera;
   ensureAssets(state);
+  state.animationActive = hasFadingBubble(state);
   scheduleFrame(state);
 }
