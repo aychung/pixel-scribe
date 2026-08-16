@@ -1,4 +1,5 @@
 import gleam/option.{type Option, None}
+import pixel_scribe_frontend/camera
 import pixel_scribe_frontend/domain
 import pixel_scribe_frontend/placement
 import pixel_scribe_frontend/scene as office_scene
@@ -45,6 +46,7 @@ pub type SceneState {
     self_id: domain.ConnectionId,
     placements: List(placement.Placement),
     render_data: office_scene.SceneRenderData,
+    camera: Option(camera.Camera),
     renderer_feedback: Option(String),
   )
   Failed(reason: String)

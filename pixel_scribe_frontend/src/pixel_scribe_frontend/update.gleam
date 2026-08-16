@@ -1,5 +1,6 @@
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import pixel_scribe_frontend/camera
 import pixel_scribe_frontend/canvas
 import pixel_scribe_frontend/domain
 import pixel_scribe_frontend/model.{type Model}
@@ -51,7 +52,7 @@ pub type Command {
   FocusUsername
   FocusComposer
   ScrollChatToEnd
-  RenderScene(data: office_scene.SceneRenderData)
+  RenderScene(data: office_scene.SceneRenderData, camera: camera.Camera)
 }
 
 /// The pure transition seam used by state-machine work. Browser effects are
@@ -84,11 +85,15 @@ pub fn transition(model: Model, message: Msg) -> #(Model, List(Command)) {
         reader_was_near_bottom,
       )
     ServerDecodeFailed(generation) -> server_decode_failed(model, generation)
-    CanvasReady(_, _, _) -> {
-      let recovered = clear_renderer_feedback(model)
+    CanvasReady(width, height, _) -> {
+      let camera_ready = update_camera(model, width, height)
+      let recovered = clear_renderer_feedback(camera_ready)
       #(recovered, render_command(recovered))
     }
-    CanvasResized(_, _, _) -> #(model, [])
+    CanvasResized(width, height, _) -> {
+      let resized = update_camera(model, width, height)
+      #(resized, render_command(resized))
+    }
     CanvasFailed(reason) -> #(
       record_renderer_feedback(model, canvas_status(reason)),
       [],
@@ -818,11 +823,11 @@ fn reconcile_scene(model: Model, snapshot: model.RoomSnapshot) -> Model {
   }
   let previous = case model.scene {
     model.Placeholder -> []
-    model.Ready(_, _, placements, _, _) -> placements
+    model.Ready(_, _, placements, _, _, _) -> placements
     model.Failed(_) -> []
   }
   let renderer_feedback = case model.scene {
-    model.Ready(_, _, _, _, feedback) -> feedback
+    model.Ready(_, _, _, _, _, feedback) -> feedback
     model.Failed(reason) -> Some(reason)
     model.Placeholder -> None
   }
@@ -846,6 +851,8 @@ fn reconcile_scene(model: Model, snapshot: model.RoomSnapshot) -> Model {
           }
         })
       let render_data = office_scene.render_data(seed, snapshot.self_id, inputs)
+      let camera_state =
+        reconcile_camera(model.scene, snapshot.self_id, placements)
       model.Model(
         ..model,
         scene: model.Ready(
@@ -853,6 +860,7 @@ fn reconcile_scene(model: Model, snapshot: model.RoomSnapshot) -> Model {
           snapshot.self_id,
           placements,
           render_data,
+          camera_state,
           renderer_feedback,
         ),
       )
@@ -863,17 +871,25 @@ fn reconcile_scene(model: Model, snapshot: model.RoomSnapshot) -> Model {
 
 fn render_command(model: Model) -> List(Command) {
   case model.scene {
-    model.Ready(_, _, _, data, _) -> [RenderScene(data)]
+    model.Ready(_, _, _, data, Some(camera), _) -> [RenderScene(data, camera)]
     model.Placeholder | model.Failed(_) -> []
+    model.Ready(_, _, _, _, None, _) -> []
   }
 }
 
 fn record_renderer_feedback(model: Model, message: String) -> Model {
   case model.scene {
-    model.Ready(seed, self_id, placements, data, _) ->
+    model.Ready(seed, self_id, placements, data, camera_state, _) ->
       model.Model(
         ..model,
-        scene: model.Ready(seed, self_id, placements, data, Some(message)),
+        scene: model.Ready(
+          seed,
+          self_id,
+          placements,
+          data,
+          camera_state,
+          Some(message),
+        ),
       )
     model.Failed(_) | model.Placeholder ->
       model.Model(..model, scene: model.Failed(message))
@@ -882,11 +898,59 @@ fn record_renderer_feedback(model: Model, message: String) -> Model {
 
 fn clear_renderer_feedback(model: Model) -> Model {
   case model.scene {
-    model.Ready(seed, self_id, placements, data, Some(_)) ->
+    model.Ready(seed, self_id, placements, data, camera_state, Some(_)) ->
       model.Model(
         ..model,
-        scene: model.Ready(seed, self_id, placements, data, None),
+        scene: model.Ready(seed, self_id, placements, data, camera_state, None),
       )
+    _ -> model
+  }
+}
+
+fn reconcile_camera(
+  state: model.SceneState,
+  self_id: domain.ConnectionId,
+  placements: List(placement.Placement),
+) -> Option(camera.Camera) {
+  case state {
+    model.Ready(_, _, _, _, Some(existing), _) -> {
+      let camera.Camera(_, _, previous_self_id) = existing
+      let result = case previous_self_id == self_id {
+        True -> camera.update(existing, placements)
+        False -> camera.retarget(existing, self_id, placements)
+      }
+      case result {
+        Ok(value) -> Some(value)
+        Error(_) -> None
+      }
+    }
+    _ -> None
+  }
+}
+
+fn update_camera(model: Model, width: Int, height: Int) -> Model {
+  case model.scene {
+    model.Ready(seed, self_id, placements, data, current, feedback) -> {
+      let next = case current {
+        Some(existing) -> camera.resize(existing, width, height, placements)
+        None -> camera.new(width, height, self_id, placements)
+      }
+      case next {
+        Ok(camera_state) ->
+          model.Model(
+            ..model,
+            scene: model.Ready(
+              seed,
+              self_id,
+              placements,
+              data,
+              Some(camera_state),
+              feedback,
+            ),
+          )
+        Error(_) -> model
+      }
+    }
     _ -> model
   }
 }

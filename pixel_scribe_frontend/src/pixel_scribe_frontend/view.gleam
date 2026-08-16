@@ -182,7 +182,7 @@ fn office_stage(model: Model) -> Element(Msg) {
 
 fn canvas_status(model: Model) -> Element(Msg) {
   let message = case model.scene {
-    model.Ready(_, _, _, _, Some(reason)) -> reason
+    model.Ready(_, _, _, _, _, Some(reason)) -> reason
     model.Failed(reason) -> reason
     _ -> ""
   }

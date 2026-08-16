@@ -1,4 +1,6 @@
+import gleam/json
 import lustre/effect.{type Effect}
+import pixel_scribe_frontend/camera
 import pixel_scribe_frontend/scene
 
 /// The only canvas node owned by the application.
@@ -37,7 +39,11 @@ fn initialize_canvas_ffi(
 fn dispose_canvas_ffi() -> Nil
 
 @external(javascript, "./canvas_ffi.mjs", "render_canvas")
-fn render_canvas_ffi(scene_json: String, on_error: fn(Int) -> Nil) -> Nil
+fn render_canvas_ffi(
+  scene_json: String,
+  camera_json: String,
+  on_error: fn(Int) -> Nil,
+) -> Nil
 
 /// Initializes the one fixed renderer after Lustre has applied the latest
 /// view. The effect is safe to run again: the native boundary reuses the same
@@ -60,13 +66,32 @@ pub fn dispose() -> Effect(a) {
 
 /// Sends one trusted scene snapshot to the active renderer. The native side
 /// validates the JSON again because browser and FFI values are untrusted.
-pub fn render(data: scene.SceneRenderData) -> Effect(Fact) {
+pub fn render(
+  data: scene.SceneRenderData,
+  state: camera.Camera,
+) -> Effect(Fact) {
   let scene_json = scene.render_data_json(data)
+  let camera_json = camera_json(state)
   effect.from(fn(dispatch) {
-    render_canvas_ffi(scene_json, fn(code) {
+    render_canvas_ffi(scene_json, camera_json, fn(code) {
       dispatch(Failed(error_from_code(code)))
     })
   })
+}
+
+fn camera_json(state: camera.Camera) -> String {
+  let camera.Camera(
+    camera.ViewportExtent(width, height),
+    scene.WorldPoint(origin_x, origin_y),
+    _,
+  ) = state
+  json.object([
+    #("origin_x", json.int(origin_x)),
+    #("origin_y", json.int(origin_y)),
+    #("viewport_width", json.int(width)),
+    #("viewport_height", json.int(height)),
+  ])
+  |> json.to_string
 }
 
 fn error_from_code(code: Int) -> Error {

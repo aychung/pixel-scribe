@@ -50,9 +50,10 @@ fn scene_lifecycle(before: Model, after: Model) -> Effect(update.Msg) {
 
 fn render_current_scene(model: Model) -> Effect(update.Msg) {
   case model.scene {
-    model.Ready(_, _, _, data, _) ->
-      effect.map(canvas.render(data), canvas_fact_to_msg)
+    model.Ready(_, _, _, data, Some(camera), _) ->
+      effect.map(canvas.render(data, camera), canvas_fact_to_msg)
     model.Placeholder | model.Failed(_) -> effect.none()
+    model.Ready(_, _, _, _, None, _) -> effect.none()
   }
 }
 
@@ -93,8 +94,8 @@ fn interpret_command(command: update.Command) -> Effect(update.Msg) {
     update.FocusUsername -> browser.focus_username()
     update.FocusComposer -> browser.focus_composer()
     update.ScrollChatToEnd -> browser.scroll_chat_to_end()
-    update.RenderScene(data) ->
-      effect.map(canvas.render(data), canvas_fact_to_msg)
+    update.RenderScene(data, camera) ->
+      effect.map(canvas.render(data, camera), canvas_fact_to_msg)
   }
 }
 
