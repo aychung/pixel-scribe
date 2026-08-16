@@ -175,6 +175,16 @@ pub fn joined_workspace_exposes_empty_chat_and_enabled_composer_semantics_test()
   assert !string.contains(rendered, " disabled")
 }
 
+pub fn joined_workspace_describes_the_canvas_with_a_permanent_caption_test() {
+  let self_id = domain.connection_id_from_string("canvas-self")
+  let joined = joined_model([domain.Presence(self_id, "Ada")], self_id)
+  let rendered = element.to_string(view.view(joined))
+
+  assert string.contains(rendered, "Pixel-art office scene.")
+  assert string.contains(rendered, "aria-describedby=\"canvas-fallback\"")
+  assert !string.contains(rendered, "The office canvas will appear here.")
+}
+
 pub fn chat_log_renders_snapshot_messages_in_order_and_keys_by_message_id_test() {
   let self_id = domain.connection_id_from_string("chat-self")
   let messages = [

@@ -73,6 +73,10 @@ async function installRafProbe(page: Page) {
       fired: 0,
       pending: 0,
       clears: 0,
+      saves: 0,
+      restores: 0,
+      throwOnClip: false,
+      avatarSourceXs: [] as number[],
       images: [] as unknown[],
       clampValues: [] as number[][],
       flush(timestamp: number) {
@@ -128,11 +132,51 @@ async function installRafProbe(page: Page) {
     });
     const contextPrototype = CanvasRenderingContext2D.prototype;
     const nativeClearRect = contextPrototype.clearRect;
+    const nativeSave = contextPrototype.save;
+    const nativeRestore = contextPrototype.restore;
+    const nativeClip = contextPrototype.clip;
+    const nativeDrawImage = contextPrototype.drawImage;
     Object.defineProperty(contextPrototype, "clearRect", {
       configurable: true,
       value(this: CanvasRenderingContext2D, ...arguments_: Parameters<typeof nativeClearRect>) {
         probe.clears += 1;
         return nativeClearRect.apply(this, arguments_);
+      },
+    });
+    Object.defineProperty(contextPrototype, "save", {
+      configurable: true,
+      value(this: CanvasRenderingContext2D) {
+        probe.saves += 1;
+        return nativeSave.call(this);
+      },
+    });
+    Object.defineProperty(contextPrototype, "restore", {
+      configurable: true,
+      value(this: CanvasRenderingContext2D) {
+        probe.restores += 1;
+        return nativeRestore.call(this);
+      },
+    });
+    Object.defineProperty(contextPrototype, "clip", {
+      configurable: true,
+      value(this: CanvasRenderingContext2D) {
+        if (probe.throwOnClip) throw new Error("synthetic clip failure");
+        return nativeClip.call(this);
+      },
+    });
+    Object.defineProperty(contextPrototype, "drawImage", {
+      configurable: true,
+      value(this: CanvasRenderingContext2D, ...arguments_: unknown[]) {
+        const image = arguments_[0] as { kind?: string } | undefined;
+        if (image?.kind === "avatars") {
+          probe.avatarSourceXs.push(arguments_[1] as number);
+          return;
+        }
+        if (image?.kind === "tiles") return;
+        return nativeDrawImage.apply(
+          this,
+          arguments_ as Parameters<typeof nativeDrawImage>,
+        );
       },
     });
     Object.defineProperty(Math, "min", {
@@ -219,6 +263,20 @@ async function prepareDirectFfi(page: Page) {
       () => {},
     );
   });
+}
+
+async function renderDirectScene(page: Page, scene: unknown, camera: unknown) {
+  await page.evaluate(async ({ scene, camera }) => {
+    const probe = (globalThis as typeof globalThis & {
+      __canvasRafProbe: { hold: boolean; flush: (timestamp: number) => void };
+    }).__canvasRafProbe;
+    const ffi = await import("/__canvas_ffi_test__.mjs");
+    probe.hold = true;
+    ffi.render_canvas(JSON.stringify(scene), JSON.stringify(camera), () => {});
+    probe.hold = false;
+    probe.flush(16);
+  }, { scene, camera });
+  await expect.poll(async () => (await rafMetrics(page)).pending).toBe(0);
 }
 
 async function joinOffice(
@@ -353,6 +411,219 @@ async function canvasInk(page: Page) {
     return { opaque, colors: colors.size, width: canvas.width, height: canvas.height };
   });
 }
+
+async function canvasColorCounts(page: Page) {
+  return page.locator("#office-canvas").evaluate((element) => {
+    const canvas = element as HTMLCanvasElement;
+    const context = canvas.getContext("2d");
+    if (context === null) throw new Error("Canvas 2D context unavailable");
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    const counts: Record<string, number> = {};
+    for (let index = 0; index < pixels.length; index += 4) {
+      const key = `${pixels[index]},${pixels[index + 1]},${pixels[index + 2]}`;
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return counts;
+  });
+}
+
+test.describe("canvas FFI boundaries", () => {
+  test("uses the CSS content box for null-entry resize and live DPR measurements", async ({
+    page,
+  }) => {
+    await installFfiModule(page);
+    await page.addInitScript(() => {
+      class NoopResizeObserver {
+        constructor(_callback: ResizeObserverCallback) {}
+        observe(_target: Element, _options?: ResizeObserverOptions) {}
+        disconnect() {}
+      }
+      Object.defineProperty(globalThis, "ResizeObserver", {
+        configurable: true,
+        value: NoopResizeObserver,
+      });
+      const nativeMatchMedia = window.matchMedia.bind(window);
+      const mediaLists: MediaQueryList[] = [];
+      Object.defineProperty(globalThis, "__canvasMediaLists", {
+        configurable: true,
+        value: mediaLists,
+      });
+      Object.defineProperty(window, "matchMedia", {
+        configurable: true,
+        value: (query: string) => {
+          const media = nativeMatchMedia(query);
+          mediaLists.push(media);
+          return media;
+        },
+      });
+    });
+    await page.goto("/");
+    await page.evaluate(() => {
+      document.body.innerHTML =
+        '<canvas id="office-canvas" style="display:block;box-sizing:border-box;width:320px;height:200px;padding:3px 4px 5px 6px;border-style:solid;border-width:1px 2px 3px 4px"></canvas>';
+    });
+    const dimensions = await page.evaluate(async () => {
+      const events: Array<[number, number, number]> = [];
+      Object.defineProperty(globalThis, "__canvasSizeEvents", {
+        configurable: true,
+        value: events,
+      });
+      const ffi = await import("/__canvas_ffi_test__.mjs");
+      ffi.initialize_canvas(
+        (width, height, dpr) => events.push([width, height, dpr]),
+        (width, height, dpr) => events.push([width, height, dpr]),
+        () => {},
+      );
+      return { events, dpr: window.devicePixelRatio };
+    });
+    const dpr = dimensions.dpr;
+    expect(dimensions.events[0]).toEqual([304, 188, dpr]);
+
+    await page.evaluate(() => {
+      const canvas = document.getElementById("office-canvas") as HTMLCanvasElement;
+      canvas.style.width = "300px";
+      canvas.style.height = "180px";
+      window.dispatchEvent(new Event("resize"));
+    });
+    await expect
+      .poll(() => page.evaluate(() => (globalThis as typeof globalThis & {
+        __canvasSizeEvents: Array<[number, number, number]>;
+      }).__canvasSizeEvents))
+      .toContainEqual([284, 168, dpr]);
+
+    await page.evaluate(() => {
+      const canvas = document.getElementById("office-canvas") as HTMLCanvasElement;
+      canvas.style.width = "280px";
+      canvas.style.height = "160px";
+      const lists = (globalThis as typeof globalThis & {
+        __canvasMediaLists: MediaQueryList[];
+      }).__canvasMediaLists;
+      lists[lists.length - 1].dispatchEvent(new Event("change"));
+    });
+    await expect
+      .poll(() => page.evaluate(() => (globalThis as typeof globalThis & {
+        __canvasSizeEvents: Array<[number, number, number]>;
+      }).__canvasSizeEvents))
+      .toContainEqual([264, 148, dpr]);
+  });
+
+  test("balances fallback context state after success and injected drawing failure", async ({
+    page,
+  }) => {
+    await prepareDirectFfi(page);
+    await renderDirectScene(page, {
+      avatars: [{ id: "self", username: "Ada", x: 160, y: 120, variant: 0, self: true, status: "online" }],
+    }, { origin_x: 0, origin_y: 0, viewport_width: 320, viewport_height: 240 });
+    let counts = await page.evaluate(() => (globalThis as typeof globalThis & {
+      __canvasRafProbe: { saves: number; restores: number; throwOnClip: boolean };
+    }).__canvasRafProbe);
+    expect(counts.saves).toBe(counts.restores);
+
+    await page.evaluate(async () => {
+      const probe = (globalThis as typeof globalThis & {
+        __canvasRafProbe: { throwOnClip: boolean };
+      }).__canvasRafProbe;
+      probe.throwOnClip = true;
+    });
+    await renderDirectScene(page, { avatars: [] }, {
+      origin_x: 0,
+      origin_y: 0,
+      viewport_width: 320,
+      viewport_height: 240,
+    });
+    counts = await page.evaluate(() => (globalThis as typeof globalThis & {
+      __canvasRafProbe: { saves: number; restores: number; throwOnClip: boolean };
+    }).__canvasRafProbe);
+    expect(counts.saves).toBe(counts.restores);
+  });
+
+  test("draws fallback office geometry in addition to the backdrop and avatars", async ({
+    page,
+  }) => {
+    await prepareDirectFfi(page);
+    await renderDirectScene(page, {
+      avatars: [
+        { id: "self", username: "Ada", x: 96, y: 112, variant: 0, self: true, status: "online" },
+        { id: "peer", username: "Lin", x: 256, y: 208, variant: 1, self: false, status: "online" },
+      ],
+    }, { origin_x: 0, origin_y: 0, viewport_width: 320, viewport_height: 240 });
+    const colors = await canvasColorCounts(page);
+    expect(colors["47,76,77"] ?? 0).toBeGreaterThan(100);
+    expect(colors["111,135,144"] ?? 0).toBeGreaterThan(100);
+    expect(colors["139,94,74"] ?? 0).toBeGreaterThan(100);
+    expect(colors["243,211,106"] ?? 0).toBeGreaterThan(0);
+    expect(colors["114,183,161"] ?? 0).toBeGreaterThan(0);
+  });
+
+  test("draws equal-depth avatars in the already-sorted input order", async ({ page }) => {
+    await installRafProbe(page);
+    await installFfiModule(page);
+    await page.goto("/");
+    await page.evaluate(() => {
+      document.body.innerHTML =
+        '<canvas id="office-canvas" style="display:block;width:320px;height:240px"></canvas>';
+    });
+    await page.evaluate(async () => {
+      class FakeImage {
+        kind = "";
+        onload: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        set src(url: string) {
+          this.kind = url.includes("avatars") ? "avatars" : "tiles";
+          this.onload?.();
+        }
+      }
+      Object.defineProperty(globalThis, "Image", { configurable: true, value: FakeImage });
+      const ffi = await import("/__canvas_ffi_test__.mjs");
+      ffi.initialize_canvas(() => {}, () => {}, () => {});
+      ffi.render_canvas(
+        JSON.stringify({
+          avatars: [
+            { id: "z", username: "Zed", x: 160, y: 120, variant: 0, self: false, status: "online" },
+            { id: "ä", username: "Ada", x: 160, y: 120, variant: 1, self: false, status: "online" },
+          ],
+        }),
+        JSON.stringify({ origin_x: 0, origin_y: 0, viewport_width: 320, viewport_height: 240 }),
+        () => {},
+      );
+    });
+    await expect
+      .poll(() => page.evaluate(() => (globalThis as typeof globalThis & {
+        __canvasRafProbe: { avatarSourceXs: number[] };
+      }).__canvasRafProbe.avatarSourceXs))
+      .toEqual([0, 16]);
+  });
+
+  test("rejects unsorted avatar input and reports no avatar draw", async ({ page }) => {
+    await prepareDirectFfi(page);
+    await page.evaluate(async () => {
+      const errors: number[] = [];
+      Object.defineProperty(globalThis, "__canvasSceneErrors", {
+        configurable: true,
+        value: errors,
+      });
+      const probe = (globalThis as typeof globalThis & {
+        __canvasRafProbe: { hold: boolean; flush: (timestamp: number) => void };
+      }).__canvasRafProbe;
+      const ffi = await import("/__canvas_ffi_test__.mjs");
+      probe.hold = true;
+      ffi.render_canvas(JSON.stringify({ avatars: [
+        { id: "ä", username: "Ada", x: 160, y: 120, variant: 1, self: false, status: "online" },
+        { id: "z", username: "Zed", x: 160, y: 120, variant: 0, self: false, status: "online" },
+      ] }), JSON.stringify({ origin_x: 0, origin_y: 0, viewport_width: 320, viewport_height: 240 }),
+      (code) => errors.push(code));
+      probe.hold = false;
+      probe.flush(32);
+    });
+    await expect.poll(async () => (await rafMetrics(page)).pending).toBe(0);
+    const errors = await page.evaluate(() => (globalThis as typeof globalThis & {
+      __canvasSceneErrors: number[];
+    }).__canvasSceneErrors);
+    expect(errors).toEqual([6]);
+    const colors = await canvasColorCounts(page);
+    expect(colors["114,183,161"] ?? 0).toBe(0);
+  });
+});
 
 test.describe("canvas office scene", () => {
   test("coalesces dirty frames, clamps delay, and settles a static scene", async ({ page }) => {

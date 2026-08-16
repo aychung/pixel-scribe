@@ -172,7 +172,7 @@ fn office_stage(model: Model) -> Element(Msg) {
         ]),
         html.figcaption(
           [attribute.id("canvas-fallback"), attribute.class("canvas-fallback")],
-          [html.text("The office canvas will appear here.")],
+          [html.text("Pixel-art office scene.")],
         ),
         canvas_status(model),
       ]),

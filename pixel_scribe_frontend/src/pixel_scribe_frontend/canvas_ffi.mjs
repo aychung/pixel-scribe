@@ -85,24 +85,65 @@ function finiteDimension(value) {
   }
 }
 
+function cssLength(value) {
+  try {
+    if (typeof value === "number") return finiteDimension(value);
+    if (typeof value !== "string") return null;
+    const parsed = Number.parseFloat(value);
+    return finiteDimension(parsed);
+  } catch (_) {
+    return null;
+  }
+}
+
+function computedInset(style, first, second) {
+  const firstValue = cssLength(readProperty(style, first));
+  const secondValue = cssLength(readProperty(style, second));
+  return firstValue === null || secondValue === null ? null : firstValue + secondValue;
+}
+
 function contentBox(canvas, entry) {
   let rect = null;
   if (entry !== null && entry !== undefined) {
     rect = readProperty(entry, "contentRect");
     if (rect === FAILED) return null;
   }
+  let horizontalInset = 0;
+  let verticalInset = 0;
   if (!rect) {
     rect = call(canvas, "getBoundingClientRect");
     if (rect === FAILED) return null;
+    const style = call(globalThis, "getComputedStyle", canvas);
+    if (style === FAILED) return null;
+    const horizontal = computedInset(style, "borderLeftWidth", "borderRightWidth");
+    const vertical = computedInset(style, "borderTopWidth", "borderBottomWidth");
+    const horizontalPadding = computedInset(style, "paddingLeft", "paddingRight");
+    const verticalPadding = computedInset(style, "paddingTop", "paddingBottom");
+    if (
+      horizontal === null ||
+      vertical === null ||
+      horizontalPadding === null ||
+      verticalPadding === null
+    ) {
+      return null;
+    }
+    horizontalInset = horizontal + horizontalPadding;
+    verticalInset = vertical + verticalPadding;
   }
 
   const widthValue = readProperty(rect, "width");
   const heightValue = readProperty(rect, "height");
   if (widthValue === FAILED || heightValue === FAILED) return null;
 
-  const width = finiteDimension(widthValue);
-  const height = finiteDimension(heightValue);
+  const width = finiteDimension(widthValue - horizontalInset);
+  const height = finiteDimension(heightValue - verticalInset);
   return width === null || height === null ? null : { width, height };
+}
+
+function rawStringCompare(left, right) {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
 }
 
 function report(state, code) {
@@ -235,6 +276,7 @@ function validScene(payload) {
 
   const avatars = [];
   const ids = new Set();
+  let previous = null;
   for (const avatar of parsed.avatars) {
     if (!avatar || typeof avatar !== "object") return null;
     if (
@@ -268,7 +310,15 @@ function validScene(payload) {
     ) {
       return null;
     }
+    if (
+      previous !== null &&
+      (avatar.y < previous.y ||
+        (avatar.y === previous.y && rawStringCompare(avatar.id, previous.id) < 0))
+    ) {
+      return null;
+    }
     ids.add(avatar.id);
+    previous = { y: avatar.y, id: avatar.id };
     avatars.push({
       id: avatar.id,
       username: avatar.username,
@@ -509,8 +559,9 @@ function drawFurniture(context, camera, tiles) {
 }
 
 function drawAvatars(context, camera, avatars, image) {
-  const sorted = [...avatars].sort((left, right) => left.y - right.y || left.id.localeCompare(right.id));
-  for (const avatar of sorted) {
+  // Gleam supplies this list in stable Y/connection-ID order. Re-sorting here
+  // would make draw order depend on the browser's locale.
+  for (const avatar of avatars) {
     const { x, y } = avatarPosition(avatar, camera);
     if (!rectVisible(x - 8, y - 16, TILE_SIZE, TILE_SIZE, camera, true)) continue;
     context.globalAlpha = avatar.status === "reconnecting" ? 0.55 : 1;
@@ -581,17 +632,20 @@ function drawFallback(state, avatars, camera) {
     viewportWidth: width,
     viewportHeight: height,
   };
+  let saved = false;
   try {
     const context = state.context;
     context.save();
+    saved = true;
     context.imageSmoothingEnabled = false;
     context.clearRect(0, 0, width, height);
     context.fillStyle = "#18232a";
     context.fillRect(0, 0, width, height);
-    context.save();
     context.beginPath();
     context.rect(0, 0, fallbackCamera.viewportWidth, fallbackCamera.viewportHeight);
     context.clip();
+    drawFallbackFloorAndWalls(context, fallbackCamera);
+    drawFurniture(context, fallbackCamera, null);
     for (const avatar of avatars) {
       const { x, y } = avatarPosition(avatar, fallbackCamera);
       if (!rectVisible(x - 6, y - 14, 12, 14, fallbackCamera, true)) continue;
@@ -601,13 +655,48 @@ function drawFallback(state, avatars, camera) {
       context.fillRect(x - 4, y - 11, 2, 2);
       context.fillRect(x + 2, y - 11, 2, 2);
     }
-    context.restore();
   } catch (_) {
-    try {
-      state.context.restore();
-    } catch (_) {
-      // The browser context remains unavailable.
+    // The browser context remains best-effort; the finally block still closes
+    // the save scope when any drawing operation fails.
+  } finally {
+    if (saved) {
+      try {
+        state.context.restore();
+      } catch (_) {
+        // A broken browser context cannot be repaired here.
+      }
     }
+  }
+}
+
+function drawFallbackFloorAndWalls(context, camera) {
+  const range = visibleWorldRange(camera);
+  const startX = Math.floor(range.left / TILE_SIZE) * TILE_SIZE;
+  const startY = Math.floor(range.top / TILE_SIZE) * TILE_SIZE;
+  const endX = Math.ceil(range.right / TILE_SIZE) * TILE_SIZE;
+  const endY = Math.ceil(range.bottom / TILE_SIZE) * TILE_SIZE;
+
+  for (let worldY = startY; worldY < endY; worldY += TILE_SIZE) {
+    for (let worldX = startX; worldX < endX; worldX += TILE_SIZE) {
+      const x = worldX - camera.originX;
+      const y = worldY - camera.originY;
+      context.fillStyle = (worldX / TILE_SIZE + worldY / TILE_SIZE) % 2 === 0
+        ? "#2f4c4d"
+        : "#355b5a";
+      context.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+    }
+  }
+
+  context.fillStyle = "#6f8790";
+  for (let worldX = startX; worldX < endX; worldX += TILE_SIZE) {
+    const x = worldX - camera.originX;
+    context.fillRect(x, -camera.originY, TILE_SIZE, TILE_SIZE * 2);
+    context.fillRect(x, WORLD_HEIGHT - TILE_SIZE * 2 - camera.originY, TILE_SIZE, TILE_SIZE * 2);
+  }
+  for (let worldY = startY; worldY < endY; worldY += TILE_SIZE) {
+    const y = worldY - camera.originY;
+    context.fillRect(-camera.originX, y, TILE_SIZE * 2, TILE_SIZE);
+    context.fillRect(WORLD_WIDTH - TILE_SIZE * 2 - camera.originX, y, TILE_SIZE * 2, TILE_SIZE);
   }
 }
 
