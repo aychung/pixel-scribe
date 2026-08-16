@@ -34,7 +34,7 @@ to JavaScript.
     `test/pixel_scribe_frontend/scene_test.gleam`.
   - **Verify:** fixed-clock lifecycle tests plus all Gleam checks.
   - **Depends:** Task 12B.
-- [ ] **Task 12D — Prove bubbles in the browser.**
+- [x] **Task 12D — Prove bubbles in the browser.**
   - **Done when:** routed accepted messages show full multiline DOM text and the
     correct owned canvas bubble before/during/after fade; replace, leave, reduced
     motion, and snapshot-no-replay cases pass without duplicate announcements.
@@ -62,23 +62,23 @@ to JavaScript.
 
 **Acceptance criteria:**
 
-- [ ] Live accepted messages create one correctly owned bubble by sender ID;
+- [x] Live accepted messages create one correctly owned bubble by sender ID;
   duplicate events do not, newer messages replace, leave clears, and snapshots
   do not replay bubbles.
-- [ ] Wrapping, three-line truncation, edge clamping, 5s/1s lifecycle, stale timer,
+- [x] Wrapping, three-line truncation, edge clamping, 5s/1s lifecycle, stale timer,
   reduced-motion, and full-DOM-text invariants have deterministic tests.
-- [ ] Renderer sleeps after the final bubble expires and never requires a
+- [x] Renderer sleeps after the final bubble expires and never requires a
   permanent loop for fixed avatars.
 
 **Verification:**
 
-- [ ] Fixed-clock Gleam scene/update tests fail first, then pass.
-- [ ] `gleam format --check src test`
-- [ ] `gleam build`
-- [ ] `gleam test`
-- [ ] Playwright routed message produces both full DOM log text and approved
+- [x] Fixed-clock Gleam scene/update tests fail first, then pass.
+- [x] `gleam format --check src test`
+- [x] `gleam build`
+- [x] `gleam test`
+- [x] Playwright routed message produces both full DOM log text and approved
   canvas bubble snapshots before fade, during fade, and after expiry.
-- [ ] `bunx playwright test e2e/bubbles.spec.ts --project=chromium --reporter=line --workers=1`
+- [x] `bunx playwright test e2e/bubbles.spec.ts --project=chromium --reporter=line --workers=1`
 
 **Dependencies:** Tasks 8 and 11.
 

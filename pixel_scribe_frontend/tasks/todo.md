@@ -31,7 +31,7 @@ a later task merely because a nearby file is already open.
 
 - [x] [Task 10 — Office world and camera](todo-10-office.md)
 - [x] [Task 11 — Canvas renderer and assets](todo-11-canvas.md)
-- [ ] [Task 12 — Temporary speech bubbles](todo-12-bubbles.md)
+- [x] [Task 12 — Temporary speech bubbles](todo-12-bubbles.md)
 - [ ] [Visual direction checkpoint](todo-checkpoint-visual-direction.md)
 
 ## Release readiness
