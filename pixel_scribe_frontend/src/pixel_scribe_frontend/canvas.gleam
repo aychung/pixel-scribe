@@ -1,4 +1,5 @@
 import lustre/effect.{type Effect}
+import pixel_scribe_frontend/scene
 
 /// The only canvas node owned by the application.
 pub const canvas_id = "office-canvas"
@@ -20,6 +21,8 @@ pub type Error {
   ResizeObserverUnavailable
   GeometryUnavailable
   InitializationFailed
+  AssetUnavailable
+  SceneUnavailable
   Unknown
 }
 
@@ -32,6 +35,9 @@ fn initialize_canvas_ffi(
 
 @external(javascript, "./canvas_ffi.mjs", "dispose_canvas")
 fn dispose_canvas_ffi() -> Nil
+
+@external(javascript, "./canvas_ffi.mjs", "render_canvas")
+fn render_canvas_ffi(scene_json: String, on_error: fn(Int) -> Nil) -> Nil
 
 /// Initializes the one fixed renderer after Lustre has applied the latest
 /// view. The effect is safe to run again: the native boundary reuses the same
@@ -52,6 +58,17 @@ pub fn dispose() -> Effect(a) {
   effect.from(fn(_dispatch) { dispose_canvas_ffi() })
 }
 
+/// Sends one trusted scene snapshot to the active renderer. The native side
+/// validates the JSON again because browser and FFI values are untrusted.
+pub fn render(data: scene.SceneRenderData) -> Effect(Fact) {
+  let scene_json = scene.render_data_json(data)
+  effect.from(fn(dispatch) {
+    render_canvas_ffi(scene_json, fn(code) {
+      dispatch(Failed(error_from_code(code)))
+    })
+  })
+}
+
 fn error_from_code(code: Int) -> Error {
   case code {
     0 -> CanvasUnavailable
@@ -59,6 +76,8 @@ fn error_from_code(code: Int) -> Error {
     2 -> ResizeObserverUnavailable
     3 -> GeometryUnavailable
     4 -> InitializationFailed
+    5 -> AssetUnavailable
+    6 -> SceneUnavailable
     _ -> Unknown
   }
 }

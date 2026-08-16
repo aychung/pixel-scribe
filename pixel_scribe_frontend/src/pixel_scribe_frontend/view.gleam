@@ -129,7 +129,7 @@ fn joined_workspace(
   snapshot: model.RoomSnapshot,
 ) -> Element(Msg) {
   html.div([attribute.class("workspace-shell joined-workspace")], [
-    office_stage(),
+    office_stage(model),
     html.aside(
       [
         attribute.class("chat-rail"),
@@ -149,7 +149,7 @@ fn joined_workspace(
   ])
 }
 
-fn office_stage() -> Element(Msg) {
+fn office_stage(model: Model) -> Element(Msg) {
   html.section(
     [
       attribute.class("office-stage"),
@@ -174,9 +174,21 @@ fn office_stage() -> Element(Msg) {
           [attribute.id("canvas-fallback"), attribute.class("canvas-fallback")],
           [html.text("The office canvas will appear here.")],
         ),
+        canvas_status(model),
       ]),
     ],
   )
+}
+
+fn canvas_status(model: Model) -> Element(Msg) {
+  let message = case model.scene {
+    model.Ready(_, _, _, _, Some(reason)) -> reason
+    model.Failed(reason) -> reason
+    _ -> ""
+  }
+  html.p([attribute.id("canvas-status"), attribute.aria_live("polite")], [
+    html.text(message),
+  ])
 }
 
 fn status_region(model: Model, stale: Bool) -> Element(Msg) {

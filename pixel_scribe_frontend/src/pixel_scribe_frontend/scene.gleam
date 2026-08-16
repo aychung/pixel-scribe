@@ -1,4 +1,5 @@
 import gleam/int
+import gleam/json
 import gleam/list
 import gleam/order
 import gleam/string
@@ -265,6 +266,45 @@ pub fn render_data(
     passes: draw_passes,
     avatars: list.sort(draws, by: compare_avatar_draws),
   )
+}
+
+/// Serialize only the bounded, trusted render facts needed by the native
+/// boundary. The renderer still validates this JSON before using it.
+pub fn render_data_json(data: SceneRenderData) -> String {
+  let SceneRenderData(_, avatars) = data
+
+  json.object([
+    #("avatars", json.array(avatars, avatar_json)),
+  ])
+  |> json.to_string
+}
+
+fn avatar_json(avatar: AvatarDraw) -> json.Json {
+  let AvatarDraw(
+    connection_id,
+    username,
+    WorldPoint(x, y),
+    _,
+    AvatarVariant(variant),
+    is_self,
+    status,
+  ) = avatar
+  json.object([
+    #("id", json.string(domain.connection_id_to_string(connection_id))),
+    #("username", json.string(username)),
+    #("x", json.int(x)),
+    #("y", json.int(y)),
+    #("variant", json.int(variant)),
+    #("self", json.bool(is_self)),
+    #("status", json.string(status_name(status))),
+  ])
+}
+
+fn status_name(status: AvatarStatus) -> String {
+  case status {
+    Online -> "online"
+    Reconnecting -> "reconnecting"
+  }
 }
 
 const avatar_variant_count = 4

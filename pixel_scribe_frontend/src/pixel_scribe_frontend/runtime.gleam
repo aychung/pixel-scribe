@@ -21,7 +21,8 @@ pub fn update(
   let #(updated, commands) = update.transition(model, message)
   let command_effect = interpret_commands(commands)
   let canvas_effect = canvas_lifecycle(model, updated)
-  #(updated, effect.batch([command_effect, canvas_effect]))
+  let scene_effect = scene_lifecycle(model, updated)
+  #(updated, effect.batch([command_effect, canvas_effect, scene_effect]))
 }
 
 fn canvas_lifecycle(before: Model, after: Model) -> Effect(update.Msg) {
@@ -36,6 +37,22 @@ fn canvas_visible(model: Model) -> Bool {
   case model.room_snapshot {
     Some(_) -> True
     None -> False
+  }
+}
+
+fn scene_lifecycle(before: Model, after: Model) -> Effect(update.Msg) {
+  case before.room_snapshot, after.room_snapshot {
+    Some(_), Some(_) if before.scene != after.scene ->
+      render_current_scene(after)
+    _, _ -> effect.none()
+  }
+}
+
+fn render_current_scene(model: Model) -> Effect(update.Msg) {
+  case model.scene {
+    model.Ready(_, _, _, data, _) ->
+      effect.map(canvas.render(data), canvas_fact_to_msg)
+    model.Placeholder | model.Failed(_) -> effect.none()
   }
 }
 
@@ -76,7 +93,8 @@ fn interpret_command(command: update.Command) -> Effect(update.Msg) {
     update.FocusUsername -> browser.focus_username()
     update.FocusComposer -> browser.focus_composer()
     update.ScrollChatToEnd -> browser.scroll_chat_to_end()
-    update.RenderScene -> effect.none()
+    update.RenderScene(data) ->
+      effect.map(canvas.render(data), canvas_fact_to_msg)
   }
 }
 

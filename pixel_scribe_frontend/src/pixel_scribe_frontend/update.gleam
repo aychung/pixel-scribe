@@ -3,8 +3,10 @@ import gleam/option.{type Option, None, Some}
 import pixel_scribe_frontend/canvas
 import pixel_scribe_frontend/domain
 import pixel_scribe_frontend/model.{type Model}
+import pixel_scribe_frontend/placement
 import pixel_scribe_frontend/protocol
 import pixel_scribe_frontend/reconnect
+import pixel_scribe_frontend/scene as office_scene
 import pixel_scribe_frontend/validation
 
 /// Trusted application inputs and decoded server events. Raw browser payloads
@@ -49,7 +51,7 @@ pub type Command {
   FocusUsername
   FocusComposer
   ScrollChatToEnd
-  RenderScene
+  RenderScene(data: office_scene.SceneRenderData)
 }
 
 /// The pure transition seam used by state-machine work. Browser effects are
@@ -82,9 +84,15 @@ pub fn transition(model: Model, message: Msg) -> #(Model, List(Command)) {
         reader_was_near_bottom,
       )
     ServerDecodeFailed(generation) -> server_decode_failed(model, generation)
-    CanvasReady(_, _, _) -> #(model, [])
+    CanvasReady(_, _, _) -> {
+      let recovered = clear_renderer_feedback(model)
+      #(recovered, render_command(recovered))
+    }
     CanvasResized(_, _, _) -> #(model, [])
-    CanvasFailed(_) -> #(model, [])
+    CanvasFailed(reason) -> #(
+      record_renderer_feedback(model, canvas_status(reason)),
+      [],
+    )
     RateLimitTimerFired(generation, deadline_ms) ->
       rate_limit_timer_fired(model, generation, deadline_ms)
     ReconnectTimerFired(generation, timer_id) ->
@@ -345,7 +353,7 @@ fn dispatch_server_event(
                   latest_unique_messages(messages),
                   False,
                 )
-              #(
+              let updated_model =
                 model.Model(
                   ..model,
                   phase: model.Joined(generation, self_id),
@@ -353,7 +361,9 @@ fn dispatch_server_event(
                   reconnect_attempt: 0,
                   reconnect_timer: None,
                   connection_feedback: None,
-                ),
+                )
+              #(
+                reconcile_scene(updated_model, snapshot),
                 cancel_reconnect(model),
               )
             }
@@ -373,7 +383,12 @@ fn dispatch_server_event(
               ..snapshot,
               participants: upsert_presence(snapshot.participants, user),
             )
-          #(model.Model(..model, room_snapshot: Some(updated_snapshot)), [])
+          let updated_model =
+            reconcile_scene(
+              model.Model(..model, room_snapshot: Some(updated_snapshot)),
+              updated_snapshot,
+            )
+          #(updated_model, [])
         }
         _, _ -> #(model, [])
       }
@@ -398,7 +413,15 @@ fn dispatch_server_event(
                 connection_id,
               ),
             )
-          #(model.Model(..model, room_snapshot: Some(updated_snapshot)), [])
+          let updated_model =
+            reconcile_scene(
+              model.Model(..model, room_snapshot: Some(updated_snapshot)),
+              updated_snapshot,
+            )
+          case updated_snapshot.participants == snapshot.participants {
+            True -> #(model, [])
+            False -> #(updated_model, [])
+          }
         }
         _, _ -> #(model, [])
       }
@@ -786,6 +809,101 @@ fn append_message(
   messages
   |> list.append([message])
   |> latest_50
+}
+
+fn reconcile_scene(model: Model, snapshot: model.RoomSnapshot) -> Model {
+  let seed = case model.placement_seed {
+    Some(value) -> value
+    None -> 0
+  }
+  let previous = case model.scene {
+    model.Placeholder -> []
+    model.Ready(_, _, placements, _, _) -> placements
+    model.Failed(_) -> []
+  }
+  let renderer_feedback = case model.scene {
+    model.Ready(_, _, _, _, feedback) -> feedback
+    model.Failed(reason) -> Some(reason)
+    model.Placeholder -> None
+  }
+
+  case placement.reconcile(seed, previous, snapshot.participants) {
+    Ok(placements) -> {
+      let inputs =
+        list.filter_map(snapshot.participants, fn(presence) {
+          let domain.Presence(connection_id, username) = presence
+          case placement.anchor_for(connection_id, placements) {
+            Ok(anchor) -> {
+              let office_scene.Anchor(_, position) = anchor
+              Ok(office_scene.AvatarInput(
+                connection_id: connection_id,
+                username: username,
+                bottom_anchor: position,
+                status: office_scene.Online,
+              ))
+            }
+            Error(_) -> Error(Nil)
+          }
+        })
+      let render_data = office_scene.render_data(seed, snapshot.self_id, inputs)
+      model.Model(
+        ..model,
+        scene: model.Ready(
+          seed,
+          snapshot.self_id,
+          placements,
+          render_data,
+          renderer_feedback,
+        ),
+      )
+    }
+    Error(_) -> model.Model(..model, scene: model.Placeholder)
+  }
+}
+
+fn render_command(model: Model) -> List(Command) {
+  case model.scene {
+    model.Ready(_, _, _, data, _) -> [RenderScene(data)]
+    model.Placeholder | model.Failed(_) -> []
+  }
+}
+
+fn record_renderer_feedback(model: Model, message: String) -> Model {
+  case model.scene {
+    model.Ready(seed, self_id, placements, data, _) ->
+      model.Model(
+        ..model,
+        scene: model.Ready(seed, self_id, placements, data, Some(message)),
+      )
+    model.Failed(_) | model.Placeholder ->
+      model.Model(..model, scene: model.Failed(message))
+  }
+}
+
+fn clear_renderer_feedback(model: Model) -> Model {
+  case model.scene {
+    model.Ready(seed, self_id, placements, data, Some(_)) ->
+      model.Model(
+        ..model,
+        scene: model.Ready(seed, self_id, placements, data, None),
+      )
+    _ -> model
+  }
+}
+
+fn canvas_status(reason: canvas.Error) -> String {
+  case reason {
+    canvas.AssetUnavailable ->
+      "Office art unavailable; showing fallback geometry."
+    canvas.SceneUnavailable ->
+      "Office scene unavailable; showing fallback geometry."
+    canvas.CanvasUnavailable -> "Office canvas unavailable."
+    canvas.ContextUnavailable -> "Office drawing is unavailable."
+    canvas.ResizeObserverUnavailable -> "Office resizing is unavailable."
+    canvas.GeometryUnavailable -> "Office layout could not be measured."
+    canvas.InitializationFailed -> "Office drawing could not start."
+    canvas.Unknown -> "Office drawing reported an unknown problem."
+  }
 }
 
 fn latest_unique_messages(

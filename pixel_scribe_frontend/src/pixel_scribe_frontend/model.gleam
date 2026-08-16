@@ -1,5 +1,7 @@
 import gleam/option.{type Option, None}
 import pixel_scribe_frontend/domain
+import pixel_scribe_frontend/placement
+import pixel_scribe_frontend/scene as office_scene
 
 /// The user-visible connection phases. A generation identifies one socket
 /// lifetime; attempts count reconnects and reset only after a room snapshot.
@@ -38,6 +40,14 @@ pub type ReconnectTimer {
 
 pub type SceneState {
   Placeholder
+  Ready(
+    seed: Int,
+    self_id: domain.ConnectionId,
+    placements: List(placement.Placement),
+    render_data: office_scene.SceneRenderData,
+    renderer_feedback: Option(String),
+  )
+  Failed(reason: String)
 }
 
 pub type Model {
