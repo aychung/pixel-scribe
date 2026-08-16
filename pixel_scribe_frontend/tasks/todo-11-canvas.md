@@ -53,7 +53,7 @@ an original or explicitly licensed top-down office/avatar baseline for review.
   - **Verify:** fixed-seed DPR 1/2 tests for center invariance, resize, peer churn,
     reconnect target, and edge backdrop.
   - **Depends:** Task 11C.
-- [ ] **Task 11E — Implement dirty-frame scheduling.**
+- [x] **Task 11E — Implement dirty-frame scheduling.**
   - **Done when:** frames run only for init/resize/asset-ready/dirty/active-animation
     causes, delayed delta clamps to 100ms, a static scene reaches zero pending
     frames, and disposal cannot schedule another frame.
