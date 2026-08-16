@@ -40,7 +40,7 @@ an original or explicitly licensed top-down office/avatar baseline for review.
   - **Verify:** all Gleam checks, production bundle, and focused fallback/layer
     browser assertions.
   - **Depends:** Task 11B.
-- [ ] **Task 11D — Apply camera crop, DPR scaling, and culling.**
+- [x] **Task 11D — Apply camera crop, DPR scaling, and culling.**
   - **Done when:** world-to-viewport transform precedes DPR scaling, smoothing is
     off, device geometry is rounded, crop/backdrop behavior is correct at edges,
     and offscreen entities are culled without leaving semantic DOM.
