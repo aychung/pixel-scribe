@@ -14,7 +14,7 @@ an original or explicitly licensed top-down office/avatar baseline for review.
   - **Verify:** inspect every asset against the provenance record and confirm the
     repository may redistribute it; no renderer code changes in this unit.
   - **Depends:** Task 10D and the real-time UI checkpoint.
-- [ ] **Task 11B — Implement canvas initialization, resize, and disposal.**
+- [x] **Task 11B — Implement canvas initialization, resize, and disposal.**
   - **Done when:** typed effects initialize one fixed canvas renderer, observe its
     content box/DPR, dispatch ready/resize/error, and dispose observers/listeners/
     frames/image references idempotently.
