@@ -9,6 +9,12 @@ const ASSET_UNAVAILABLE = 5;
 const SCENE_UNAVAILABLE = 6;
 const FAILED = Symbol("canvas-ffi-failed");
 const TILE_SIZE = 16;
+// The v2 floor art occupies the inner 10x11 pixels of its atlas cells. Crop
+// the navy atlas padding before scaling so repeated floor tiles meet cleanly.
+const FLOOR_SOURCE_X_INSET = 2;
+const FLOOR_SOURCE_Y_INSET = 5;
+const FLOOR_SOURCE_WIDTH = 10;
+const FLOOR_SOURCE_HEIGHT = 11;
 const WORLD_WIDTH = 1536;
 const WORLD_HEIGHT = 1024;
 const TILE_URL = "/pixel-art/office-tiles-v2-16.png";
@@ -531,13 +537,13 @@ function drawFloorAndWalls(context, camera, tiles) {
       const x = (worldX - camera.originX) * camera.zoom;
       const y = (worldY - camera.originY) * camera.zoom;
       const floorColumn =
-        (worldX / TILE_SIZE + worldY / TILE_SIZE) % 5 === 0 ? 1 : 0;
+        (worldX / TILE_SIZE + worldY / TILE_SIZE) % 5 === 0 ? 3 : 2;
       context.drawImage(
         tiles,
-        floorColumn * TILE_SIZE,
-        TILE_SIZE,
-        TILE_SIZE,
-        TILE_SIZE,
+        floorColumn * TILE_SIZE + FLOOR_SOURCE_X_INSET,
+        TILE_SIZE + FLOOR_SOURCE_Y_INSET,
+        FLOOR_SOURCE_WIDTH,
+        FLOOR_SOURCE_HEIGHT,
         x,
         y,
         TILE_SIZE * camera.zoom,

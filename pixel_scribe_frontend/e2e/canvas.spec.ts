@@ -78,6 +78,7 @@ async function installRafProbe(page: Page) {
       throwOnClip: false,
       avatarSourceXs: [] as number[],
       avatarSourceYs: [] as number[],
+      tileSourceRects: [] as Array<[number, number, number, number]>,
       images: [] as unknown[],
       clampValues: [] as number[][],
       flush(timestamp: number) {
@@ -174,7 +175,15 @@ async function installRafProbe(page: Page) {
           probe.avatarSourceYs.push(arguments_[2] as number);
           return;
         }
-        if (image?.kind === "tiles") return;
+        if (image?.kind === "tiles") {
+          probe.tileSourceRects.push([
+            arguments_[1] as number,
+            arguments_[2] as number,
+            arguments_[3] as number,
+            arguments_[4] as number,
+          ]);
+          return;
+        }
         return nativeDrawImage.apply(
           this,
           arguments_ as Parameters<typeof nativeDrawImage>,
@@ -635,6 +644,51 @@ test.describe("canvas FFI boundaries", () => {
         __canvasRafProbe: { avatarSourceYs: number[] };
       }).__canvasRafProbe.avatarSourceYs))
       .toEqual([48]);
+  });
+
+  test("samples gutter-free floor crops from the atlas", async ({ page }) => {
+    await installRafProbe(page);
+    await installFfiModule(page);
+    await page.goto("/");
+    await page.evaluate(() => {
+      document.body.innerHTML =
+        '<canvas id="office-canvas" style="display:block;width:320px;height:240px"></canvas>';
+    });
+    await page.evaluate(async () => {
+      class FakeImage {
+        kind = "";
+        onload: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        set src(url: string) {
+          this.kind = url.includes("avatars") ? "avatars" : "tiles";
+          this.onload?.();
+        }
+      }
+      Object.defineProperty(globalThis, "Image", { configurable: true, value: FakeImage });
+      const ffi = await import("/__canvas_ffi_test__.mjs");
+      ffi.initialize_canvas(() => {}, () => {}, () => {});
+      ffi.render_canvas(
+        JSON.stringify({ avatars: [] }),
+        JSON.stringify({ origin_x: 0, origin_y: 0, viewport_width: 320, viewport_height: 240 }),
+        () => {},
+      );
+    });
+    await expect
+      .poll(() => page.evaluate(() => (globalThis as typeof globalThis & {
+        __canvasRafProbe: { tileSourceRects: Array<[number, number, number, number]> };
+      }).__canvasRafProbe.tileSourceRects))
+      .toContainEqual([34, 21, 10, 11]);
+    const floorSources = await page.evaluate(() => {
+      const probe = (globalThis as typeof globalThis & {
+        __canvasRafProbe: { tileSourceRects: Array<[number, number, number, number]> };
+      }).__canvasRafProbe;
+      return probe.tileSourceRects.filter(([, sourceY]) => sourceY === 21);
+    });
+    expect(floorSources.length).toBeGreaterThan(0);
+    expect(new Set(floorSources.map((rect) => rect.join(",")))).toEqual(new Set([
+      "34,21,10,11",
+      "50,21,10,11",
+    ]));
   });
 
   test("rejects unsorted avatar input and reports no avatar draw", async ({ page }) => {

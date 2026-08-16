@@ -160,19 +160,48 @@ pub fn participant_labels_are_literal_and_preserve_the_list_structure_test() {
 }
 
 pub fn joined_workspace_exposes_empty_chat_and_enabled_composer_semantics_test() {
-  let self_id = domain.connection_id_from_string("joined-self")
-  let joined = joined_model([domain.Presence(self_id, "Ada")], self_id)
-  let rendered = element.to_string(view.view(joined))
+  let simulation = joined_simulation()
+  let rendered = simulate.view(simulation)
+  let rendered_string = element.to_string(rendered)
+  let textarea =
+    query.element(
+      matching: query.tag("textarea") |> query.and(query.id("message-draft")),
+    )
+  let enabled_send_button =
+    query.element(
+      matching: query.tag("button")
+      |> query.and(query.class("send-button"))
+      |> query.and(query.aria("disabled", "false")),
+    )
 
-  assert string.contains(rendered, "Participants")
-  assert string.contains(rendered, "1 participant")
-  assert string.contains(rendered, "Messages")
-  assert string.contains(rendered, "No messages yet.")
-  assert string.contains(rendered, "Write a message")
-  assert string.contains(rendered, "for=\"message-draft\"")
-  assert string.contains(rendered, "aria-busy=\"false\"")
-  assert string.contains(rendered, "aria-disabled=\"false\"")
-  assert string.contains(rendered, "Send message")
+  assert string.contains(rendered_string, "Participants")
+  assert string.contains(rendered_string, "1 participant")
+  assert string.contains(rendered_string, "Messages")
+  assert string.contains(rendered_string, "No messages yet.")
+  assert string.contains(rendered_string, "Write a message")
+  assert string.contains(rendered_string, "for=\"message-draft\"")
+  assert string.contains(rendered_string, "aria-busy=\"false\"")
+  assert string.contains(rendered_string, "Send message")
+  let assert Ok(_) = query.find(in: rendered, matching: textarea)
+  let assert Ok(_) = query.find(in: rendered, matching: enabled_send_button)
+  let assert Error(_) =
+    query.find(
+      in: rendered,
+      matching: query.element(
+        matching: query.tag("textarea")
+        |> query.and(query.id("message-draft"))
+        |> query.and(query.attribute("disabled", "")),
+      ),
+    )
+  let assert Error(_) =
+    query.find(
+      in: rendered,
+      matching: query.element(
+        matching: query.tag("button")
+        |> query.and(query.class("send-button"))
+        |> query.and(query.attribute("disabled", "")),
+      ),
+    )
 }
 
 pub fn joined_workspace_describes_the_canvas_with_a_permanent_caption_test() {
