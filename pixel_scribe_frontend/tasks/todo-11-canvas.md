@@ -26,7 +26,7 @@ an original or explicitly licensed top-down office/avatar baseline for review.
   - **Verify:** format/build; review the complete FFI export and handle lifecycle;
     add only boundary tests supported without production test globals.
   - **Depends:** Task 11A.
-- [ ] **Task 11C — Render static layers, assets, and fallback geometry.**
+- [x] **Task 11C — Render static layers, assets, and fallback geometry.**
   - **Done when:** cached assets draw floor/walls, furniture, Y-sorted avatars,
     names/self accents, and an empty bubble pass; load failure draws a useful
     fallback and reports only safe typed status.
