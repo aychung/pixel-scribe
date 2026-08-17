@@ -1330,7 +1330,7 @@ for (const dpr of [1, 2] as const) {
         JSON.stringify({
           type: "user_joined",
           room_id: "default",
-          user: { connection_id: "zz-far-65", username: "Far" },
+          user: { connection_id: "edge-50", username: "Far" },
         }),
       );
       await expect(

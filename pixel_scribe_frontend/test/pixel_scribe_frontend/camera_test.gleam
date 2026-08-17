@@ -95,7 +95,7 @@ pub fn camera_centers_literal_logical_world_corners_without_clamping_test() {
     ))
 
   assert top_left_camera.origin == scene.WorldPoint(-160, -136)
-  assert bottom_right_camera.origin == scene.WorldPoint(159, 39)
+  assert bottom_right_camera.origin == scene.WorldPoint(175, 39)
   assert camera.world_to_viewport(top_left_camera, top_left_center)
     == scene.ViewportPoint(x: 160, y: 120)
   assert camera.world_to_viewport(bottom_right_camera, bottom_right_center)

@@ -9,12 +9,13 @@ import pixel_scribe_frontend/domain
 /// The logical pixel grid used by the office art and renderer.
 pub const tile_size = 16
 
-/// The office follows Pixel Agents' compact 20×11 interior footprint.
-pub const world_tiles_width = 20
+/// The office follows Pixel Agents' compact 21×11 interior footprint: a
+/// workroom on the left, a lounge on the right, and a central opening.
+pub const world_tiles_width = 21
 
 pub const world_tiles_height = 11
 
-pub const world_pixel_width = 320
+pub const world_pixel_width = 336
 
 pub const world_pixel_height = 176
 
@@ -80,7 +81,7 @@ pub type ExclusionRect {
 /// Keep anchors away from the outer wall and the divider between the rooms.
 pub const edge_exclusions = [
   ExclusionRect(left: 0, top: 0, width: 16, height: world_pixel_height),
-  ExclusionRect(left: 304, top: 0, width: 16, height: world_pixel_height),
+  ExclusionRect(left: 320, top: 0, width: 16, height: world_pixel_height),
   ExclusionRect(left: 0, top: 0, width: world_pixel_width, height: 16),
   ExclusionRect(left: 0, top: 160, width: world_pixel_width, height: 16),
   ExclusionRect(left: 160, top: 16, width: 16, height: 48),
@@ -89,15 +90,13 @@ pub const edge_exclusions = [
 
 /// Furniture footprints are metadata only; no Canvas or browser code belongs here.
 pub const furniture_exclusions = [
-  ExclusionRect(left: 32, top: 32, width: 64, height: 64),
-  ExclusionRect(left: 96, top: 32, width: 64, height: 64),
-  ExclusionRect(left: 48, top: 64, width: 64, height: 32),
-  ExclusionRect(left: 112, top: 64, width: 32, height: 32),
-  ExclusionRect(left: 48, top: 96, width: 16, height: 48),
-  ExclusionRect(left: 112, top: 96, width: 16, height: 48),
-  ExclusionRect(left: 16, top: 128, width: 48, height: 32),
-  ExclusionRect(left: 192, top: 48, width: 96, height: 64),
-  ExclusionRect(left: 272, top: 128, width: 32, height: 32),
+  ExclusionRect(left: 32, top: 32, width: 64, height: 96),
+  ExclusionRect(left: 96, top: 32, width: 64, height: 96),
+  ExclusionRect(left: 32, top: 112, width: 64, height: 64),
+  ExclusionRect(left: 208, top: 48, width: 64, height: 64),
+  ExclusionRect(left: 208, top: 96, width: 64, height: 64),
+  ExclusionRect(left: 256, top: 48, width: 64, height: 64),
+  ExclusionRect(left: 224, top: 64, width: 64, height: 64),
 ]
 
 pub type Anchor {
@@ -229,56 +228,56 @@ const bubble_max_line_width = 144
 /// The index is stable so placement can refer to an anchor without using a
 /// participant's username or list position.
 pub const curated_anchors = [
-  Anchor(0, WorldPoint(16, 16)),
-  Anchor(1, WorldPoint(32, 16)),
-  Anchor(2, WorldPoint(48, 16)),
-  Anchor(3, WorldPoint(64, 16)),
-  Anchor(4, WorldPoint(80, 16)),
-  Anchor(5, WorldPoint(96, 16)),
-  Anchor(6, WorldPoint(112, 16)),
-  Anchor(7, WorldPoint(128, 16)),
-  Anchor(8, WorldPoint(144, 16)),
-  Anchor(9, WorldPoint(16, 32)),
-  Anchor(10, WorldPoint(16, 48)),
-  Anchor(11, WorldPoint(16, 80)),
-  Anchor(12, WorldPoint(16, 96)),
-  Anchor(13, WorldPoint(32, 96)),
-  Anchor(14, WorldPoint(80, 96)),
-  Anchor(15, WorldPoint(96, 96)),
-  Anchor(16, WorldPoint(128, 96)),
-  Anchor(17, WorldPoint(144, 96)),
-  Anchor(18, WorldPoint(16, 112)),
-  Anchor(19, WorldPoint(80, 128)),
-  Anchor(20, WorldPoint(96, 128)),
-  Anchor(21, WorldPoint(128, 128)),
-  Anchor(22, WorldPoint(144, 128)),
-  Anchor(23, WorldPoint(80, 144)),
-  Anchor(24, WorldPoint(96, 144)),
-  Anchor(25, WorldPoint(128, 144)),
-  Anchor(26, WorldPoint(144, 144)),
-  Anchor(27, WorldPoint(176, 16)),
-  Anchor(28, WorldPoint(192, 16)),
-  Anchor(29, WorldPoint(208, 16)),
-  Anchor(30, WorldPoint(224, 16)),
-  Anchor(31, WorldPoint(240, 16)),
-  Anchor(32, WorldPoint(256, 16)),
-  Anchor(33, WorldPoint(272, 16)),
-  Anchor(34, WorldPoint(288, 16)),
-  Anchor(35, WorldPoint(176, 32)),
-  Anchor(36, WorldPoint(192, 32)),
-  Anchor(37, WorldPoint(208, 32)),
-  Anchor(38, WorldPoint(224, 32)),
-  Anchor(39, WorldPoint(240, 32)),
-  Anchor(40, WorldPoint(256, 32)),
-  Anchor(41, WorldPoint(272, 32)),
-  Anchor(42, WorldPoint(288, 32)),
-  Anchor(43, WorldPoint(176, 48)),
-  Anchor(44, WorldPoint(176, 96)),
-  Anchor(45, WorldPoint(176, 80)),
-  Anchor(46, WorldPoint(208, 112)),
-  Anchor(47, WorldPoint(176, 112)),
-  Anchor(48, WorldPoint(192, 112)),
-  Anchor(49, WorldPoint(288, 112)),
+  Anchor(0, WorldPoint(16, 48)),
+  Anchor(1, WorldPoint(16, 64)),
+  Anchor(2, WorldPoint(16, 80)),
+  Anchor(3, WorldPoint(16, 96)),
+  Anchor(4, WorldPoint(16, 112)),
+  Anchor(5, WorldPoint(16, 128)),
+  Anchor(6, WorldPoint(16, 144)),
+  Anchor(7, WorldPoint(208, 32)),
+  Anchor(8, WorldPoint(224, 32)),
+  Anchor(9, WorldPoint(240, 32)),
+  Anchor(10, WorldPoint(256, 32)),
+  Anchor(11, WorldPoint(96, 128)),
+  Anchor(12, WorldPoint(112, 128)),
+  Anchor(13, WorldPoint(128, 128)),
+  Anchor(14, WorldPoint(144, 128)),
+  Anchor(15, WorldPoint(96, 144)),
+  Anchor(16, WorldPoint(112, 144)),
+  Anchor(17, WorldPoint(128, 144)),
+  Anchor(18, WorldPoint(144, 144)),
+  Anchor(19, WorldPoint(160, 64)),
+  Anchor(20, WorldPoint(160, 80)),
+  Anchor(21, WorldPoint(160, 96)),
+  Anchor(22, WorldPoint(160, 112)),
+  Anchor(23, WorldPoint(176, 64)),
+  Anchor(24, WorldPoint(176, 80)),
+  Anchor(25, WorldPoint(176, 96)),
+  Anchor(26, WorldPoint(176, 112)),
+  Anchor(27, WorldPoint(176, 128)),
+  Anchor(28, WorldPoint(176, 144)),
+  Anchor(29, WorldPoint(192, 64)),
+  Anchor(30, WorldPoint(192, 80)),
+  Anchor(31, WorldPoint(192, 96)),
+  Anchor(32, WorldPoint(192, 112)),
+  Anchor(33, WorldPoint(192, 128)),
+  Anchor(34, WorldPoint(192, 144)),
+  Anchor(35, WorldPoint(16, 32)),
+  Anchor(36, WorldPoint(272, 32)),
+  Anchor(37, WorldPoint(288, 32)),
+  Anchor(38, WorldPoint(288, 112)),
+  Anchor(39, WorldPoint(288, 128)),
+  Anchor(40, WorldPoint(288, 144)),
+  Anchor(41, WorldPoint(304, 32)),
+  Anchor(42, WorldPoint(176, 48)),
+  Anchor(43, WorldPoint(192, 48)),
+  Anchor(44, WorldPoint(176, 32)),
+  Anchor(45, WorldPoint(192, 32)),
+  Anchor(46, WorldPoint(272, 144)),
+  Anchor(47, WorldPoint(304, 128)),
+  Anchor(48, WorldPoint(304, 144)),
+  Anchor(49, WorldPoint(272, 128)),
 ]
 
 pub fn anchor_points() -> List(WorldPoint) {

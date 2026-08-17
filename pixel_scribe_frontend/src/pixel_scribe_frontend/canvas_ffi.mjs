@@ -14,7 +14,7 @@ const CHARACTER_FRONT_COLUMN = 0;
 const CHARACTER_MODEL_ROWS = 6;
 const CHARACTER_HAIR_ROWS = 8;
 const CHARACTER_OUTFIT_ROWS = 4;
-const WORLD_WIDTH = 320;
+const WORLD_WIDTH = 336;
 const WORLD_HEIGHT = 176;
 const ASSET_URLS = Object.freeze({
   tiles: "/pixel-art/metrocity/Interior/Home/TilesHouse.png",
@@ -44,6 +44,30 @@ const BUBBLE_VISIBLE_MS = 5000;
 const BUBBLE_FADE_MS = BUBBLE_LIFETIME_MS - BUBBLE_VISIBLE_MS;
 const BUBBLE_MAX_WIDTH = 160;
 const BUBBLE_MAX_HEIGHT = 44;
+
+// The reference room's active 21×11 area is a workroom on the left and a
+// lounge on the right. These coordinates are translated from Pixel Agents'
+// 21×22 layout by removing its ten-row empty header.
+const ROOM_LAYOUT = Object.freeze({
+  desks: [
+    [32, 32, 320],
+    [96, 32, 384],
+  ],
+  conferenceTable: [64, 96],
+  conferenceChairs: [
+    [48, 96, 320],
+    [48, 128, 320],
+    [112, 96, 384],
+    [112, 128, 384],
+  ],
+  loungeSofas: [
+    [208, 64, 128],
+    [224, 48, 64],
+    [224, 96, 0],
+    [256, 64, 192],
+  ],
+  coffeeTable: [224, 64],
+});
 
 let activeRenderer = null;
 
@@ -701,9 +725,8 @@ function fillWorldRect(context, camera, worldX, worldY, width, height, color) {
 
 function drawFurniture(context, camera, assets) {
   const carpets = [
-    [208, 48, 2],
-    [208, 96, 3],
-    [32, 112, 0],
+    [176, 112, 2],
+    [240, 112, 3],
   ];
   for (const [worldX, worldY, carpetColumn] of carpets) {
     drawInteriorAsset(
@@ -719,18 +742,14 @@ function drawFurniture(context, camera, assets) {
     );
   }
 
-  const desks = [
-    [32, 32, 0],
-    [96, 32, 1],
-    [176, 112, 2],
-    [240, 112, 0],
-  ];
-  for (const [worldX, worldY, theme] of desks) {
+  drawRoomWallDecor(context, camera, assets);
+
+  for (const [worldX, worldY, chairSourceX] of ROOM_LAYOUT.desks) {
     drawInteriorAsset(
       context,
       camera,
       assets.livingRoom.image,
-      (theme % 3) * 64,
+      0,
       0,
       64,
       96,
@@ -741,7 +760,7 @@ function drawFurniture(context, camera, assets) {
       context,
       camera,
       assets.miscellaneous.image,
-      320 + (theme % 2) * 64,
+      chairSourceX,
       0,
       64,
       64,
@@ -750,18 +769,26 @@ function drawFurniture(context, camera, assets) {
     );
   }
 
-  const sofas = [
-    [208, 48, 0],
-    [208, 96, 1],
-    [256, 48, 3],
-  ];
-  for (const [worldX, worldY, colorRow] of sofas) {
+  const [tableX, tableY] = ROOM_LAYOUT.conferenceTable;
+  drawInteriorAsset(
+    context,
+    camera,
+    assets.livingRoom.image,
+    0,
+    0,
+    64,
+    96,
+    tableX,
+    tableY,
+  );
+
+  for (const [worldX, worldY, sourceX] of ROOM_LAYOUT.conferenceChairs) {
     drawInteriorAsset(
       context,
       camera,
-      assets.livingRoom1.image,
-      worldX === 256 ? 192 : 64,
-      colorRow * 64,
+      assets.miscellaneous.image,
+      sourceX,
+      0,
       64,
       64,
       worldX,
@@ -769,18 +796,36 @@ function drawFurniture(context, camera, assets) {
     );
   }
 
+  for (const [worldX, worldY, sourceX] of ROOM_LAYOUT.loungeSofas) {
+    drawInteriorAsset(
+      context,
+      camera,
+      assets.livingRoom1.image,
+      sourceX,
+      7 * 64,
+      64,
+      64,
+      worldX,
+      worldY,
+    );
+  }
+
+  const [coffeeTableX, coffeeTableY] = ROOM_LAYOUT.coffeeTable;
   drawInteriorAsset(
     context,
     camera,
     assets.miscellaneous.image,
-    192,
+    256,
     0,
     64,
     64,
-    224,
-    64,
+    coffeeTableX,
+    coffeeTableY,
   );
 
+}
+
+function drawRoomWallDecor(context, camera, assets) {
   const bookshelves = [
     [16, 0, 192],
     [80, 0, 256],
@@ -808,13 +853,24 @@ function drawFurniture(context, camera, assets) {
 }
 
 function drawFallbackFurniture(context, camera) {
-  for (const [worldX, worldY] of [[32, 48], [96, 48], [176, 128], [240, 128]]) {
+  for (const [worldX, worldY] of ROOM_LAYOUT.desks) {
     drawFurnitureTile(context, camera, null, worldX, worldY, 0, 0, 2);
     drawFurnitureTile(context, camera, null, worldX + 32, worldY, 0, 0, 2);
     drawFurnitureTile(context, camera, null, worldX, worldY + 32, 0, 0, 1);
   }
-  for (const [worldX, worldY] of [[208, 48], [208, 96]]) {
-    drawFurnitureTile(context, camera, null, worldX, worldY, 0, 0, 3);
+
+  const [tableX, tableY] = ROOM_LAYOUT.conferenceTable;
+  drawFurnitureTile(context, camera, null, tableX, tableY, 0, 0, 3);
+  for (const [worldX, worldY] of ROOM_LAYOUT.conferenceChairs) {
+    drawFurnitureTile(context, camera, null, worldX, worldY, 0, 0, 1);
+  }
+  for (const [worldX, worldY] of [
+    [208, 64],
+    [224, 48],
+    [224, 96],
+    [256, 64],
+  ]) {
+    drawFurnitureTile(context, camera, null, worldX, worldY, 0, 0, 2);
   }
   for (const [worldX, worldY] of [[16, 0], [80, 0], [176, 0], [240, 0]]) {
     drawFurnitureTile(context, camera, null, worldX, worldY, 0, 0, 2);

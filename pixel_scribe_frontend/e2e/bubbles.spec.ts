@@ -3,10 +3,10 @@ import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
 const fixedTime = new Date("2026-08-16T12:00:00Z");
 const fixedSeed = 2147483648;
 const selfId = "connection-self";
-// Keep the lifecycle fixture's peer adjacent to self. The renderer correctly
-// omits bubbles for owners outside the camera crop, so this test must exercise
-// a visible owner; dedicated scene tests cover offscreen ownership.
-const peerId = "connection-peer-5";
+// Keep the lifecycle fixture's peer visibly separated from self. The renderer
+// correctly omits bubbles for owners outside the camera crop, so this test must
+// exercise visible owners; dedicated scene tests cover offscreen ownership.
+const peerId = "edge-50";
 const multilineText = "line one\nline two\nline three";
 
 test.use({ deviceScaleFactor: 1 });
