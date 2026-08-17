@@ -14,15 +14,18 @@ limiting, liveness cleanup, origin checks, and security headers.
 The frontend currently contains the Lustre shell, username preference, protocol
 validation, pure connection-state model, browser WebSocket effect, and joined
 presence/chat workspace, including reconnect recovery. The renderer-independent
-local office world and Canvas renderer are implemented, with original office
-assets whose provenance is recorded. Task 11F human visual/provenance approval
-and real-backend/manual browser acceptance remain open, so the browser client is
-not yet the completed real-backend MVP.
+local office world, Canvas renderer, and temporary speech bubbles from Tasks 11
+and 12 are implemented and verified, with original office assets whose
+provenance is recorded. Task 11F human visual/provenance approval is recorded;
+the broader visual-direction checkpoint and real-backend/manual browser
+acceptance remain open, so the browser client is not yet the completed
+real-backend MVP.
 
 Task 11's reproducible artifact staging is implemented. The production
 Dockerfile also builds the frontend and includes those generated artifacts in
-the runtime image. Task 11F human visual/provenance approval and real-backend/
-manual browser acceptance remain open, so no full browser acceptance is claimed.
+the runtime image. The broader visual-direction checkpoint and
+real-backend/manual browser acceptance remain open, so no full browser
+acceptance is claimed.
 
 ## Repository layout
 

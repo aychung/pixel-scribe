@@ -13,11 +13,12 @@ The foundation and real-time chat slices are implemented: the browser-only
 Lustre shell, protocol codecs, pure connection state machine, username
 preference, same-origin native WebSocket, joined presence workspace,
 accepted-message chat, reconnect recovery, the renderer-independent office world,
-camera, local placement, draw data, and the Canvas renderer are in place. The
-baseline office assets are original with recorded provenance; the renderer uses
-the v2 tile atlas and all 32 cells of the avatar atlas. Task 11F human
-visual/provenance approval and real-backend browser acceptance remain open in
-later MVP checkpoints.
+camera, local placement, draw data, Canvas renderer, and temporary speech
+bubbles from Tasks 11 and 12 are in place and verified. The baseline office
+assets are original with recorded provenance; the renderer uses the v2 tile atlas
+and all 32 cells of the avatar atlas. Task 11F human visual/provenance approval
+is recorded; the broader visual-direction checkpoint and real-backend browser
+acceptance remain open in later MVP checkpoints.
 
 ## MVP
 
