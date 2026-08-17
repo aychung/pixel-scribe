@@ -28,13 +28,42 @@ function observeBrowserErrors(page: Page) {
 }
 
 function observeAssetLoads(page: Page) {
-  const loads = { tiles: 0, avatars: 0 };
+  const loads = {
+    tiles: 0,
+    cupboard: 0,
+    kitchen: 0,
+    miscellaneous: 0,
+    flowers: 0,
+    carpet: 0,
+    windows: 0,
+    paintings: 0,
+    characterModel: 0,
+    characterHair: 0,
+    characterOutfit: 0,
+  };
   page.on("requestfinished", (request) => {
-    const path = new URL(request.url()).pathname;
-    if (path.endsWith("/pixel-art/office-tiles-v2-16.png")) loads.tiles += 1;
-    if (path.endsWith("/pixel-art/office-avatars-16.png")) loads.avatars += 1;
+    const path = decodeURIComponent(new URL(request.url()).pathname);
+    if (path.endsWith("/Interior/Home/TilesHouse.png")) loads.tiles += 1;
+    if (path.endsWith("/Interior/Home/Cupboard-Sheet.png")) loads.cupboard += 1;
+    if (path.endsWith("/Interior/Home/Kitchen-Sheet.png")) loads.kitchen += 1;
+    if (path.endsWith("/Interior/Home/Miscellaneous-Sheet.png")) loads.miscellaneous += 1;
+    if (path.endsWith("/Interior/Home/Flowers-Sheet.png")) loads.flowers += 1;
+    if (path.endsWith("/Interior/Home/Carpet-Sheet.png")) loads.carpet += 1;
+    if (path.endsWith("/Interior/Home/Windows-Sheet.png")) loads.windows += 1;
+    if (path.endsWith("/Interior/Home/Paintings-Sheet.png")) loads.paintings += 1;
+    if (path.endsWith("/Character/CharacterModel/Character Model.png")) {
+      loads.characterModel += 1;
+    }
+    if (path.endsWith("/Character/Hair/Hairs.png")) loads.characterHair += 1;
+    if (path.endsWith("/Character/Outfits/Suit.png")) loads.characterOutfit += 1;
   });
   return loads;
+}
+
+async function expectMetrocityAssetLoads(loads: ReturnType<typeof observeAssetLoads>) {
+  for (const name of Object.keys(loads) as Array<keyof typeof loads>) {
+    await expect.poll(() => loads[name]).toBe(1);
+  }
 }
 
 async function installDeterminism(page: Page) {
@@ -78,6 +107,12 @@ async function installRafProbe(page: Page) {
       throwOnClip: false,
       avatarSourceXs: [] as number[],
       avatarSourceYs: [] as number[],
+      characterLayerOrder: [] as string[],
+      characterLayerSources: {
+        "character-model": [] as Array<[number, number, number, number]>,
+        "character-outfit": [] as Array<[number, number, number, number]>,
+        "character-hair": [] as Array<[number, number, number, number]>,
+      },
       tileSourceRects: [] as Array<[number, number, number, number]>,
       textDraws: [] as Array<{ text: string; maxWidth?: number }>,
       images: [] as unknown[],
@@ -172,18 +207,39 @@ async function installRafProbe(page: Page) {
       configurable: true,
       value(this: CanvasRenderingContext2D, ...arguments_: unknown[]) {
         const image = arguments_[0] as { kind?: string } | undefined;
-        if (image?.kind === "avatars") {
+        const imageKind = image?.kind;
+        if (imageKind === "character-model") {
           probe.avatarSourceXs.push(arguments_[1] as number);
           probe.avatarSourceYs.push(arguments_[2] as number);
-          return;
         }
-        if (image?.kind === "tiles") {
-          probe.tileSourceRects.push([
+        if (
+          imageKind === "character-model" ||
+          imageKind === "character-outfit" ||
+          imageKind === "character-hair"
+        ) {
+          probe.characterLayerOrder.push(imageKind);
+          probe.characterLayerSources[imageKind].push([
             arguments_[1] as number,
             arguments_[2] as number,
             arguments_[3] as number,
             arguments_[4] as number,
           ]);
+        }
+        if (
+          image?.kind === "tiles" ||
+          image?.kind === "character-model" ||
+          image?.kind === "character-hair" ||
+          image?.kind === "character-outfit" ||
+          image?.kind === "other"
+        ) {
+          if (image.kind === "tiles") {
+            probe.tileSourceRects.push([
+              arguments_[1] as number,
+              arguments_[2] as number,
+              arguments_[3] as number,
+              arguments_[4] as number,
+            ]);
+          }
           return;
         }
         return nativeDrawImage.apply(
@@ -314,7 +370,7 @@ async function joinOffice(
   includePeer = true,
 ): Promise<WebSocketRoute> {
   if (routeAssets) {
-    await page.route("**/pixel-art/office-*.png", async (route) => {
+    await page.route("**/pixel-art/metrocity/**", async (route) => {
       await new Promise((resolve) => setTimeout(resolve, 250));
       await route.fulfill({ status: 200, contentType: "image/png", body: "missing" });
     });
@@ -595,7 +651,16 @@ test.describe("canvas FFI boundaries", () => {
         onload: (() => void) | null = null;
         onerror: (() => void) | null = null;
         set src(url: string) {
-          this.kind = url.includes("avatars") ? "avatars" : "tiles";
+          const path = decodeURIComponent(url);
+          this.kind = path.includes("TilesHouse")
+            ? "tiles"
+            : path.includes("Character Model")
+              ? "character-model"
+              : path.includes("/Hairs.png")
+                ? "character-hair"
+                : path.includes("/Suit.png")
+                  ? "character-outfit"
+                  : "other";
           this.onload?.();
         }
       }
@@ -617,7 +682,12 @@ test.describe("canvas FFI boundaries", () => {
       .poll(() => page.evaluate(() => (globalThis as typeof globalThis & {
         __canvasRafProbe: { avatarSourceXs: number[] };
       }).__canvasRafProbe.avatarSourceXs))
-      .toEqual([0, 16]);
+      .toEqual([0, 0]);
+    await expect
+      .poll(() => page.evaluate(() => (globalThis as typeof globalThis & {
+        __canvasRafProbe: { avatarSourceYs: number[] };
+      }).__canvasRafProbe.avatarSourceYs))
+      .toEqual([0, 32]);
   });
 
   test("samples avatar variants from every atlas row", async ({ page }) => {
@@ -634,7 +704,16 @@ test.describe("canvas FFI boundaries", () => {
         onload: (() => void) | null = null;
         onerror: (() => void) | null = null;
         set src(url: string) {
-          this.kind = url.includes("avatars") ? "avatars" : "tiles";
+          const path = decodeURIComponent(url);
+          this.kind = path.includes("TilesHouse")
+            ? "tiles"
+            : path.includes("Character Model")
+              ? "character-model"
+              : path.includes("/Hairs.png")
+                ? "character-hair"
+                : path.includes("/Suit.png")
+                  ? "character-outfit"
+                  : "other";
           this.onload?.();
         }
       }
@@ -653,15 +732,31 @@ test.describe("canvas FFI boundaries", () => {
       .poll(() => page.evaluate(() => (globalThis as typeof globalThis & {
         __canvasRafProbe: { avatarSourceXs: number[]; avatarSourceYs: number[] };
       }).__canvasRafProbe.avatarSourceXs))
-      .toEqual([112]);
+      .toEqual([0]);
     await expect
       .poll(() => page.evaluate(() => (globalThis as typeof globalThis & {
         __canvasRafProbe: { avatarSourceYs: number[] };
       }).__canvasRafProbe.avatarSourceYs))
-      .toEqual([48]);
+      .toEqual([32]);
+    await expect
+      .poll(() => page.evaluate(() => (globalThis as typeof globalThis & {
+        __canvasRafProbe: {
+          characterLayerOrder: string[];
+          characterLayerSources: Record<string, Array<[number, number, number, number]>>;
+        };
+      }).__canvasRafProbe.characterLayerOrder))
+      .toEqual(["character-model", "character-outfit", "character-hair"]);
+    const characterSources = await page.evaluate(() => (globalThis as typeof globalThis & {
+      __canvasRafProbe: {
+        characterLayerSources: Record<string, Array<[number, number, number, number]>>;
+      };
+    }).__canvasRafProbe.characterLayerSources);
+    expect(characterSources["character-model"]).toEqual([[0, 32, 32, 32]]);
+    expect(characterSources["character-outfit"]).toEqual([[0, 96, 32, 32]]);
+    expect(characterSources["character-hair"]).toEqual([[0, 224, 32, 32]]);
   });
 
-  test("samples gutter-free floor crops from the atlas", async ({ page }) => {
+  test("samples Metrocity wall crops from the tile atlas", async ({ page }) => {
     await installRafProbe(page);
     await installFfiModule(page);
     await page.goto("/");
@@ -675,7 +770,16 @@ test.describe("canvas FFI boundaries", () => {
         onload: (() => void) | null = null;
         onerror: (() => void) | null = null;
         set src(url: string) {
-          this.kind = url.includes("avatars") ? "avatars" : "tiles";
+          const path = decodeURIComponent(url);
+          this.kind = path.includes("TilesHouse")
+            ? "tiles"
+            : path.includes("Character Model")
+              ? "character-model"
+              : path.includes("/Hairs.png")
+                ? "character-hair"
+                : path.includes("/Suit.png")
+                  ? "character-outfit"
+                  : "other";
           this.onload?.();
         }
       }
@@ -692,17 +796,18 @@ test.describe("canvas FFI boundaries", () => {
       .poll(() => page.evaluate(() => (globalThis as typeof globalThis & {
         __canvasRafProbe: { tileSourceRects: Array<[number, number, number, number]> };
       }).__canvasRafProbe.tileSourceRects))
-      .toContainEqual([34, 21, 10, 11]);
+      .toContainEqual([0, 64, 16, 16]);
     const floorSources = await page.evaluate(() => {
       const probe = (globalThis as typeof globalThis & {
         __canvasRafProbe: { tileSourceRects: Array<[number, number, number, number]> };
       }).__canvasRafProbe;
-      return probe.tileSourceRects.filter(([, sourceY]) => sourceY === 21);
+      return probe.tileSourceRects.filter(([sourceX, sourceY]) =>
+        sourceX === 0 && sourceY === 64
+      );
     });
     expect(floorSources.length).toBeGreaterThan(0);
     expect(new Set(floorSources.map((rect) => rect.join(",")))).toEqual(new Set([
-      "34,21,10,11",
-      "50,21,10,11",
+      "0,64,16,16",
     ]));
   });
 
@@ -994,8 +1099,7 @@ test.describe("canvas office scene", () => {
     const assetLoads = observeAssetLoads(page);
     await joinOffice(page, false, longPeerId, graphemePeerName);
 
-    await expect.poll(() => assetLoads.tiles).toBe(1);
-    await expect.poll(() => assetLoads.avatars).toBe(1);
+    await expectMetrocityAssetLoads(assetLoads);
     await expect.poll(async () => (await canvasInk(page)).colors).toBeGreaterThan(8);
     const ink = await canvasInk(page);
     expect(ink.opaque, JSON.stringify(ink)).toBeGreaterThan(2_000);
@@ -1042,8 +1146,7 @@ test.describe("canvas office scene", () => {
       }),
     );
     await expect(participants.getByText("2 participants", { exact: true })).toBeVisible();
-    await expect.poll(() => assetLoads.tiles).toBe(1);
-    await expect.poll(() => assetLoads.avatars).toBe(1);
+    await expectMetrocityAssetLoads(assetLoads);
     await expect.poll(async () => (await canvasInk(page)).opaque).toBeGreaterThan(500);
     const ink = await canvasInk(page);
     expect(ink.opaque, JSON.stringify(ink)).toBeGreaterThan(500);
@@ -1070,8 +1173,7 @@ test.describe("canvas office scene", () => {
           exact: true,
         }),
       ).toBeVisible();
-      await expect.poll(() => assetLoads.tiles).toBe(1);
-      await expect.poll(() => assetLoads.avatars).toBe(1);
+      await expectMetrocityAssetLoads(assetLoads);
       await expect.poll(async () => (await canvasInk(page)).colors).toBeGreaterThan(8);
       await expect(page.locator("#canvas-status")).toHaveText("");
       await expect(page.locator(".canvas-placeholder")).toHaveScreenshot(
@@ -1104,8 +1206,7 @@ test.describe("canvas office scene", () => {
       const participants = page.getByRole("region", { name: "Participants" });
       await expect(participants.getByText("50 participants", { exact: true })).toBeVisible();
       await expect(participants.getByRole("listitem")).toHaveCount(50);
-      await expect.poll(() => assetLoads.tiles).toBe(1);
-      await expect.poll(() => assetLoads.avatars).toBe(1);
+      await expectMetrocityAssetLoads(assetLoads);
       await expect.poll(async () => (await canvasInk(page)).colors).toBeGreaterThan(8);
       await expect(page.locator("#canvas-status")).toHaveText("");
       await expect(page.locator(".canvas-placeholder")).toHaveScreenshot(
@@ -1129,8 +1230,7 @@ test.describe("canvas office scene", () => {
       await expect(page.locator("#canvas-status")).toHaveText(
         "Office art unavailable; showing fallback geometry.",
       );
-      await expect.poll(() => assetLoads.tiles).toBe(1);
-      await expect.poll(() => assetLoads.avatars).toBe(1);
+      await expectMetrocityAssetLoads(assetLoads);
       await expect.poll(async () => (await canvasInk(page)).opaque).toBeGreaterThan(500);
       await expect(page.locator(".canvas-placeholder")).toHaveScreenshot(
         "office-fallback-320.png",

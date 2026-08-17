@@ -14,7 +14,7 @@ pub fn world_metadata_has_named_logical_extents_test() {
   assert scene.world_pixel_extent
     == scene.WorldExtent(width: 1536, height: 1024)
   assert scene.avatar_bottom_center_offset == scene.WorldOffset(dx: 0, dy: 0)
-  assert scene.avatar_visual_center_offset == scene.WorldOffset(dx: 0, dy: -8)
+  assert scene.avatar_visual_center_offset == scene.WorldOffset(dx: 0, dy: -16)
   assert scene.bubble_limits.max_width == 160
   assert scene.bubble_limits.max_lines == 3
 }

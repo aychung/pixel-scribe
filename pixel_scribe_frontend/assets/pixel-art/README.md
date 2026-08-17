@@ -1,10 +1,28 @@
 # Pixel Scribe pixel-art assets
 
-These PNGs are original, small pixel-art atlases commissioned for Pixel Scribe.
-They are not copied from Pixel Agents or any other named game, asset pack, or
-copyrighted collection.
+This directory contains the pixel-art sources used by the frontend. The current
+renderer uses the purchased Metrocity pack under `metrocity/`; the generated
+`office-*.png` atlases below are retained as the original Pixel Scribe baseline.
 
-## Files and layout
+## Current runtime pack
+
+Metrocity preserves the pack's source names and case. Do not rename, resize, or
+recompress these files as part of frontend work.
+
+- `metrocity/Interior/Home/TilesHouse.png` supplies 16 × 16 atomic wall tiles.
+- The Home sheets supply native 64 px-wide furniture slots for kitchen units,
+  cupboards, miscellaneous furniture, plants, carpets, windows, and paintings.
+- `metrocity/Character/CharacterModel/Character Model.png`,
+  `metrocity/Character/Outfits/Suit.png`, and
+  `metrocity/Character/Hair/Hairs.png` are layered 32 × 32 character sheets.
+
+The world remains a 16 px logical grid. Furniture is drawn at its catalogued
+native slot size, while each character is assembled from one model, outfit, and
+hair cell at the same 32 × 32 origin in that order. The current MVP uses the
+front-facing frame because movement and directional animation are outside its
+scope. All runtime images use nearest-neighbor sampling.
+
+## Historical generated atlases
 
 | File | Final size | Cell layout | Intended cell size |
 | --- | ---: | --- | ---: |
@@ -12,13 +30,11 @@ copyrighted collection.
 | `office-tiles-v2-16.png` | 128 × 128 px | 8 columns × 8 rows | 16 × 16 px |
 | `office-avatars-16.png` | 128 × 64 px | 8 columns × 4 rows | 16 × 16 px |
 
-The current renderer uses `office-tiles-v2-16.png`, whose cells contain floor
-variants, walls, windows, desks, seating, plants, storage, office equipment,
-rugs, and decor. `office-tiles-16.png` is retained as the original baseline.
-The avatar atlas contains 32 fixed-pose office avatars with varied hair, skin
-tones, clothing, and accessories. All sheets use a uniform deep navy backdrop
-in unused cell space and have no labels, grid lines, or gutters. The renderer
-uses nearest-neighbor sampling to keep the 16 px grid crisp.
+The generated tile atlas contained floor variants, walls, windows, desks,
+seating, plants, storage, office equipment, rugs, and decor. The generated
+avatar atlas contained 32 fixed-pose office avatars with varied hair, skin
+tones, clothing, and accessories. These historical sheets use a uniform deep
+navy backdrop in unused cell space and have no labels, grid lines, or gutters.
 
 ## Provenance and permission
 

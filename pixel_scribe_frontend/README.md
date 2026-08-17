@@ -14,9 +14,12 @@ Lustre shell, protocol codecs, pure connection state machine, username
 preference, same-origin native WebSocket, joined presence workspace,
 accepted-message chat, reconnect recovery, the renderer-independent office world,
 camera, local placement, draw data, Canvas renderer, and temporary speech
-bubbles from Tasks 11 and 12 are in place and verified. The baseline office
-assets are original with recorded provenance; the renderer uses the v2 tile atlas
-and all 32 cells of the avatar atlas. Task 11F human visual/provenance approval
+bubbles from Tasks 11 and 12 are in place and verified. The frontend now uses
+the purchased Metrocity interior pack: native 16 px wall tiles, catalogued
+64 px-wide furniture slots, and 32 × 32 model/outfit/hair character layers.
+The current character frame is front-facing until movement is introduced. The
+generated office atlases remain as a historical baseline with their original
+provenance. Task 11F human visual/provenance approval
 is recorded; the broader visual-direction checkpoint and real-backend browser
 acceptance remain open in later MVP checkpoints.
 

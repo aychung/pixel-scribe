@@ -42,7 +42,7 @@ pub fn camera_keeps_unclamped_negative_origin_at_world_edge_test() {
   let self_id = domain.connection_id_from_string("self")
   let assert Ok(camera_state) = camera.new(640, 480, self_id, placements)
 
-  assert camera_state.origin == scene.WorldPoint(-192, -120)
+  assert camera_state.origin == scene.WorldPoint(-192, -128)
 }
 
 pub fn camera_keeps_unclamped_positive_world_overflow_at_far_edge_test() {
@@ -55,7 +55,7 @@ pub fn camera_keeps_unclamped_positive_world_overflow_at_far_edge_test() {
   let self_id = domain.connection_id_from_string("self")
   let assert Ok(camera_state) = camera.new(640, 480, self_id, placements)
 
-  assert camera_state.origin == scene.WorldPoint(1104, 584)
+  assert camera_state.origin == scene.WorldPoint(1104, 576)
 }
 
 pub fn camera_centers_literal_logical_world_corners_without_clamping_test() {
@@ -85,8 +85,8 @@ pub fn camera_centers_literal_logical_world_corners_without_clamping_test() {
       scene.world_pixel_height - 1,
     ))
 
-  assert top_left_camera.origin == scene.WorldPoint(-320, -248)
-  assert bottom_right_camera.origin == scene.WorldPoint(1215, 775)
+  assert top_left_camera.origin == scene.WorldPoint(-320, -256)
+  assert bottom_right_camera.origin == scene.WorldPoint(1215, 767)
   assert camera.world_to_viewport(top_left_camera, top_left_center)
     == scene.ViewportPoint(x: 320, y: 240)
   assert camera.world_to_viewport(bottom_right_camera, bottom_right_center)

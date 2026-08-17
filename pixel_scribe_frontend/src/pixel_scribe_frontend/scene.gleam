@@ -62,7 +62,9 @@ pub type WorldOffset {
 
 pub const avatar_bottom_center_offset = WorldOffset(dx: 0, dy: 0)
 
-pub const avatar_visual_center_offset = WorldOffset(dx: 0, dy: -8)
+/// Metrocity character cells are native 32×32 sprites with a bottom-center
+/// anchor, so their visual center is 16 logical pixels above the anchor.
+pub const avatar_visual_center_offset = WorldOffset(dx: 0, dy: -16)
 
 pub type BubbleLimits {
   BubbleLimits(max_width: Int, max_lines: Int)
@@ -747,12 +749,13 @@ fn avatar_is_visible_in_viewport(
   viewport_height: Int,
 ) -> Bool {
   let AvatarDraw(_, _, WorldPoint(anchor_x, anchor_y), _, _, _, _) = avatar
-  // Match the native avatar destination rectangle: x-8..x+8 and y-16..y.
+  // Match the native Metrocity character destination rectangle: x-16..x+16
+  // and y-32..y.
   let safe_width = int.max(0, viewport_width)
   let safe_height = int.max(0, viewport_height)
-  let avatar_left = anchor_x - 8
-  let avatar_top = anchor_y - 16
-  let avatar_right = anchor_x + 8
+  let avatar_left = anchor_x - 16
+  let avatar_top = anchor_y - 32
+  let avatar_right = anchor_x + 16
   let avatar_bottom = anchor_y
   let viewport_right = origin_x + safe_width
   let viewport_bottom = origin_y + safe_height

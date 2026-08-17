@@ -9,17 +9,27 @@ const ASSET_UNAVAILABLE = 5;
 const SCENE_UNAVAILABLE = 6;
 const FAILED = Symbol("canvas-ffi-failed");
 const TILE_SIZE = 16;
-// The v2 floor art occupies the inner 10x11 pixels of its atlas cells. Crop
-// the navy atlas padding before scaling so repeated floor tiles meet cleanly.
-const FLOOR_SOURCE_X_INSET = 2;
-const FLOOR_SOURCE_Y_INSET = 5;
-const FLOOR_SOURCE_WIDTH = 10;
-const FLOOR_SOURCE_HEIGHT = 11;
+const CHARACTER_CELL_SIZE = 32;
+const CHARACTER_FRONT_COLUMN = 0;
+const CHARACTER_MODEL_ROWS = 6;
+const CHARACTER_HAIR_ROWS = 8;
+const CHARACTER_OUTFIT_ROWS = 4;
 const WORLD_WIDTH = 1536;
 const WORLD_HEIGHT = 1024;
-const TILE_URL = "/pixel-art/office-tiles-v2-16.png";
-const AVATAR_URL = "/pixel-art/office-avatars-16.png";
-const AVATAR_COLUMNS = 8;
+const ASSET_URLS = Object.freeze({
+  tiles: "/pixel-art/metrocity/Interior/Home/TilesHouse.png",
+  cupboard: "/pixel-art/metrocity/Interior/Home/Cupboard-Sheet.png",
+  kitchen: "/pixel-art/metrocity/Interior/Home/Kitchen-Sheet.png",
+  miscellaneous: "/pixel-art/metrocity/Interior/Home/Miscellaneous-Sheet.png",
+  flowers: "/pixel-art/metrocity/Interior/Home/Flowers-Sheet.png",
+  carpet: "/pixel-art/metrocity/Interior/Home/Carpet-Sheet.png",
+  windows: "/pixel-art/metrocity/Interior/Home/Windows-Sheet.png",
+  paintings: "/pixel-art/metrocity/Interior/Home/Paintings-Sheet.png",
+  characterModel: "/pixel-art/metrocity/Character/CharacterModel/Character%20Model.png",
+  characterHair: "/pixel-art/metrocity/Character/Hair/Hairs.png",
+  characterOutfit: "/pixel-art/metrocity/Character/Outfits/Suit.png",
+});
+const WALL_TILE_SOURCE = [0, 64];
 const AVATAR_VARIANT_COUNT = 32;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 3;
@@ -482,8 +492,21 @@ function startAsset(state, name, url) {
 }
 
 function ensureAssets(state) {
-  startAsset(state, "tiles", TILE_URL);
-  startAsset(state, "avatars", AVATAR_URL);
+  for (const [name, url] of Object.entries(ASSET_URLS)) {
+    startAsset(state, name, url);
+  }
+}
+
+function allAssetsLoaded(assets) {
+  return Object.values(assets).every((asset) => asset.status === "loaded");
+}
+
+function initialAssets() {
+  const assets = {};
+  for (const name of Object.keys(ASSET_URLS)) {
+    assets[name] = { status: "idle", image: null };
+  }
+  return assets;
 }
 
 function canvasSize(state) {
@@ -552,12 +575,8 @@ function drawCurrent(state) {
 function drawScene(state, scene) {
   const { width, height } = canvasSize(state);
   const camera = state.camera;
-  const tiles = state.assets.tiles;
-  const avatars = state.assets.avatars;
-  const hasTiles = tiles.status === "loaded";
-  const hasAvatars = avatars.status === "loaded";
 
-  if (!camera || !hasTiles || !hasAvatars) {
+  if (!camera || !allAssetsLoaded(state.assets)) {
     drawFallback(state, scene, camera);
     return;
   }
@@ -577,9 +596,9 @@ function drawScene(state, scene) {
       camera.viewportHeight * camera.zoom,
     );
     context.clip();
-    drawFloorAndWalls(context, camera, tiles.image);
-    drawFurniture(context, camera, tiles.image);
-    drawAvatars(context, camera, scene.avatars, avatars.image);
+    drawFloorAndWalls(context, camera, state.assets.tiles.image);
+    drawFurniture(context, camera, state.assets);
+    drawAvatars(context, camera, scene.avatars, state.assets);
     drawNamesAndAccents(context, camera, scene.avatars);
     drawSpeechBubbles(context, camera, scene);
     context.restore();
@@ -609,32 +628,39 @@ function drawFloorAndWalls(context, camera, tiles) {
   const startY = Math.floor(range.top / TILE_SIZE) * TILE_SIZE;
   const endX = Math.ceil(range.right / TILE_SIZE) * TILE_SIZE;
   const endY = Math.ceil(range.bottom / TILE_SIZE) * TILE_SIZE;
+
+  fillWorldRect(context, camera, 0, 0, WORLD_WIDTH, WORLD_HEIGHT, "#8e5d2a");
   for (let worldY = startY; worldY < endY; worldY += TILE_SIZE) {
     for (let worldX = startX; worldX < endX; worldX += TILE_SIZE) {
       const x = (worldX - camera.originX) * camera.zoom;
       const y = (worldY - camera.originY) * camera.zoom;
-      const floorColumn =
-        (worldX / TILE_SIZE + worldY / TILE_SIZE) % 5 === 0 ? 3 : 2;
-      context.drawImage(
-        tiles,
-        floorColumn * TILE_SIZE + FLOOR_SOURCE_X_INSET,
-        TILE_SIZE + FLOOR_SOURCE_Y_INSET,
-        FLOOR_SOURCE_WIDTH,
-        FLOOR_SOURCE_HEIGHT,
-        x,
-        y,
-        TILE_SIZE * camera.zoom,
-        TILE_SIZE * camera.zoom,
-      );
+      context.fillStyle =
+        (worldX / TILE_SIZE + worldY / TILE_SIZE) % 2 === 0
+          ? "#8e5d2a"
+          : "#956334";
+      context.fillRect(x, y, TILE_SIZE * camera.zoom, TILE_SIZE * camera.zoom);
     }
   }
+
+  fillWorldRect(context, camera, 0, 0, WORLD_WIDTH, 64, "#3a2619");
+  fillWorldRect(context, camera, 0, WORLD_HEIGHT - 64, WORLD_WIDTH, 64, "#3a2619");
+  fillWorldRect(context, camera, 0, 64, 32, WORLD_HEIGHT - 128, "#3a2619");
+  fillWorldRect(
+    context,
+    camera,
+    WORLD_WIDTH - 32,
+    64,
+    32,
+    WORLD_HEIGHT - 128,
+    "#3a2619",
+  );
+
   for (let worldX = startX; worldX < endX; worldX += TILE_SIZE) {
     const x = (worldX - camera.originX) * camera.zoom;
-    const wallColumn = worldX / TILE_SIZE % 6 === 0 ? 1 : 0;
     context.drawImage(
       tiles,
-      wallColumn * TILE_SIZE,
-      0,
+      WALL_TILE_SOURCE[0],
+      WALL_TILE_SOURCE[1],
       TILE_SIZE,
       TILE_SIZE,
       x,
@@ -644,8 +670,8 @@ function drawFloorAndWalls(context, camera, tiles) {
     );
     context.drawImage(
       tiles,
-      0,
-      0,
+      WALL_TILE_SOURCE[0],
+      WALL_TILE_SOURCE[1],
       TILE_SIZE,
       TILE_SIZE,
       x,
@@ -658,8 +684,8 @@ function drawFloorAndWalls(context, camera, tiles) {
     const y = (worldY - camera.originY) * camera.zoom;
     context.drawImage(
       tiles,
-      0,
-      0,
+      WALL_TILE_SOURCE[0],
+      WALL_TILE_SOURCE[1],
       TILE_SIZE,
       TILE_SIZE,
       -camera.originX * camera.zoom,
@@ -669,8 +695,8 @@ function drawFloorAndWalls(context, camera, tiles) {
     );
     context.drawImage(
       tiles,
-      0,
-      0,
+      WALL_TILE_SOURCE[0],
+      WALL_TILE_SOURCE[1],
       TILE_SIZE,
       TILE_SIZE,
       (WORLD_WIDTH - TILE_SIZE - camera.originX) * camera.zoom,
@@ -681,7 +707,17 @@ function drawFloorAndWalls(context, camera, tiles) {
   }
 }
 
-function drawFurniture(context, camera, tiles) {
+function fillWorldRect(context, camera, worldX, worldY, width, height, color) {
+  context.fillStyle = color;
+  context.fillRect(
+    (worldX - camera.originX) * camera.zoom,
+    (worldY - camera.originY) * camera.zoom,
+    width * camera.zoom,
+    height * camera.zoom,
+  );
+}
+
+function drawFurniture(context, camera, assets) {
   const pods = [
     [160, 176, 0],
     [432, 336, 1],
@@ -690,14 +726,99 @@ function drawFurniture(context, camera, tiles) {
     [1200, 496, 4],
   ];
   for (const [worldX, worldY, theme] of pods) {
-    drawFurnitureTile(context, camera, tiles, worldX, worldY, 2 + (theme % 3), 2, 2);
-    drawFurnitureTile(context, camera, tiles, worldX + 32, worldY, 2 + ((theme + 1) % 3), 2, 2);
-    drawFurnitureTile(context, camera, tiles, worldX, worldY + 32, theme % 4, 3, 2);
-    drawFurnitureTile(context, camera, tiles, worldX + 32, worldY + 32, (theme + 1) % 4, 3, 2);
-    drawFurnitureTile(context, camera, tiles, worldX + 64, worldY, theme % 4, 5, 2);
-    drawFurnitureTile(context, camera, tiles, worldX + 64, worldY + 32, theme % 4, 4, 2);
-    drawFurnitureTile(context, camera, tiles, worldX + 64, worldY + 64, 5, 7);
+    drawInteriorAsset(
+      context,
+      camera,
+      assets.kitchen.image,
+      64 + (theme % 2) * 64,
+      0,
+      64,
+      96,
+      worldX,
+      worldY,
+    );
+    drawInteriorAsset(
+      context,
+      camera,
+      assets.cupboard.image,
+      192 + (theme % 3) * 64,
+      0,
+      64,
+      96,
+      worldX + 64,
+      worldY,
+    );
+    drawInteriorAsset(
+      context,
+      camera,
+      assets.miscellaneous.image,
+      320 + (theme % 2) * 64,
+      0,
+      64,
+      64,
+      worldX + 16,
+      worldY + 80,
+    );
   }
+
+  drawInteriorAsset(context, camera, assets.carpet.image, 128, 0, 64, 64, 704, 432);
+  drawInteriorAsset(context, camera, assets.miscellaneous.image, 256, 0, 64, 64, 704, 432);
+  drawInteriorAsset(context, camera, assets.miscellaneous.image, 320, 0, 64, 64, 672, 448);
+  drawInteriorAsset(context, camera, assets.miscellaneous.image, 384, 0, 64, 64, 752, 448);
+
+  drawInteriorAsset(context, camera, assets.flowers.image, 0, 0, 64, 96, 96, 96);
+  drawInteriorAsset(context, camera, assets.flowers.image, 64, 0, 64, 96, 1376, 96);
+  drawInteriorAsset(context, camera, assets.flowers.image, 128, 0, 64, 96, 96, 800);
+  drawInteriorAsset(context, camera, assets.flowers.image, 192, 0, 64, 96, 1376, 800);
+
+  drawInteriorAsset(context, camera, assets.windows.image, 704, 0, 64, 64, 480, 0);
+  drawInteriorAsset(context, camera, assets.windows.image, 768, 0, 64, 64, 992, 0);
+  drawInteriorAsset(context, camera, assets.paintings.image, 0, 0, 64, 32, 704, 16);
+  drawInteriorAsset(context, camera, assets.paintings.image, 64, 0, 64, 32, 768, 16);
+}
+
+function drawFallbackFurniture(context, camera) {
+  const pods = [
+    [160, 176, 0],
+    [432, 336, 1],
+    [720, 672, 2],
+    [1008, 176, 3],
+    [1200, 496, 4],
+  ];
+  for (const [worldX, worldY] of pods) {
+    drawFurnitureTile(context, camera, null, worldX, worldY, 0, 0, 2);
+    drawFurnitureTile(context, camera, null, worldX + 32, worldY, 0, 0, 2);
+    drawFurnitureTile(context, camera, null, worldX, worldY + 32, 0, 0, 2);
+    drawFurnitureTile(context, camera, null, worldX + 32, worldY + 32, 0, 0, 2);
+    drawFurnitureTile(context, camera, null, worldX + 64, worldY, 0, 0, 2);
+    drawFurnitureTile(context, camera, null, worldX + 64, worldY + 32, 0, 0, 2);
+    drawFurnitureTile(context, camera, null, worldX + 64, worldY + 64, 0, 0, 1);
+  }
+}
+
+function drawInteriorAsset(
+  context,
+  camera,
+  image,
+  sourceX,
+  sourceY,
+  sourceWidth,
+  sourceHeight,
+  worldX,
+  worldY,
+) {
+  if (!rectVisible(worldX, worldY, sourceWidth, sourceHeight, camera)) return;
+  context.drawImage(
+    image,
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+    (worldX - camera.originX) * camera.zoom,
+    (worldY - camera.originY) * camera.zoom,
+    sourceWidth * camera.zoom,
+    sourceHeight * camera.zoom,
+  );
 }
 
 function drawFurnitureTile(
@@ -740,48 +861,68 @@ function drawFurnitureTile(
   );
 }
 
-function drawAvatars(context, camera, avatars, image) {
+function drawAvatars(context, camera, avatars, assets) {
   // Gleam supplies this list in stable Y/connection-ID order. Re-sorting here
   // would make draw order depend on the browser's locale.
   for (const avatar of avatars) {
     const { x, y } = avatarPosition(avatar, camera);
     if (!rectVisible(
-      x - 8 * camera.zoom,
-      y - 16 * camera.zoom,
-      TILE_SIZE * camera.zoom,
-      TILE_SIZE * camera.zoom,
+      x - 16 * camera.zoom,
+      y - 32 * camera.zoom,
+      CHARACTER_CELL_SIZE * camera.zoom,
+      CHARACTER_CELL_SIZE * camera.zoom,
       camera,
       true,
     )) continue;
     context.globalAlpha = avatar.status === "reconnecting" ? 0.55 : 1;
-    if (image) {
-      const sourceColumn = avatar.variant % AVATAR_COLUMNS;
-      const sourceRow = Math.floor(avatar.variant / AVATAR_COLUMNS);
-      context.drawImage(
-        image,
-        sourceColumn * TILE_SIZE,
-        sourceRow * TILE_SIZE,
-        TILE_SIZE,
-        TILE_SIZE,
-        x - 8 * camera.zoom,
-        y - 16 * camera.zoom,
-        TILE_SIZE * camera.zoom,
-        TILE_SIZE * camera.zoom,
-      );
-    } else {
-      context.fillStyle = avatar.self ? "#f3d36a" : "#72b7a1";
-      context.fillRect(
-        x - 6 * camera.zoom,
-        y - 14 * camera.zoom,
-        12 * camera.zoom,
-        14 * camera.zoom,
-      );
-      context.fillStyle = "#18232a";
-      context.fillRect(x - 4 * camera.zoom, y - 11 * camera.zoom, 2 * camera.zoom, 2 * camera.zoom);
-      context.fillRect(x + 2 * camera.zoom, y - 11 * camera.zoom, 2 * camera.zoom, 2 * camera.zoom);
-    }
+    const left = x - 16 * camera.zoom;
+    const top = y - 32 * camera.zoom;
+    const modelRow = avatar.variant % CHARACTER_MODEL_ROWS;
+    const hairRow = Math.floor(avatar.variant / 4) % CHARACTER_HAIR_ROWS;
+    const outfitRow = Math.floor(avatar.variant / 8) % CHARACTER_OUTFIT_ROWS;
+    drawCharacterLayer(
+      context,
+      assets.characterModel.image,
+      CHARACTER_FRONT_COLUMN * CHARACTER_CELL_SIZE,
+      modelRow * CHARACTER_CELL_SIZE,
+      left,
+      top,
+      camera.zoom,
+    );
+    drawCharacterLayer(
+      context,
+      assets.characterOutfit.image,
+      CHARACTER_FRONT_COLUMN * CHARACTER_CELL_SIZE,
+      outfitRow * CHARACTER_CELL_SIZE,
+      left,
+      top,
+      camera.zoom,
+    );
+    drawCharacterLayer(
+      context,
+      assets.characterHair.image,
+      CHARACTER_FRONT_COLUMN * CHARACTER_CELL_SIZE,
+      hairRow * CHARACTER_CELL_SIZE,
+      left,
+      top,
+      camera.zoom,
+    );
     context.globalAlpha = 1;
   }
+}
+
+function drawCharacterLayer(context, image, sourceX, sourceY, x, y, zoom) {
+  context.drawImage(
+    image,
+    sourceX,
+    sourceY,
+    CHARACTER_CELL_SIZE,
+    CHARACTER_CELL_SIZE,
+    x,
+    y,
+    CHARACTER_CELL_SIZE * zoom,
+    CHARACTER_CELL_SIZE * zoom,
+  );
 }
 
 function drawNamesAndAccents(context, camera, avatars) {
@@ -791,9 +932,9 @@ function drawNamesAndAccents(context, camera, avatars) {
     const { x, y } = avatarPosition(avatar, camera);
     if (!rectVisible(
       x - 80 * camera.zoom,
-      y - 32 * camera.zoom,
+      y - 48 * camera.zoom,
       160 * camera.zoom,
-      40 * camera.zoom,
+      56 * camera.zoom,
       camera,
       true,
     )) continue;
@@ -801,7 +942,7 @@ function drawNamesAndAccents(context, camera, avatars) {
     context.fillText(
       avatar.username,
       x,
-      Math.max(12 * camera.zoom, y - 20 * camera.zoom),
+      Math.max(12 * camera.zoom, y - 36 * camera.zoom),
       Math.max(
         1,
         Math.min(
@@ -813,13 +954,13 @@ function drawNamesAndAccents(context, camera, avatars) {
     if (avatar.self) {
       context.strokeStyle = "#f3d36a";
       context.strokeRect(
-        x - 11 * camera.zoom,
-        y - 19 * camera.zoom,
-        22 * camera.zoom,
-        21 * camera.zoom,
+        x - 19 * camera.zoom,
+        y - 35 * camera.zoom,
+        38 * camera.zoom,
+        37 * camera.zoom,
       );
       context.fillStyle = "#f3d36a";
-      context.fillRect(x - camera.zoom, y - 9 * camera.zoom, 2 * camera.zoom, 2 * camera.zoom);
+      context.fillRect(x - camera.zoom, y - 17 * camera.zoom, 2 * camera.zoom, 2 * camera.zoom);
     }
   }
 }
@@ -959,7 +1100,7 @@ function drawFallback(state, scene, camera) {
     );
     context.clip();
     drawFallbackFloorAndWalls(context, fallbackCamera);
-    drawFurniture(context, fallbackCamera, null);
+    drawFallbackFurniture(context, fallbackCamera);
     for (const avatar of avatars) {
       const { x, y } = avatarPosition(avatar, fallbackCamera);
       if (!rectVisible(
@@ -1168,10 +1309,7 @@ export function initialize_canvas(onReady, onResize, onError) {
     dpr: null,
     deviceWidth: null,
     deviceHeight: null,
-    assets: {
-      tiles: { status: "idle", image: null },
-      avatars: { status: "idle", image: null },
-    },
+    assets: initialAssets(),
     camera: null,
     lastScene: null,
     lastFrameTime: null,
