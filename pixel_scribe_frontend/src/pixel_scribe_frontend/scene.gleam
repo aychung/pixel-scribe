@@ -149,7 +149,6 @@ pub type Bubble {
   Bubble(
     message_id: domain.MessageId,
     sender_id: domain.ConnectionId,
-    username: String,
     text: String,
     started_at_ms: Int,
     expires_at_ms: Int,
@@ -177,16 +176,11 @@ pub type BubbleRect {
 
 /// Pure, renderer-independent bubble text and placement.
 ///
-/// `lines` is only the bounded visual representation. The source message is
-/// intentionally not copied or changed here: `Bubble.text` remains the full
-/// accepted value for the accessible DOM chat log.
+/// `lines` is only the bounded visual representation. `Bubble.text` retains
+/// the full accepted value for future re-layout; chat state independently
+/// supplies the full text to the accessible DOM log.
 pub type BubbleLayout {
-  BubbleLayout(
-    lines: List(String),
-    rectangle: BubbleRect,
-    anchor: ViewportPoint,
-    truncated: Bool,
-  )
+  BubbleLayout(lines: List(String), rectangle: BubbleRect, truncated: Bool)
 }
 
 pub type SceneRenderData {
@@ -205,9 +199,9 @@ pub const bubble_fade_ms = 1000
 
 pub const bubble_lifetime_ms = 6000
 
-/// Bubble layout uses a fixed logical glyph advance. Grapheme clusters are
-/// counted rather than UTF-8 bytes or codepoints, so emoji and combining marks
-/// are never split by a visual line break.
+/// Bubble layout uses a conservative logical advance per grapheme. ASCII
+/// graphemes use an 8px advance; every grapheme containing a non-ASCII
+/// codepoint uses a 16px advance.
 pub const bubble_glyph_width = 8
 
 pub const bubble_horizontal_padding = 8
@@ -218,10 +212,9 @@ pub const bubble_line_height = 12
 
 pub const bubble_anchor_gap = 4
 
-// Keep these derived token values literal because Gleam constants cannot use
-// arithmetic expressions. They intentionally match the public layout tokens:
-// (160 - 8 - 8) / 8 = 18 grapheme clusters.
-const bubble_max_graphemes_per_line = 18
+// Keep this derived token literal because Gleam constants cannot use
+// arithmetic expressions: 160 - 8 - 8 = 144px of text interior.
+const bubble_max_line_width = 144
 
 /// Fifty hand-authored, tile-aligned bottom-center positions in open floor.
 /// The index is stable so placement can refer to an anchor without using a
@@ -368,7 +361,6 @@ pub fn add_bubble(
         Bubble(
           message.message_id,
           message.sender_id,
-          message.username,
           message.text,
           started_at_ms,
           started_at_ms + bubble_lifetime_ms,
@@ -393,7 +385,7 @@ pub fn bubble_visibility(
   now_ms: Int,
   reduced_motion: Bool,
 ) -> BubbleVisibility {
-  let Bubble(_, _, _, _, started_at_ms, expires_at_ms) = bubble
+  let Bubble(_, _, _, started_at_ms, expires_at_ms) = bubble
   let fade_starts_at_ms = started_at_ms + bubble_visible_ms
   case now_ms >= expires_at_ms {
     True -> Expired
@@ -414,17 +406,6 @@ pub fn bubble_visibility(
 /// Find the one lifecycle boundary that can change the current projection.
 /// Expired bubbles have no deadline, allowing the renderer to go idle after
 /// its final cleanup draw.
-pub fn next_bubble_deadline(
-  data: SceneRenderData,
-  now_ms: Int,
-  reduced_motion: Bool,
-) -> Option(Int) {
-  case next_bubble_boundary(data, now_ms, reduced_motion) {
-    Some(BubbleDeadline(_, at_ms)) -> Some(at_ms)
-    None -> None
-  }
-}
-
 pub fn next_bubble_boundary(
   data: SceneRenderData,
   now_ms: Int,
@@ -432,7 +413,7 @@ pub fn next_bubble_boundary(
 ) -> Option(BubbleDeadline) {
   let SceneRenderData(_, _, bubbles) = data
   list.fold(bubbles, None, fn(current, bubble) {
-    let Bubble(_, _, _, _, started_at_ms, expires_at_ms) = bubble
+    let Bubble(_, _, _, started_at_ms, expires_at_ms) = bubble
     let boundary = case bubble_visibility(bubble, now_ms, reduced_motion) {
       Expired -> None
       FullyVisible ->
@@ -500,9 +481,7 @@ pub fn layout_bubble(
   let #(lines, truncated) = truncate_visual_lines(wrapped_lines)
   let line_count = int.max(1, list.length(lines))
   let longest_line_width =
-    lines
-    |> list.map(fn(line) { string.length(line) * bubble_glyph_width })
-    |> list.fold(0, int.max)
+    lines |> list.map(line_width) |> list.fold(0, int.max)
   let width =
     int.min(
       bubble_limits.max_width,
@@ -533,7 +512,6 @@ pub fn layout_bubble(
   BubbleLayout(
     lines,
     BubbleRect(left, top, rectangle_width, rectangle_height),
-    anchor,
     truncated,
   )
 }
@@ -545,13 +523,14 @@ fn wrap_explicit_lines(lines: List(String)) -> List(String) {
 fn wrap_line(line: String) -> List(String) {
   case string.is_empty(line) {
     True -> [""]
-    False -> wrap_graphemes(string.to_graphemes(line), [], [])
+    False -> wrap_graphemes(string.to_graphemes(line), [], 0, [])
   }
 }
 
 fn wrap_graphemes(
   remaining: List(String),
   current: List(String),
+  current_width: Int,
   finished: List(String),
 ) -> List(String) {
   case remaining {
@@ -564,15 +543,23 @@ fn wrap_graphemes(
             ..finished
           ])
       }
-    [grapheme, ..rest] ->
-      case list.length(current) >= bubble_max_graphemes_per_line {
+    [grapheme, ..rest] -> {
+      let next_width = grapheme_width(grapheme)
+      case current != [] && current_width + next_width > bubble_max_line_width {
         True ->
-          wrap_graphemes(rest, [grapheme], [
+          wrap_graphemes(remaining, [], 0, [
             string.join(list.reverse(current), with: ""),
             ..finished
           ])
-        False -> wrap_graphemes(rest, [grapheme, ..current], finished)
+        False ->
+          wrap_graphemes(
+            rest,
+            [grapheme, ..current],
+            current_width + next_width,
+            finished,
+          )
       }
+    }
   }
 }
 
@@ -582,31 +569,66 @@ fn truncate_visual_lines(lines: List(String)) -> #(List(String), Bool) {
     False -> {
       let kept = list.take(lines, bubble_limits.max_lines)
       let assert Ok(last) = list.last(kept)
-      let ellipsis = "..."
-      let prefix_length =
-        int.max(0, bubble_max_graphemes_per_line - string.length(ellipsis))
-      let visual_last = string.slice(last, 0, prefix_length) <> ellipsis
+      let visual_last = line_with_ellipsis(last)
       let without_last = list.take(kept, bubble_limits.max_lines - 1)
       #(list.append(without_last, [visual_last]), True)
     }
   }
 }
 
-fn clamp(value: Int, minimum: Int, maximum: Int) -> Int {
-  int.max(minimum, int.min(value, maximum))
+fn line_width(line: String) -> Int {
+  line
+  |> string.to_graphemes
+  |> list.map(grapheme_width)
+  |> list.fold(0, fn(total, width) { total + width })
 }
 
-/// Clear the current bubble for a participant that left the room.
-pub fn clear_bubble(
-  data: SceneRenderData,
-  sender_id: domain.ConnectionId,
-) -> SceneRenderData {
-  let SceneRenderData(passes, avatars, bubbles) = data
-  SceneRenderData(
-    passes,
-    avatars,
-    list.filter(bubbles, fn(bubble) { bubble.sender_id != sender_id }),
-  )
+fn grapheme_width(grapheme: String) -> Int {
+  let codepoints = string.to_utf_codepoints(grapheme)
+  case
+    list.any(codepoints, fn(codepoint) {
+      string.utf_codepoint_to_int(codepoint) > 127
+    })
+  {
+    True -> 16
+    False -> bubble_glyph_width
+  }
+}
+
+fn line_with_ellipsis(line: String) -> String {
+  let ellipsis = "..."
+  let available_width = bubble_max_line_width - line_width(ellipsis)
+  let prefix =
+    take_graphemes_to_width(string.to_graphemes(line), available_width, 0, [])
+  prefix <> ellipsis
+}
+
+fn take_graphemes_to_width(
+  remaining: List(String),
+  maximum_width: Int,
+  current_width: Int,
+  kept: List(String),
+) -> String {
+  case remaining {
+    [] -> string.join(list.reverse(kept), with: "")
+    [grapheme, ..rest] -> {
+      let next_width = grapheme_width(grapheme)
+      case current_width + next_width <= maximum_width {
+        True ->
+          take_graphemes_to_width(
+            rest,
+            maximum_width,
+            current_width + next_width,
+            [grapheme, ..kept],
+          )
+        False -> string.join(list.reverse(kept), with: "")
+      }
+    }
+  }
+}
+
+fn clamp(value: Int, minimum: Int, maximum: Int) -> Int {
+  int.max(minimum, int.min(value, maximum))
 }
 
 /// Keep existing bubbles only for participants still present. Room snapshots
@@ -627,12 +649,6 @@ pub fn retain_bubbles(
       })
     }),
   )
-}
-
-/// Serialize only the bounded, trusted render facts needed by the native
-/// boundary. The renderer still validates this JSON before using it.
-pub fn render_data_json(data: SceneRenderData) -> String {
-  render_data_json_for_viewport(data, 0, 0, 8192, 8192)
 }
 
 pub fn render_data_json_for_viewport(
@@ -675,34 +691,76 @@ fn bubble_layout_json(
     list.find(avatars, fn(avatar) { avatar.connection_id == bubble.sender_id })
   {
     Error(_) -> Error(Nil)
-    Ok(AvatarDraw(_, _, WorldPoint(anchor_x, anchor_y), _, _, _, _)) -> {
-      let layout =
-        layout_bubble(
-          bubble,
-          ViewportPoint(anchor_x - origin_x, anchor_y - origin_y),
+    Ok(avatar) -> {
+      case
+        avatar_is_visible_in_viewport(
+          avatar,
+          origin_x,
+          origin_y,
           viewport_width,
           viewport_height,
         )
-      let BubbleLayout(lines, BubbleRect(left, top, width, height), _, _) =
-        layout
-      Ok(
-        json.object([
-          #("id", json.string(domain.message_id_to_string(bubble.message_id))),
-          #(
-            "sender_id",
-            json.string(domain.connection_id_to_string(bubble.sender_id)),
-          ),
-          #("lines", json.array(lines, json.string)),
-          #("left", json.int(left)),
-          #("top", json.int(top)),
-          #("width", json.int(width)),
-          #("height", json.int(height)),
-          #("started_at_ms", json.int(bubble.started_at_ms)),
-          #("expires_at_ms", json.int(bubble.expires_at_ms)),
-        ]),
-      )
+      {
+        False -> Error(Nil)
+        True -> {
+          let AvatarDraw(_, _, WorldPoint(anchor_x, anchor_y), _, _, _, _) =
+            avatar
+          let layout =
+            layout_bubble(
+              bubble,
+              ViewportPoint(anchor_x - origin_x, anchor_y - origin_y),
+              viewport_width,
+              viewport_height,
+            )
+          let BubbleLayout(lines, BubbleRect(left, top, width, height), _) =
+            layout
+          Ok(
+            json.object([
+              #(
+                "id",
+                json.string(domain.message_id_to_string(bubble.message_id)),
+              ),
+              #(
+                "sender_id",
+                json.string(domain.connection_id_to_string(bubble.sender_id)),
+              ),
+              #("lines", json.array(lines, json.string)),
+              #("left", json.int(left)),
+              #("top", json.int(top)),
+              #("width", json.int(width)),
+              #("height", json.int(height)),
+              #("started_at_ms", json.int(bubble.started_at_ms)),
+              #("expires_at_ms", json.int(bubble.expires_at_ms)),
+            ]),
+          )
+        }
+      }
     }
   }
+}
+
+fn avatar_is_visible_in_viewport(
+  avatar: AvatarDraw,
+  origin_x: Int,
+  origin_y: Int,
+  viewport_width: Int,
+  viewport_height: Int,
+) -> Bool {
+  let AvatarDraw(_, _, WorldPoint(anchor_x, anchor_y), _, _, _, _) = avatar
+  // Match the native avatar destination rectangle: x-8..x+8 and y-16..y.
+  let safe_width = int.max(0, viewport_width)
+  let safe_height = int.max(0, viewport_height)
+  let avatar_left = anchor_x - 8
+  let avatar_top = anchor_y - 16
+  let avatar_right = anchor_x + 8
+  let avatar_bottom = anchor_y
+  let viewport_right = origin_x + safe_width
+  let viewport_bottom = origin_y + safe_height
+
+  avatar_left < viewport_right
+  && avatar_right > origin_x
+  && avatar_top < viewport_bottom
+  && avatar_bottom > origin_y
 }
 
 fn avatar_json(avatar: AvatarDraw) -> json.Json {

@@ -28,6 +28,8 @@ const MAX_ZOOM = 3;
 const MAX_RENDER_STRING_LENGTH = 8192;
 const MAX_VIEWPORT_EXTENT = 8192;
 const BUBBLE_LIFETIME_MS = 6000;
+const BUBBLE_VISIBLE_MS = 5000;
+const BUBBLE_FADE_MS = BUBBLE_LIFETIME_MS - BUBBLE_VISIBLE_MS;
 const BUBBLE_MAX_WIDTH = 160;
 const BUBBLE_MAX_HEIGHT = 44;
 
@@ -846,11 +848,18 @@ function drawSpeechBubbles(context, camera, scene) {
       context.fillStyle = "#18232a";
       context.font = `${12 * camera.zoom}px monospace`;
       context.textAlign = "left";
+      // The layout uses a logical bubble width, while Canvas may resolve
+      // emoji and other fallback glyphs wider than the monospace advance.
+      // maxWidth keeps every line inside the padded rectangle without
+      // clipping it at the viewport edge. Normal lines below this width are
+      // unaffected; only oversized native text is scaled by Canvas.
+      const interiorWidth = Math.max(1, (bubble.width - 16) * camera.zoom);
       for (let index = 0; index < bubble.lines.length; index += 1) {
         context.fillText(
           bubble.lines[index],
           left + 8 * camera.zoom,
           top + (index + 1) * 12 * camera.zoom,
+          interiorWidth,
         );
       }
     } catch (_) {
@@ -890,10 +899,16 @@ function prefersReducedMotion() {
 
 function bubbleVisibility(bubble, now, reducedMotion) {
   if (now >= bubble.expiresAt) return null;
-  if (reducedMotion || now < bubble.startedAt + 5000) {
+  if (reducedMotion || now < bubble.startedAt + BUBBLE_VISIBLE_MS) {
     return { opacity: 100, fading: false };
   }
-  const progress = Math.max(0, Math.min(100, (now - bubble.startedAt - 5000) / 1000));
+  const progress = Math.max(
+    0,
+    Math.min(
+      1,
+      (now - bubble.startedAt - BUBBLE_VISIBLE_MS) / BUBBLE_FADE_MS,
+    ),
+  );
   return { opacity: Math.max(1, Math.round(100 - progress * 100)), fading: true };
 }
 

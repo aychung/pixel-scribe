@@ -30,7 +30,7 @@ fn schedule_timer_ffi(
   generation: Int,
   timer_id: Int,
   delay_ms: Int,
-  callback: fn(Int, Int) -> Nil,
+  callback: fn(Int, Int, Int) -> Nil,
 ) -> Nil
 
 @external(javascript, "./browser_ffi.mjs", "cancel_timer")
@@ -105,16 +105,17 @@ pub fn format_timestamp_local(timestamp: String) -> String {
   format_timestamp_local_ffi(timestamp)
 }
 
-/// Schedules a browser timer that sends its typed identity back through the
-/// supplied Lustre message constructor. The generation is deliberately part
-/// of the callback, so the state machine can ignore a callback from a stale
-/// socket lifetime even when a cancellation races with the browser timer.
+/// Schedules a browser timer that sends its typed identity and actual firing
+/// wall-clock time back through the supplied Lustre message constructor. The
+/// generation is deliberately part of the callback, so the state machine can
+/// ignore a callback from a stale socket lifetime even when a cancellation
+/// races with the browser timer.
 pub fn schedule_timer(
   kind: TimerKind,
   generation: Int,
   timer_id: Int,
   delay_ms: Int,
-  message: fn(Int, Int) -> a,
+  message: fn(Int, Int, Int) -> a,
 ) -> Effect(a) {
   effect.from(fn(dispatch) {
     schedule_timer_ffi(
@@ -122,8 +123,8 @@ pub fn schedule_timer(
       generation,
       timer_id,
       delay_ms,
-      fn(fired_generation, fired_timer_id) {
-        dispatch(message(fired_generation, fired_timer_id))
+      fn(fired_generation, fired_timer_id, fired_at_ms) {
+        dispatch(message(fired_generation, fired_timer_id, fired_at_ms))
       },
     )
   })

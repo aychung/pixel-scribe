@@ -13,8 +13,18 @@ const CHAT_LOG_NEAR_BOTTOM_PX = 24;
 // on the entry for cancellation checks and callback dispatch. Keeping the
 // entry object in the map lets a callback prove it is still the currently
 // registered timer even if clearTimeout cannot prevent an already queued
-// callback.
+// callback. The callback receives Date.now() at dispatch time rather than
+// the requested deadline because background tabs can deliver timers late.
 const timerHandles = new Map();
+
+function currentTimeMs() {
+  try {
+    const value = Date.now();
+    return Number.isSafeInteger(value) ? value : 0;
+  } catch (_error) {
+    return 0;
+  }
+}
 
 function timerKey(timerKind, timerId) {
   return `${timerKind}:${timerId}`;
@@ -64,7 +74,7 @@ export function schedule_timer(timerKind, generation, timerId, delayMs, callback
       // Remove before dispatching so a callback that triggers cleanup cannot
       // accidentally cancel or retain an already-fired handle.
       timerHandles.delete(key);
-      callback(generation, timerId);
+      callback(generation, timerId, currentTimeMs());
     }, delayMs);
   } catch (_error) {
     timerHandles.delete(key);

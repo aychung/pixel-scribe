@@ -79,6 +79,7 @@ async function installRafProbe(page: Page) {
       avatarSourceXs: [] as number[],
       avatarSourceYs: [] as number[],
       tileSourceRects: [] as Array<[number, number, number, number]>,
+      textDraws: [] as Array<{ text: string; maxWidth?: number }>,
       images: [] as unknown[],
       clampValues: [] as number[][],
       flush(timestamp: number) {
@@ -138,6 +139,7 @@ async function installRafProbe(page: Page) {
     const nativeRestore = contextPrototype.restore;
     const nativeClip = contextPrototype.clip;
     const nativeDrawImage = contextPrototype.drawImage;
+    const nativeFillText = contextPrototype.fillText;
     Object.defineProperty(contextPrototype, "clearRect", {
       configurable: true,
       value(this: CanvasRenderingContext2D, ...arguments_: Parameters<typeof nativeClearRect>) {
@@ -187,6 +189,19 @@ async function installRafProbe(page: Page) {
         return nativeDrawImage.apply(
           this,
           arguments_ as Parameters<typeof nativeDrawImage>,
+        );
+      },
+    });
+    Object.defineProperty(contextPrototype, "fillText", {
+      configurable: true,
+      value(this: CanvasRenderingContext2D, ...arguments_: unknown[]) {
+        probe.textDraws.push({
+          text: arguments_[0] as string,
+          maxWidth: arguments_[3] as number | undefined,
+        });
+        return nativeFillText.apply(
+          this,
+          arguments_ as Parameters<typeof nativeFillText>,
         );
       },
     });
@@ -783,6 +798,42 @@ test.describe("canvas FFI boundaries", () => {
     expect(after.pending).toBe(0);
     expect(after.requested).toBe(before.requested);
     assertNoBrowserErrors();
+  });
+
+  test("enforces the bubble interior width for wide graphemes", async ({ page }) => {
+    await prepareDirectFfi(page);
+    await page.evaluate(async () => {
+      const probe = (globalThis as typeof globalThis & {
+        __canvasRafProbe: { hold: boolean; flush: (timestamp: number) => void };
+      }).__canvasRafProbe;
+      const ffi = await import("/__canvas_ffi_test__.mjs");
+      probe.hold = true;
+      const startedAt = Date.now();
+      ffi.render_canvas(JSON.stringify({
+        avatars: [
+          { id: "sender", username: "Ada", x: 160, y: 120, variant: 0, self: false, status: "online" },
+        ],
+        bubbles: [{
+          id: "wide-emoji",
+          sender_id: "sender",
+          lines: ["🙂".repeat(18)],
+          left: 0,
+          top: 0,
+          width: 160,
+          height: 20,
+          started_at_ms: startedAt,
+          expires_at_ms: startedAt + 6_000,
+        }],
+      }), JSON.stringify({ origin_x: 0, origin_y: 0, viewport_width: 320, viewport_height: 240 }), () => {});
+      probe.hold = false;
+      probe.flush(32);
+    });
+    await expect.poll(async () => (await rafMetrics(page)).pending).toBe(0);
+    const textDraws = await page.evaluate(() => (globalThis as typeof globalThis & {
+      __canvasRafProbe: { textDraws: Array<{ text: string; maxWidth?: number }> };
+    }).__canvasRafProbe.textDraws);
+    const bubbleText = textDraws.find(({ text }) => text === "🙂".repeat(18));
+    expect(bubbleText).toEqual({ text: "🙂".repeat(18), maxWidth: 144 });
   });
 
   test("rejects noncanonical bubble lifetime and settles without an animation loop", async ({ page }) => {

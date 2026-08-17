@@ -38,7 +38,7 @@ pub type Msg {
   ZoomIn
   ReconnectTimerFired(generation: Int, timer_id: Int)
   RateLimitTimerFired(generation: Int, deadline_ms: Int)
-  BubbleTimerFired(generation: Int, timer_id: Int)
+  BubbleTimerFired(generation: Int, timer_id: Int, fired_at_ms: Int)
   RetryRequested
   ReturnToUsername
 }
@@ -118,8 +118,8 @@ pub fn transition(model: Model, message: Msg) -> #(Model, List(Command)) {
     ZoomIn -> update_zoom(model, ZoomIncrease)
     RateLimitTimerFired(generation, deadline_ms) ->
       rate_limit_timer_fired(model, generation, deadline_ms)
-    BubbleTimerFired(generation, timer_id) ->
-      bubble_timer_fired(model, generation, timer_id)
+    BubbleTimerFired(generation, timer_id, fired_at_ms) ->
+      bubble_timer_fired(model, generation, timer_id, fired_at_ms)
     ReconnectTimerFired(generation, timer_id) ->
       reconnect_timer_fired(model, generation, timer_id)
     RetryRequested -> retry_requested(model)
@@ -1082,22 +1082,19 @@ fn bubble_timer_fired(
   model: Model,
   generation: Int,
   timer_id: Int,
+  fired_at_ms: Int,
 ) -> #(Model, List(Command)) {
   case model.bubble_timer {
     Some(model.BubbleTimer(expected_generation, expected_id, deadline_ms, _))
       if expected_generation == generation && expected_id == timer_id
     -> {
+      let effective_now_ms = int.max(deadline_ms, fired_at_ms)
       let expired =
         model.Model(..model, bubble_timer: None)
-        |> expire_scene_bubbles(deadline_ms)
-      let scene_changed = expired.scene != model.scene
+        |> expire_scene_bubbles(effective_now_ms)
       let #(timed, timer_commands) =
-        reconcile_bubble_timer(expired, generation, deadline_ms)
-      let render_commands = case scene_changed {
-        True -> timer_commands
-        False -> [RenderScene, ..timer_commands]
-      }
-      #(timed, render_commands)
+        reconcile_bubble_timer(expired, generation, effective_now_ms)
+      #(timed, [RenderScene, ..timer_commands])
     }
     _ -> #(model, [])
   }

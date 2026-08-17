@@ -101,7 +101,9 @@ fn interpret_command(
         generation,
         timer_id,
         delay_ms,
-        update.ReconnectTimerFired,
+        fn(fired_generation, fired_timer_id, _fired_at_ms) {
+          update.ReconnectTimerFired(fired_generation, fired_timer_id)
+        },
       )
     update.CancelReconnect(generation, timer_id) ->
       browser.cancel_timer(browser.Reconnect, generation, timer_id)
@@ -111,7 +113,9 @@ fn interpret_command(
         generation,
         deadline_ms,
         delay_ms,
-        update.RateLimitTimerFired,
+        fn(fired_generation, fired_deadline_ms, _fired_at_ms) {
+          update.RateLimitTimerFired(fired_generation, fired_deadline_ms)
+        },
       )
     update.CancelRateLimit(generation, deadline_ms) ->
       browser.cancel_timer(browser.RateLimit, generation, deadline_ms)

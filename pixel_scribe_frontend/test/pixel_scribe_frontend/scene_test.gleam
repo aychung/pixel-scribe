@@ -139,14 +139,7 @@ pub fn live_bubbles_are_owned_replaced_and_cleared_by_connection_id_test() {
   let with_first = scene.add_bubble(data, first, 1000)
   assert with_first.bubbles
     == [
-      scene.Bubble(
-        first.message_id,
-        first.sender_id,
-        first.username,
-        first.text,
-        1000,
-        7000,
-      ),
+      scene.Bubble(first.message_id, first.sender_id, first.text, 1000, 7000),
     ]
 
   let with_replacement = scene.add_bubble(with_first, replacement, 2000)
@@ -155,14 +148,18 @@ pub fn live_bubbles_are_owned_replaced_and_cleared_by_connection_id_test() {
       scene.Bubble(
         replacement.message_id,
         replacement.sender_id,
-        replacement.username,
         replacement.text,
         2000,
         8000,
       ),
     ]
 
-  let cleared = scene.clear_bubble(with_replacement, peer_id)
+  let survivor_data =
+    scene.render_data(17, self_id, [avatar_input("self", "Ada", 128)])
+  let cleared =
+    scene.retain_bubbles(with_replacement, survivor_data, [
+      domain.Presence(self_id, "Ada"),
+    ])
   assert cleared.bubbles == []
 }
 
@@ -253,7 +250,6 @@ pub fn accepted_live_message_creates_duplicate_safe_bubble_and_leave_clears_test
       scene.Bubble(
         accepted.message_id,
         accepted.sender_id,
-        accepted.username,
         accepted.text,
         0,
         scene.bubble_lifetime_ms,
@@ -323,7 +319,6 @@ pub fn bubble_layout_caps_visual_lines_and_uses_ellipsis_only_when_truncated_tes
       scene.Bubble(
         message.message_id,
         message.sender_id,
-        message.username,
         "short",
         0,
         scene.bubble_lifetime_ms,
@@ -350,7 +345,8 @@ pub fn bubble_layout_is_emoji_safe_and_clamped_to_every_viewport_edge_test() {
     scene.layout_bubble(bubble, scene.ViewportPoint(x: 200, y: 120), 200, 120)
 
   assert list.length(left.lines) <= scene.bubble_limits.max_lines
-  assert list.all(left.lines, fn(line) { string.length(line) <= 18 })
+  assert list.all(left.lines, fn(line) { string.length(line) <= 10 })
+  assert list.any(left.lines, fn(line) { string.ends_with(line, "...") })
   assert left.rectangle.left >= 0
   assert left.rectangle.top >= 0
   assert left.rectangle.left + left.rectangle.width <= 200
@@ -360,6 +356,41 @@ pub fn bubble_layout_is_emoji_safe_and_clamped_to_every_viewport_edge_test() {
   assert right.rectangle.left + right.rectangle.width <= 200
   assert right.rectangle.top + right.rectangle.height <= 120
   assert bubble.text == emoji_text
+}
+
+pub fn bubble_layout_prices_zwj_family_as_one_grapheme_test() {
+  let sender_id = domain.connection_id_from_string("bubble-family")
+  let data =
+    scene.render_data(17, sender_id, [avatar_input("bubble-family", "Ada", 128)])
+  let family = "👨‍👩‍👧‍👦"
+  let family_text = string.repeat(family, 18)
+  let message = chat_message("family", sender_id, family_text)
+  let assert [bubble] = scene.add_bubble(data, message, 0).bubbles
+
+  let layout =
+    scene.layout_bubble(bubble, scene.ViewportPoint(x: 80, y: 80), 200, 120)
+
+  assert layout.lines == [string.repeat(family, 9), string.repeat(family, 9)]
+  assert layout.truncated == False
+}
+
+pub fn bubble_layout_prices_decomposed_combining_grapheme_not_codepoints_test() {
+  let sender_id = domain.connection_id_from_string("bubble-combining")
+  let data =
+    scene.render_data(17, sender_id, [
+      avatar_input("bubble-combining", "Ada", 128),
+    ])
+  let combining = "e\u{301}\u{308}"
+  let combining_text = string.repeat(combining, 12)
+  let message = chat_message("combining", sender_id, combining_text)
+  let assert [bubble] = scene.add_bubble(data, message, 0).bubbles
+
+  let layout =
+    scene.layout_bubble(bubble, scene.ViewportPoint(x: 80, y: 80), 200, 120)
+
+  assert layout.lines
+    == [string.repeat(combining, 9), string.repeat(combining, 3)]
+  assert layout.truncated == False
 }
 
 pub fn bubble_lifecycle_is_visible_then_fades_then_expires_at_fixed_clock_test() {
@@ -400,10 +431,13 @@ pub fn bubble_lifecycle_schedules_only_the_next_boundary_and_expiry_removes_it_t
   let assert [bubble] = scene.add_bubble(data, message, 10_000).bubbles
   let with_bubble = scene.SceneRenderData(data.passes, data.avatars, [bubble])
 
-  assert scene.next_bubble_deadline(with_bubble, 10_001, False) == Some(15_000)
-  assert scene.next_bubble_deadline(with_bubble, 15_100, False) == Some(16_000)
-  assert scene.next_bubble_deadline(with_bubble, 15_100, True) == Some(16_000)
-  assert scene.next_bubble_deadline(with_bubble, 16_000, False) == None
+  assert scene.next_bubble_boundary(with_bubble, 10_001, False)
+    == Some(scene.BubbleDeadline(message.message_id, 15_000))
+  assert scene.next_bubble_boundary(with_bubble, 15_100, False)
+    == Some(scene.BubbleDeadline(message.message_id, 16_000))
+  assert scene.next_bubble_boundary(with_bubble, 15_100, True)
+    == Some(scene.BubbleDeadline(message.message_id, 16_000))
+  assert scene.next_bubble_boundary(with_bubble, 16_000, False) == None
   assert scene.expire_bubbles(with_bubble, 15_999, False).bubbles == [bubble]
   assert scene.expire_bubbles(with_bubble, 16_000, False).bubbles == []
 }
@@ -421,7 +455,8 @@ pub fn replacing_a_bubble_makes_the_old_identity_ineligible_for_expiry_test() {
 
   assert scene.expire_bubbles(replaced, 16_000, False).bubbles
     == replaced.bubbles
-  assert scene.next_bubble_deadline(replaced, 16_000, False) == Some(17_000)
+  assert scene.next_bubble_boundary(replaced, 16_000, False)
+    == Some(scene.BubbleDeadline(replacement.message_id, 17_000))
 }
 
 pub fn renderer_json_uses_canonical_bubble_lines_and_preserves_full_text_test() {
@@ -439,6 +474,41 @@ pub fn renderer_json_uses_canonical_bubble_lines_and_preserves_full_text_test() 
   assert !string.contains(rendered, "\"text\"")
   assert string.contains(rendered, "\"left\":")
   assert string.contains(rendered, "\"expires_at_ms\":16000")
+}
+
+pub fn renderer_json_omits_fully_offscreen_bubbles_but_keeps_visible_edge_owners_test() {
+  let sender_id = domain.connection_id_from_string("bubble-offscreen")
+  let message = chat_message("offscreen", sender_id, "hello")
+  let offscreen_data =
+    scene.render_data(17, sender_id, [
+      scene.AvatarInput(
+        connection_id: sender_id,
+        username: "Ada",
+        bottom_anchor: scene.WorldPoint(x: 128, y: 500),
+        status: scene.Online,
+      ),
+    ])
+    |> scene.add_bubble(message, 0)
+  let offscreen_json =
+    scene.render_data_json_for_viewport(offscreen_data, 0, 0, 320, 240)
+
+  assert offscreen_data.bubbles != []
+  assert string.contains(offscreen_json, "\"bubbles\":[]")
+
+  let edge_data =
+    scene.render_data(17, sender_id, [
+      scene.AvatarInput(
+        connection_id: sender_id,
+        username: "Ada",
+        bottom_anchor: scene.WorldPoint(x: 4, y: 16),
+        status: scene.Online,
+      ),
+    ])
+    |> scene.add_bubble(message, 0)
+  let edge_json = scene.render_data_json_for_viewport(edge_data, 0, 0, 320, 240)
+
+  assert string.contains(edge_json, "\"id\":\"offscreen\"")
+  assert string.contains(edge_json, "\"left\":0")
 }
 
 fn chat_message(

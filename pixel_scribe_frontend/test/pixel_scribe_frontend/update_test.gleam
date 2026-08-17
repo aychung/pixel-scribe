@@ -972,7 +972,7 @@ pub fn stale_bubble_timer_cannot_expire_a_replacement_test() {
       update.ScheduleBubble(37, 2, 5000),
     ]
   let #(stale, stale_commands) =
-    update.transition(with_replacement, update.BubbleTimerFired(37, 1))
+    update.transition(with_replacement, update.BubbleTimerFired(37, 1, 15_000))
   assert stale == with_replacement
   assert stale_commands == []
 }
@@ -995,7 +995,7 @@ pub fn bubble_timer_expiry_updates_pure_scene_and_schedules_render_test() {
       ),
     )
   let #(after_fade_boundary, fade_commands) =
-    update.transition(with_bubble, update.BubbleTimerFired(38, 1))
+    update.transition(with_bubble, update.BubbleTimerFired(38, 1, 15_000))
   assert fade_commands
     == [
       update.RenderScene,
@@ -1007,18 +1007,81 @@ pub fn bubble_timer_expiry_updates_pure_scene_and_schedules_render_test() {
       scene.Bubble(
         accepted.message_id,
         accepted.sender_id,
-        accepted.username,
         accepted.text,
         10_000,
         16_000,
       ),
     ]
   let #(expired, expiry_commands) =
-    update.transition(after_fade_boundary, update.BubbleTimerFired(38, 2))
+    update.transition(
+      after_fade_boundary,
+      update.BubbleTimerFired(38, 2, 16_000),
+    )
   let assert model.Ready(_, _, _, expired_data, _, _) = expired.scene
   assert expired_data.bubbles == []
-  assert expiry_commands == []
+  assert expiry_commands == [update.RenderScene]
   assert expired.bubble_timer == None
+}
+
+pub fn late_bubble_timer_callback_does_not_schedule_obsolete_timer_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let peer_id = domain.connection_id_from_string("peer")
+  let joined =
+    joined_ready_model(40, self_id, [domain.Presence(peer_id, "Bea")])
+  let accepted = message("late-timer", peer_id, "accepted")
+  let #(with_bubble, _) =
+    update.transition(
+      joined,
+      update.AcceptedMessage(
+        40,
+        10_000,
+        domain.default_room_id,
+        accepted,
+        False,
+      ),
+    )
+
+  // The callback was scheduled for 16,000ms, but the browser delivered it
+  // after the bubble had already expired at 16,000ms.
+  let #(expired, commands) =
+    update.transition(with_bubble, update.BubbleTimerFired(40, 1, 17_000))
+
+  let assert model.Ready(_, _, _, data, _, _) = expired.scene
+  assert data.bubbles == []
+  assert expired.bubble_timer == None
+  assert commands == [update.RenderScene]
+}
+
+pub fn early_bubble_timer_callback_uses_stored_boundary_test() {
+  let self_id = domain.connection_id_from_string("self")
+  let peer_id = domain.connection_id_from_string("peer")
+  let joined =
+    joined_ready_model(41, self_id, [domain.Presence(peer_id, "Bea")])
+  let accepted = message("early-timer", peer_id, "accepted")
+  let #(with_bubble, _) =
+    update.transition(
+      joined,
+      update.AcceptedMessage(
+        41,
+        10_000,
+        domain.default_room_id,
+        accepted,
+        False,
+      ),
+    )
+
+  // The current timer boundary is 15,000ms. A clock that moves backward
+  // must not make the reducer schedule that same boundary again.
+  let #(updated, commands) =
+    update.transition(with_bubble, update.BubbleTimerFired(41, 1, 14_000))
+
+  assert updated.bubble_timer
+    == Some(model.BubbleTimer(41, 2, 16_000, accepted.message_id))
+  assert commands
+    == [
+      update.RenderScene,
+      update.ScheduleBubble(41, 2, 1000),
+    ]
 }
 
 pub fn reduced_motion_schedules_expiry_without_a_fade_boundary_test() {
@@ -1048,6 +1111,13 @@ pub fn reduced_motion_schedules_expiry_without_a_fade_boundary_test() {
     == [
       update.ScheduleBubble(39, 1, 6000),
     ]
+
+  let #(expired, expiry_commands) =
+    update.transition(updated, update.BubbleTimerFired(39, 1, 16_000))
+  let assert model.Ready(_, _, _, expired_data, _, _) = expired.scene
+  assert expired_data.bubbles == []
+  assert expired.bubble_timer == None
+  assert expiry_commands == [update.RenderScene]
 }
 
 pub fn duplicate_accepted_message_never_scrolls_test() {
