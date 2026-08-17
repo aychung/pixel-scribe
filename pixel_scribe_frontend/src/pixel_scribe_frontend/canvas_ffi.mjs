@@ -14,8 +14,8 @@ const CHARACTER_FRONT_COLUMN = 0;
 const CHARACTER_MODEL_ROWS = 6;
 const CHARACTER_HAIR_ROWS = 8;
 const CHARACTER_OUTFIT_ROWS = 4;
-const WORLD_WIDTH = 1536;
-const WORLD_HEIGHT = 1024;
+const WORLD_WIDTH = 320;
+const WORLD_HEIGHT = 176;
 const ASSET_URLS = Object.freeze({
   tiles: "/pixel-art/metrocity/Interior/Home/TilesHouse.png",
   cupboard: "/pixel-art/metrocity/Interior/Home/Cupboard-Sheet.png",
@@ -631,82 +631,62 @@ function drawFloorAndWalls(context, camera, tiles) {
   const endX = Math.ceil(range.right / TILE_SIZE) * TILE_SIZE;
   const endY = Math.ceil(range.bottom / TILE_SIZE) * TILE_SIZE;
 
-  fillWorldRect(context, camera, 0, 0, WORLD_WIDTH, WORLD_HEIGHT, "#8e5d2a");
+  fillWorldRect(context, camera, 0, 0, WORLD_WIDTH, WORLD_HEIGHT, "#3a2619");
   for (let worldY = startY; worldY < endY; worldY += TILE_SIZE) {
     for (let worldX = startX; worldX < endX; worldX += TILE_SIZE) {
+      if (!isOfficeFloorTile(worldX, worldY)) continue;
       const x = (worldX - camera.originX) * camera.zoom;
       const y = (worldY - camera.originY) * camera.zoom;
-      context.fillStyle =
-        (worldX / TILE_SIZE + worldY / TILE_SIZE) % 2 === 0
-          ? "#8e5d2a"
-          : "#956334";
+      const checker = (worldX / TILE_SIZE + worldY / TILE_SIZE) % 2 === 0;
+      context.fillStyle = floorColor(worldX, checker);
       context.fillRect(x, y, TILE_SIZE * camera.zoom, TILE_SIZE * camera.zoom);
     }
   }
 
-  fillWorldRect(context, camera, 0, 0, WORLD_WIDTH, 64, "#3a2619");
-  fillWorldRect(context, camera, 0, WORLD_HEIGHT - 64, WORLD_WIDTH, 64, "#3a2619");
-  fillWorldRect(context, camera, 0, 64, 32, WORLD_HEIGHT - 128, "#3a2619");
-  fillWorldRect(
-    context,
-    camera,
-    WORLD_WIDTH - 32,
-    64,
-    32,
-    WORLD_HEIGHT - 128,
-    "#3a2619",
-  );
+  for (let worldX = 0; worldX < WORLD_WIDTH; worldX += TILE_SIZE) {
+    drawWallTile(context, camera, tiles, worldX, 0);
+    drawWallTile(context, camera, tiles, worldX, WORLD_HEIGHT - TILE_SIZE);
+  }
+  for (let worldY = TILE_SIZE; worldY < WORLD_HEIGHT - TILE_SIZE; worldY += TILE_SIZE) {
+    drawWallTile(context, camera, tiles, 0, worldY);
+    drawWallTile(context, camera, tiles, WORLD_WIDTH - TILE_SIZE, worldY);
+  }
+  for (let worldY = TILE_SIZE; worldY < 64; worldY += TILE_SIZE) {
+    drawWallTile(context, camera, tiles, 160, worldY);
+  }
+  for (let worldY = 128; worldY < WORLD_HEIGHT - TILE_SIZE; worldY += TILE_SIZE) {
+    drawWallTile(context, camera, tiles, 160, worldY);
+  }
+}
 
-  for (let worldX = startX; worldX < endX; worldX += TILE_SIZE) {
-    const x = (worldX - camera.originX) * camera.zoom;
-    context.drawImage(
-      tiles,
-      WALL_TILE_SOURCE[0],
-      WALL_TILE_SOURCE[1],
-      TILE_SIZE,
-      TILE_SIZE,
-      x,
-      -camera.originY * camera.zoom,
-      TILE_SIZE * camera.zoom,
-      TILE_SIZE * camera.zoom,
-    );
-    context.drawImage(
-      tiles,
-      WALL_TILE_SOURCE[0],
-      WALL_TILE_SOURCE[1],
-      TILE_SIZE,
-      TILE_SIZE,
-      x,
-      (WORLD_HEIGHT - TILE_SIZE - camera.originY) * camera.zoom,
-      TILE_SIZE * camera.zoom,
-      TILE_SIZE * camera.zoom,
-    );
-  }
-  for (let worldY = startY; worldY < endY; worldY += TILE_SIZE) {
-    const y = (worldY - camera.originY) * camera.zoom;
-    context.drawImage(
-      tiles,
-      WALL_TILE_SOURCE[0],
-      WALL_TILE_SOURCE[1],
-      TILE_SIZE,
-      TILE_SIZE,
-      -camera.originX * camera.zoom,
-      y,
-      TILE_SIZE * camera.zoom,
-      TILE_SIZE * camera.zoom,
-    );
-    context.drawImage(
-      tiles,
-      WALL_TILE_SOURCE[0],
-      WALL_TILE_SOURCE[1],
-      TILE_SIZE,
-      TILE_SIZE,
-      (WORLD_WIDTH - TILE_SIZE - camera.originX) * camera.zoom,
-      y,
-      TILE_SIZE * camera.zoom,
-      TILE_SIZE * camera.zoom,
-    );
-  }
+function isOfficeFloorTile(worldX, worldY) {
+  return (
+    worldX >= TILE_SIZE &&
+    worldX < WORLD_WIDTH - TILE_SIZE &&
+    worldY >= TILE_SIZE &&
+    worldY < WORLD_HEIGHT - TILE_SIZE &&
+    !(worldX === 160 && (worldY < 64 || worldY >= 128))
+  );
+}
+
+function floorColor(worldX, checker) {
+  if (worldX >= 160) return checker ? "#3f6e91" : "#477a9f";
+  return checker ? "#8e5d2a" : "#956334";
+}
+
+function drawWallTile(context, camera, tiles, worldX, worldY) {
+  if (!rectVisible(worldX, worldY, TILE_SIZE, TILE_SIZE, camera)) return;
+  context.drawImage(
+    tiles,
+    WALL_TILE_SOURCE[0],
+    WALL_TILE_SOURCE[1],
+    TILE_SIZE,
+    TILE_SIZE,
+    (worldX - camera.originX) * camera.zoom,
+    (worldY - camera.originY) * camera.zoom,
+    TILE_SIZE * camera.zoom,
+    TILE_SIZE * camera.zoom,
+  );
 }
 
 function fillWorldRect(context, camera, worldX, worldY, width, height, color) {
@@ -720,55 +700,10 @@ function fillWorldRect(context, camera, worldX, worldY, width, height, color) {
 }
 
 function drawFurniture(context, camera, assets) {
-  const pods = [
-    [160, 176, 0],
-    [432, 336, 1],
-    [720, 672, 2],
-    [1008, 176, 3],
-    [1200, 496, 4],
-  ];
-  for (const [worldX, worldY, theme] of pods) {
-    drawInteriorAsset(
-      context,
-      camera,
-      assets.kitchen.image,
-      64 + (theme % 2) * 64,
-      0,
-      64,
-      96,
-      worldX,
-      worldY,
-    );
-    drawInteriorAsset(
-      context,
-      camera,
-      assets.cupboard.image,
-      192 + (theme % 3) * 64,
-      0,
-      64,
-      96,
-      worldX + 64,
-      worldY,
-    );
-    drawInteriorAsset(
-      context,
-      camera,
-      assets.miscellaneous.image,
-      320 + (theme % 2) * 64,
-      0,
-      64,
-      64,
-      worldX + 16,
-      worldY + 80,
-    );
-  }
-
   const carpets = [
-    [192, 320, 2],
-    [832, 320, 1],
-    [640, 432, 2],
-    [192, 704, 3],
-    [832, 704, 4],
+    [208, 48, 2],
+    [208, 96, 3],
+    [32, 112, 0],
   ];
   for (const [worldX, worldY, carpetColumn] of carpets) {
     drawInteriorAsset(
@@ -785,22 +720,17 @@ function drawFurniture(context, camera, assets) {
   }
 
   const desks = [
-    [96, 176, 0],
-    [96, 336, 0],
-    [320, 176, 1],
-    [608, 176, 2],
-    [928, 336, 3],
-    [96, 672, 4],
-    [320, 656, 5],
-    [608, 512, 0],
-    [928, 656, 1],
+    [32, 32, 0],
+    [96, 32, 1],
+    [176, 112, 2],
+    [240, 112, 0],
   ];
   for (const [worldX, worldY, theme] of desks) {
     drawInteriorAsset(
       context,
       camera,
       assets.livingRoom.image,
-      0,
+      (theme % 3) * 64,
       0,
       64,
       96,
@@ -821,17 +751,16 @@ function drawFurniture(context, camera, assets) {
   }
 
   const sofas = [
-    [320, 96, 0],
-    [928, 96, 3],
-    [320, 768, 5],
-    [928, 768, 7],
+    [208, 48, 0],
+    [208, 96, 1],
+    [256, 48, 3],
   ];
   for (const [worldX, worldY, colorRow] of sofas) {
     drawInteriorAsset(
       context,
       camera,
       assets.livingRoom1.image,
-      64,
+      worldX === 256 ? 192 : 64,
       colorRow * 64,
       64,
       64,
@@ -840,16 +769,23 @@ function drawFurniture(context, camera, assets) {
     );
   }
 
-  drawInteriorAsset(context, camera, assets.livingRoom1.image, 64, 0, 64, 64, 192, 320);
-  drawInteriorAsset(context, camera, assets.miscellaneous.image, 256, 0, 64, 64, 192, 352);
+  drawInteriorAsset(
+    context,
+    camera,
+    assets.miscellaneous.image,
+    192,
+    0,
+    64,
+    64,
+    224,
+    64,
+  );
 
   const bookshelves = [
-    [640, 80, 192],
-    [768, 80, 256],
-    [896, 80, 320],
-    [128, 864, 192],
-    [256, 864, 256],
-    [384, 864, 320],
+    [16, 0, 192],
+    [80, 0, 256],
+    [176, 0, 320],
+    [240, 0, 384],
   ];
   for (const [worldX, worldY, sourceX] of bookshelves) {
     drawInteriorAsset(
@@ -865,37 +801,23 @@ function drawFurniture(context, camera, assets) {
     );
   }
 
-  drawInteriorAsset(context, camera, assets.miscellaneous.image, 256, 0, 64, 64, 704, 432);
-  drawInteriorAsset(context, camera, assets.miscellaneous.image, 320, 0, 64, 64, 672, 448);
-  drawInteriorAsset(context, camera, assets.miscellaneous.image, 384, 0, 64, 64, 752, 448);
-
-  drawInteriorAsset(context, camera, assets.flowers.image, 0, 0, 64, 96, 96, 96);
-  drawInteriorAsset(context, camera, assets.flowers.image, 64, 0, 64, 96, 1376, 96);
-  drawInteriorAsset(context, camera, assets.flowers.image, 128, 0, 64, 96, 96, 800);
-  drawInteriorAsset(context, camera, assets.flowers.image, 192, 0, 64, 96, 1376, 800);
-
-  drawInteriorAsset(context, camera, assets.windows.image, 704, 0, 64, 64, 480, 0);
-  drawInteriorAsset(context, camera, assets.windows.image, 768, 0, 64, 64, 992, 0);
-  drawInteriorAsset(context, camera, assets.paintings.image, 0, 0, 64, 32, 704, 16);
-  drawInteriorAsset(context, camera, assets.paintings.image, 64, 0, 64, 32, 768, 16);
+  drawInteriorAsset(context, camera, assets.flowers.image, 0, 0, 64, 96, 16, 0);
+  drawInteriorAsset(context, camera, assets.flowers.image, 320, 0, 64, 96, 240, 0);
+  drawInteriorAsset(context, camera, assets.paintings.image, 0, 0, 64, 32, 176, 0);
+  drawInteriorAsset(context, camera, assets.paintings.image, 64, 0, 64, 32, 240, 0);
 }
 
 function drawFallbackFurniture(context, camera) {
-  const pods = [
-    [160, 176, 0],
-    [432, 336, 1],
-    [720, 672, 2],
-    [1008, 176, 3],
-    [1200, 496, 4],
-  ];
-  for (const [worldX, worldY] of pods) {
+  for (const [worldX, worldY] of [[32, 48], [96, 48], [176, 128], [240, 128]]) {
     drawFurnitureTile(context, camera, null, worldX, worldY, 0, 0, 2);
     drawFurnitureTile(context, camera, null, worldX + 32, worldY, 0, 0, 2);
-    drawFurnitureTile(context, camera, null, worldX, worldY + 32, 0, 0, 2);
-    drawFurnitureTile(context, camera, null, worldX + 32, worldY + 32, 0, 0, 2);
-    drawFurnitureTile(context, camera, null, worldX + 64, worldY, 0, 0, 2);
-    drawFurnitureTile(context, camera, null, worldX + 64, worldY + 32, 0, 0, 2);
-    drawFurnitureTile(context, camera, null, worldX + 64, worldY + 64, 0, 0, 1);
+    drawFurnitureTile(context, camera, null, worldX, worldY + 32, 0, 0, 1);
+  }
+  for (const [worldX, worldY] of [[208, 48], [208, 96]]) {
+    drawFurnitureTile(context, camera, null, worldX, worldY, 0, 0, 3);
+  }
+  for (const [worldX, worldY] of [[16, 0], [80, 0], [176, 0], [240, 0]]) {
+    drawFurnitureTile(context, camera, null, worldX, worldY, 0, 0, 2);
   }
 }
 
@@ -1257,13 +1179,20 @@ function drawFallbackFloorAndWalls(context, camera) {
   const endX = Math.ceil(range.right / TILE_SIZE) * TILE_SIZE;
   const endY = Math.ceil(range.bottom / TILE_SIZE) * TILE_SIZE;
 
+  context.fillStyle = "#3a2619";
+  context.fillRect(
+    -camera.originX * camera.zoom,
+    -camera.originY * camera.zoom,
+    WORLD_WIDTH * camera.zoom,
+    WORLD_HEIGHT * camera.zoom,
+  );
   for (let worldY = startY; worldY < endY; worldY += TILE_SIZE) {
     for (let worldX = startX; worldX < endX; worldX += TILE_SIZE) {
+      if (!isOfficeFloorTile(worldX, worldY)) continue;
       const x = (worldX - camera.originX) * camera.zoom;
       const y = (worldY - camera.originY) * camera.zoom;
-      context.fillStyle = (worldX / TILE_SIZE + worldY / TILE_SIZE) % 2 === 0
-        ? "#2f4c4d"
-        : "#355b5a";
+      const checker = (worldX / TILE_SIZE + worldY / TILE_SIZE) % 2 === 0;
+      context.fillStyle = floorColor(worldX, checker);
       context.fillRect(
         x,
         y,
@@ -1274,36 +1203,30 @@ function drawFallbackFloorAndWalls(context, camera) {
   }
 
   context.fillStyle = "#6f8790";
-  for (let worldX = startX; worldX < endX; worldX += TILE_SIZE) {
-    const x = (worldX - camera.originX) * camera.zoom;
-    context.fillRect(
-      x,
-      -camera.originY * camera.zoom,
-      TILE_SIZE * camera.zoom,
-      TILE_SIZE * 2 * camera.zoom,
-    );
-    context.fillRect(
-      x,
-      (WORLD_HEIGHT - TILE_SIZE * 2 - camera.originY) * camera.zoom,
-      TILE_SIZE * camera.zoom,
-      TILE_SIZE * 2 * camera.zoom,
-    );
+  for (let worldX = 0; worldX < WORLD_WIDTH; worldX += TILE_SIZE) {
+    drawFallbackWallTile(context, camera, worldX, 0);
+    drawFallbackWallTile(context, camera, worldX, WORLD_HEIGHT - TILE_SIZE);
   }
-  for (let worldY = startY; worldY < endY; worldY += TILE_SIZE) {
-    const y = (worldY - camera.originY) * camera.zoom;
-    context.fillRect(
-      -camera.originX * camera.zoom,
-      y,
-      TILE_SIZE * 2 * camera.zoom,
-      TILE_SIZE * camera.zoom,
-    );
-    context.fillRect(
-      (WORLD_WIDTH - TILE_SIZE * 2 - camera.originX) * camera.zoom,
-      y,
-      TILE_SIZE * 2 * camera.zoom,
-      TILE_SIZE * camera.zoom,
-    );
+  for (let worldY = TILE_SIZE; worldY < WORLD_HEIGHT - TILE_SIZE; worldY += TILE_SIZE) {
+    drawFallbackWallTile(context, camera, 0, worldY);
+    drawFallbackWallTile(context, camera, WORLD_WIDTH - TILE_SIZE, worldY);
   }
+  for (let worldY = TILE_SIZE; worldY < 64; worldY += TILE_SIZE) {
+    drawFallbackWallTile(context, camera, 160, worldY);
+  }
+  for (let worldY = 128; worldY < WORLD_HEIGHT - TILE_SIZE; worldY += TILE_SIZE) {
+    drawFallbackWallTile(context, camera, 160, worldY);
+  }
+}
+
+function drawFallbackWallTile(context, camera, worldX, worldY) {
+  if (!rectVisible(worldX, worldY, TILE_SIZE, TILE_SIZE, camera)) return;
+  context.fillRect(
+    (worldX - camera.originX) * camera.zoom,
+    (worldY - camera.originY) * camera.zoom,
+    TILE_SIZE * camera.zoom,
+    TILE_SIZE * camera.zoom,
+  );
 }
 
 function detachImageCallbacks(imageReferences) {

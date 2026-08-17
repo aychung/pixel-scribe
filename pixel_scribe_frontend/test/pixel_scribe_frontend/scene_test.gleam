@@ -10,9 +10,8 @@ import pixel_scribe_frontend/update
 
 pub fn world_metadata_has_named_logical_extents_test() {
   assert scene.tile_size == 16
-  assert scene.world_tile_extent == scene.TileExtent(width: 96, height: 64)
-  assert scene.world_pixel_extent
-    == scene.WorldExtent(width: 1536, height: 1024)
+  assert scene.world_tile_extent == scene.TileExtent(width: 20, height: 11)
+  assert scene.world_pixel_extent == scene.WorldExtent(width: 320, height: 176)
   assert scene.avatar_bottom_center_offset == scene.WorldOffset(dx: 0, dy: 0)
   assert scene.avatar_visual_center_offset == scene.WorldOffset(dx: 0, dy: -16)
   assert scene.bubble_limits.max_width == 160
@@ -41,6 +40,13 @@ pub fn curated_anchors_are_unique_integral_and_walkable_test() {
   })
   assert unique_indices(anchors) == list.length(anchors)
   assert unique_positions(anchors) == list.length(anchors)
+}
+
+pub fn compact_office_has_a_doorway_between_two_rooms_test() {
+  assert scene.world_tile_extent == scene.TileExtent(width: 20, height: 11)
+  assert scene.anchor_is_walkable(scene.WorldPoint(160, 80))
+  assert !scene.anchor_is_walkable(scene.WorldPoint(160, 32))
+  assert !scene.anchor_is_walkable(scene.WorldPoint(160, 144))
 }
 
 pub fn coordinate_spaces_are_distinct_records_test() {

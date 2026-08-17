@@ -634,7 +634,8 @@ test.describe("canvas FFI boundaries", () => {
       ],
     }, { origin_x: 0, origin_y: 0, viewport_width: 320, viewport_height: 240 });
     const colors = await canvasColorCounts(page);
-    expect(colors["47,76,77"] ?? 0).toBeGreaterThan(100);
+    expect(colors["142,93,42"] ?? 0).toBeGreaterThan(100);
+    expect(colors["63,110,145"] ?? 0).toBeGreaterThan(100);
     expect(colors["111,135,144"] ?? 0).toBeGreaterThan(100);
     expect(colors["139,94,74"] ?? 0).toBeGreaterThan(100);
     expect(colors["243,211,106"] ?? 0).toBeGreaterThan(0);
@@ -1389,7 +1390,7 @@ for (const dpr of [1, 2] as const) {
       const second = await canvasMetrics(page);
       expect(Math.abs(second.centerGoldCenter.x - second.cssWidth / 2)).toBeLessThan(1.1);
       expect(Math.abs(second.centerGoldCenter.y - second.cssHeight / 2)).toBeLessThan(1.1);
-      expect(second.corner).not.toEqual(first.corner);
+      expect(second.corner).toEqual([24, 35, 42, 255]);
     });
   });
 }
