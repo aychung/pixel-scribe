@@ -23,6 +23,8 @@ const ASSET_URLS = Object.freeze({
   miscellaneous: "/pixel-art/metrocity/Interior/Home/Miscellaneous-Sheet.png",
   flowers: "/pixel-art/metrocity/Interior/Home/Flowers-Sheet.png",
   carpet: "/pixel-art/metrocity/Interior/Home/Carpet-Sheet.png",
+  livingRoom: "/pixel-art/metrocity/Interior/Home/LivingRoom-Sheet.png",
+  livingRoom1: "/pixel-art/metrocity/Interior/Home/LivingRoom1-Sheet.png",
   windows: "/pixel-art/metrocity/Interior/Home/Windows-Sheet.png",
   paintings: "/pixel-art/metrocity/Interior/Home/Paintings-Sheet.png",
   characterModel: "/pixel-art/metrocity/Character/CharacterModel/Character%20Model.png",
@@ -761,7 +763,108 @@ function drawFurniture(context, camera, assets) {
     );
   }
 
-  drawInteriorAsset(context, camera, assets.carpet.image, 128, 0, 64, 64, 704, 432);
+  const carpets = [
+    [192, 320, 2],
+    [832, 320, 1],
+    [640, 432, 2],
+    [192, 704, 3],
+    [832, 704, 4],
+  ];
+  for (const [worldX, worldY, carpetColumn] of carpets) {
+    drawInteriorAsset(
+      context,
+      camera,
+      assets.carpet.image,
+      carpetColumn * 64,
+      0,
+      64,
+      64,
+      worldX,
+      worldY,
+    );
+  }
+
+  const desks = [
+    [96, 176, 0],
+    [96, 336, 0],
+    [320, 176, 1],
+    [608, 176, 2],
+    [928, 336, 3],
+    [96, 672, 4],
+    [320, 656, 5],
+    [608, 512, 0],
+    [928, 656, 1],
+  ];
+  for (const [worldX, worldY, theme] of desks) {
+    drawInteriorAsset(
+      context,
+      camera,
+      assets.livingRoom.image,
+      0,
+      0,
+      64,
+      96,
+      worldX,
+      worldY,
+    );
+    drawInteriorAsset(
+      context,
+      camera,
+      assets.miscellaneous.image,
+      320 + (theme % 2) * 64,
+      0,
+      64,
+      64,
+      worldX,
+      worldY + 64,
+    );
+  }
+
+  const sofas = [
+    [320, 96, 0],
+    [928, 96, 3],
+    [320, 768, 5],
+    [928, 768, 7],
+  ];
+  for (const [worldX, worldY, colorRow] of sofas) {
+    drawInteriorAsset(
+      context,
+      camera,
+      assets.livingRoom1.image,
+      64,
+      colorRow * 64,
+      64,
+      64,
+      worldX,
+      worldY,
+    );
+  }
+
+  drawInteriorAsset(context, camera, assets.livingRoom1.image, 64, 0, 64, 64, 192, 320);
+  drawInteriorAsset(context, camera, assets.miscellaneous.image, 256, 0, 64, 64, 192, 352);
+
+  const bookshelves = [
+    [640, 80, 192],
+    [768, 80, 256],
+    [896, 80, 320],
+    [128, 864, 192],
+    [256, 864, 256],
+    [384, 864, 320],
+  ];
+  for (const [worldX, worldY, sourceX] of bookshelves) {
+    drawInteriorAsset(
+      context,
+      camera,
+      assets.cupboard.image,
+      sourceX,
+      0,
+      64,
+      96,
+      worldX,
+      worldY,
+    );
+  }
+
   drawInteriorAsset(context, camera, assets.miscellaneous.image, 256, 0, 64, 64, 704, 432);
   drawInteriorAsset(context, camera, assets.miscellaneous.image, 320, 0, 64, 64, 672, 448);
   drawInteriorAsset(context, camera, assets.miscellaneous.image, 384, 0, 64, 64, 752, 448);

@@ -35,6 +35,8 @@ function observeAssetLoads(page: Page) {
     miscellaneous: 0,
     flowers: 0,
     carpet: 0,
+    livingRoom: 0,
+    livingRoom1: 0,
     windows: 0,
     paintings: 0,
     characterModel: 0,
@@ -49,6 +51,8 @@ function observeAssetLoads(page: Page) {
     if (path.endsWith("/Interior/Home/Miscellaneous-Sheet.png")) loads.miscellaneous += 1;
     if (path.endsWith("/Interior/Home/Flowers-Sheet.png")) loads.flowers += 1;
     if (path.endsWith("/Interior/Home/Carpet-Sheet.png")) loads.carpet += 1;
+    if (path.endsWith("/Interior/Home/LivingRoom-Sheet.png")) loads.livingRoom += 1;
+    if (path.endsWith("/Interior/Home/LivingRoom1-Sheet.png")) loads.livingRoom1 += 1;
     if (path.endsWith("/Interior/Home/Windows-Sheet.png")) loads.windows += 1;
     if (path.endsWith("/Interior/Home/Paintings-Sheet.png")) loads.paintings += 1;
     if (path.endsWith("/Character/CharacterModel/Character Model.png")) {
