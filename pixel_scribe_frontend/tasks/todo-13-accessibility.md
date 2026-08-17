@@ -6,7 +6,7 @@ not redesign protocol or add new features.
 
 ### Work units
 
-- [ ] **Task 13A — Finish responsive and safe-area layout.**
+- [x] **Task 13A — Finish responsive and safe-area layout.**
   - **Done when:** mobile and desktop use the approved rows/columns, `100dvh`,
     safe-area padding, useful canvas/chat minimums, independent log scrolling,
     visible composer, and no body overflow at required widths/orientations.
@@ -15,7 +15,7 @@ not redesign protocol or add new features.
     relevant, crowded content, reconnect/blocked states, and software-keyboard
     emulation available to the test.
   - **Depends:** visual checkpoint.
-- [ ] **Task 13B — Finish deterministic focus and keyboard behavior.**
+- [x] **Task 13B — Finish deterministic focus and keyboard behavior.**
   - **Done when:** username error, successful join, terminal state, retry, and
     composer focus follow the plan; ordinary presence/chat never steal focus; all
     actions including multiline send remain keyboard-complete.
@@ -25,7 +25,7 @@ not redesign protocol or add new features.
   - **Verify:** focused view and Chromium keyboard/focus tests plus all Gleam
     checks.
   - **Depends:** Task 13A.
-- [ ] **Task 13C — Finish semantic and visual accessibility.**
+- [x] **Task 13C — Finish semantic and visual accessibility.**
   - **Done when:** forms/lists/log/status/canvas fallback, busy/disabled states,
     visible focus, non-color status, 4.5:1 text contrast, 200% text zoom, long
     content, and live-region restraint satisfy the parent criteria.
@@ -33,7 +33,7 @@ not redesign protocol or add new features.
     `test/pixel_scribe_frontend/view_test.gleam`.
   - **Verify:** view tests plus all Gleam checks and production bundle.
   - **Depends:** Task 13B.
-- [ ] **Task 13D — Run unsuppressed axe state coverage.**
+- [x] **Task 13D — Run unsuppressed axe state coverage.**
   - **Done when:** username, joined, reconnecting, protocol-failure, room-full,
     and room-unavailable states have WCAG A/AA scans with no disabled rules or
     excluded application subtree.
@@ -41,7 +41,7 @@ not redesign protocol or add new features.
     `e2e/support/accessibility.ts` only for reusable state-neutral helpers.
   - **Verify:** focused Chromium accessibility suite.
   - **Depends:** Task 13C.
-- [ ] **Task 13E — Complete cross-browser and manual accessibility evidence.**
+- [x] **Task 13E — Complete cross-browser and manual accessibility evidence.**
   - **Done when:** Chromium/Firefox/WebKit pass and keyboard-only, 200% zoom,
     reduced-motion, screen-reader, canvas-disabled, and responsive smoke results
     are recorded without product changes hidden in this verification unit.
@@ -70,21 +70,21 @@ not redesign protocol or add new features.
 
 **Acceptance criteria:**
 
-- [ ] Every product state is keyboard-complete, focus-correct, text-safe, and has
+- [x] Every product state is keyboard-complete, focus-correct, text-safe, and has
   no automatically detectable WCAG A/AA violation.
-- [ ] Required viewport/orientation/crowded-content tests show no clipped controls,
+- [x] Required viewport/orientation/crowded-content tests show no clipped controls,
   hidden composer, body horizontal scroll, unusable canvas, or safe-area collision.
 - [ ] Canvas remains supplementary: disabling/removing it leaves join, status,
   participants, errors, chat history, and composer understandable and usable.
 
 **Verification:**
 
-- [ ] View tests cover roles, labels, descriptions, disabled/busy, live regions,
+- [x] View tests cover roles, labels, descriptions, disabled/busy, live regions,
   focus targets, duplicate/long content, and canvas fallback.
-- [ ] `gleam format --check src test`
-- [ ] `gleam build`
-- [ ] `gleam test`
-- [ ] Playwright responsive/accessibility suites pass in Chromium.
+- [x] `gleam format --check src test`
+- [x] `gleam build`
+- [x] `gleam test`
+- [x] Playwright responsive/accessibility suites pass in Chromium.
 - [ ] Install and run Firefox/WebKit projects for the frontend release matrix.
 - [ ] Manual keyboard-only, 200% text zoom, reduced-motion, and screen-reader
   smoke checks are recorded.
