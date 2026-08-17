@@ -146,6 +146,11 @@ export function focus_composer() {
   return undefined;
 }
 
+export function focus_connection_status() {
+  focusFixedElement("connection-status");
+  return undefined;
+}
+
 export function scroll_chat_to_end() {
   const element = fixedElement(CHAT_LOG_ID);
   if (element === undefined) {

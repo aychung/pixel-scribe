@@ -86,6 +86,100 @@ pub fn room_state_view_exposes_minimal_joined_status_test() {
   assert string.contains(rendered, "Joined the default office")
 }
 
+pub fn first_successful_join_requests_composer_focus_test() {
+  let self_id = domain.connection_id_from_string("focus-self")
+  let self_presence = domain.Presence(self_id, "Ada")
+  let assert #(entered, []) =
+    update.transition(model.initial(), update.UsernameInput("Ada"))
+  let #(connecting, _) = update.transition(entered, update.SubmitUsername)
+  let #(awaiting, _) = update.transition(connecting, update.SocketOpened(1))
+  let #(joined, commands) =
+    update.transition(
+      awaiting,
+      update.ServerEvent(
+        1,
+        0,
+        domain.RoomState(domain.default_room_id, self_id, [self_presence], []),
+      ),
+    )
+
+  assert joined.room_snapshot != None
+  assert commands == [update.FocusComposer]
+}
+
+pub fn connecting_username_form_is_busy_and_disables_join_controls_test() {
+  let assert #(entered, []) =
+    update.transition(model.initial(), update.UsernameInput("Ada"))
+  let #(connecting, _) = update.transition(entered, update.SubmitUsername)
+  let rendered = element.to_string(view.view(connecting))
+
+  assert string.contains(rendered, "aria-busy=\"true\"")
+  assert string.contains(rendered, "id=\"username\"")
+  assert string.contains(rendered, "aria-invalid=\"false\"")
+  assert string.contains(rendered, "class=\"join-button\" disabled")
+}
+
+pub fn pre_snapshot_reconnect_disables_username_submission_without_busy_test() {
+  let assert #(entered, []) =
+    update.transition(model.initial(), update.UsernameInput("Ada"))
+  let #(connecting, _) = update.transition(entered, update.SubmitUsername)
+  let #(waiting, _) =
+    update.transition(connecting, update.SocketClosed(1, False, 0.0))
+  let rendered = view.view(waiting)
+  let rendered_string = element.to_string(rendered)
+  let disabled_input =
+    query.element(
+      matching: query.tag("input")
+      |> query.and(query.id("username"))
+      |> query.and(query.attribute("disabled", "")),
+    )
+  let disabled_button =
+    query.element(
+      matching: query.tag("button")
+      |> query.and(query.class("join-button"))
+      |> query.and(query.attribute("disabled", "")),
+    )
+
+  assert waiting.phase == model.WaitingToReconnect(2, 1, 375)
+  assert string.contains(rendered_string, "aria-busy=\"false\"")
+  let assert Ok(_) = query.find(in: rendered, matching: disabled_input)
+  let assert Ok(_) = query.find(in: rendered, matching: disabled_button)
+}
+
+pub fn blocked_status_is_focusable_and_named_for_recovery_test() {
+  let assert #(entered, []) =
+    update.transition(model.initial(), update.UsernameInput("Ada"))
+  let #(connecting, _) = update.transition(entered, update.SubmitUsername)
+  let blocked_error =
+    domain.ErrorEvent(None, domain.InvalidEvent, "Protocol error.", False)
+  let #(blocked, commands) =
+    update.transition(
+      connecting,
+      update.ServerEvent(1, 0, domain.ServerError(blocked_error)),
+    )
+  let rendered = element.to_string(view.view(blocked))
+  let rendered_view = view.view(blocked)
+  let disabled_input =
+    query.element(
+      matching: query.tag("input")
+      |> query.and(query.id("username"))
+      |> query.and(query.attribute("disabled", "")),
+    )
+  let disabled_button =
+    query.element(
+      matching: query.tag("button")
+      |> query.and(query.class("join-button"))
+      |> query.and(query.attribute("disabled", "")),
+    )
+
+  assert string.contains(rendered, "id=\"connection-status\"")
+  assert string.contains(rendered, "tabindex=\"0\"")
+  assert string.contains(rendered, "aria-busy=\"false\"")
+  let assert Ok(_) = query.find(in: rendered_view, matching: disabled_input)
+  let assert Ok(_) = query.find(in: rendered_view, matching: disabled_button)
+  assert commands == [update.CloseSocket(1), update.FocusConnectionStatus]
+}
+
 pub fn participant_list_is_keyed_by_connection_id_and_keeps_duplicate_labels_test() {
   let self_id = domain.connection_id_from_string("connection-self")
   let peer_id = domain.connection_id_from_string("connection-peer")
@@ -94,7 +188,14 @@ pub fn participant_list_is_keyed_by_connection_id_and_keeps_duplicate_labels_tes
     domain.Presence(peer_id, "Riley"),
   ]
   let joined = joined_model(participants, self_id)
-  let rendered = element.to_string(view.view(joined))
+  let rendered_view = view.view(joined)
+  let rendered = element.to_string(rendered_view)
+  let participant_list =
+    query.element(
+      matching: query.tag("ul")
+      |> query.and(query.class("participant-list"))
+      |> query.and(query.attribute("tabindex", "0")),
+    )
 
   assert string.contains(rendered, "data-lustre-key=\"connection-self\"")
   assert string.contains(rendered, "data-lustre-key=\"connection-peer\"")
@@ -106,6 +207,7 @@ pub fn participant_list_is_keyed_by_connection_id_and_keeps_duplicate_labels_tes
     == 2
   assert count_substring(rendered, "class=\"participant-self\"") == 1
   assert string.contains(rendered, "role=\"list\"")
+  let assert Ok(_) = query.find(in: rendered_view, matching: participant_list)
 }
 
 pub fn participant_ids_are_not_rendered_as_user_facing_labels_test() {
@@ -445,6 +547,32 @@ pub fn composer_invalid_input_stays_visible_with_inline_feedback_test() {
     rendered,
     "Message contains an unsupported control character.",
   )
+  assert string.contains(rendered, "aria-invalid=\"true\"")
+}
+
+pub fn composer_rate_limit_notice_is_not_marked_as_invalid_test() {
+  let self_id = domain.connection_id_from_string("rate-limit-self")
+  let joined = joined_model([domain.Presence(self_id, "Ada")], self_id)
+  let rate_limit =
+    domain.ErrorEvent(
+      Some(domain.default_room_id),
+      domain.RateLimited,
+      "Please wait before sending another message.",
+      True,
+    )
+  let #(limited, _) =
+    update.transition(
+      joined,
+      update.ServerEvent(1, 4000, domain.ServerError(rate_limit)),
+    )
+  let rendered = element.to_string(view.view(limited))
+
+  assert limited.rate_limit_until == Some(5000)
+  assert string.contains(
+    rendered,
+    "Please wait before sending another message.",
+  )
+  assert string.contains(rendered, "aria-invalid=\"false\"")
 }
 
 pub fn composer_oversized_frame_stays_visible_without_becoming_busy_test() {

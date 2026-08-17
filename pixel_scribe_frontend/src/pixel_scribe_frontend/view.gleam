@@ -85,6 +85,7 @@ fn username_panel(model: Model) -> Element(Msg) {
       html.form(
         [
           attribute.class("username-form"),
+          attribute.aria_busy(username_form_busy(model)),
           event.on_submit(fn(_fields) { update.SubmitUsername }),
         ],
         [
@@ -97,6 +98,8 @@ fn username_panel(model: Model) -> Element(Msg) {
             attribute.placeholder("e.g. Ada"),
             attribute.value(model.username_input),
             attribute.required(True),
+            attribute.disabled(username_form_disabled(model)),
+            attribute.aria_invalid(username_input_invalid(model.feedback)),
             attribute.aria_describedby(username_description_ids(model.feedback)),
             event.on_input(update.UsernameInput),
           ]),
@@ -107,16 +110,24 @@ fn username_panel(model: Model) -> Element(Msg) {
           feedback_message("username-feedback", model.feedback),
           feedback_message("connection-feedback", model.connection_feedback),
           html.button(
-            [attribute.type_("submit"), attribute.class("join-button")],
+            [
+              attribute.type_("submit"),
+              attribute.class("join-button"),
+              attribute.disabled(username_form_disabled(model)),
+              attribute.aria_disabled(username_form_disabled(model)),
+            ],
             [html.text("Enter the office")],
           ),
         ],
       ),
       html.p(
         [
+          attribute.id("connection-status"),
           attribute.class("status-copy"),
           attribute.role("status"),
           attribute.aria_live("polite"),
+          attribute.aria_atomic(True),
+          attribute.tabindex(0),
         ],
         [html.text(connection_status(model, False))],
       ),
@@ -217,10 +228,9 @@ fn zoom_controls(model: Model) -> Element(Msg) {
           event.on_click(update.ZoomReset),
         ],
         [
-          html.span(
-            [attribute.id("office-zoom-value"), attribute.aria_live("polite")],
-            [html.text(int.to_string(zoom) <> "%")],
-          ),
+          html.span([attribute.id("office-zoom-value")], [
+            html.text(int.to_string(zoom) <> "%"),
+          ]),
         ],
       ),
       html.button(
@@ -252,7 +262,7 @@ fn canvas_status(model: Model) -> Element(Msg) {
     model.Failed(reason) -> reason
     _ -> ""
   }
-  html.p([attribute.id("canvas-status"), attribute.aria_live("polite")], [
+  html.p([attribute.id("canvas-status")], [
     html.text(message),
   ])
 }
@@ -268,9 +278,12 @@ fn status_region(model: Model, stale: Bool) -> Element(Msg) {
   html.div([attribute.class("status-region")], [
     html.p(
       [
+        attribute.id("connection-status"),
         attribute.class("status-copy"),
         attribute.role("status"),
         attribute.aria_live("polite"),
+        attribute.aria_atomic(True),
+        attribute.tabindex(0),
       ],
       [html.text(connection_status(model, stale))],
     ),
@@ -298,7 +311,11 @@ fn participants_panel(snapshot: model.RoomSnapshot) -> Element(Msg) {
         html.text(participant_count(snapshot.participants)),
       ]),
       keyed.ul(
-        [attribute.class("participant-list"), attribute.role("list")],
+        [
+          attribute.class("participant-list"),
+          attribute.role("list"),
+          attribute.tabindex(0),
+        ],
         participant_items,
       ),
     ],
@@ -443,6 +460,7 @@ fn composer(model: Model) -> Element(Msg) {
           attribute.rows(3),
           attribute.placeholder("Write a plain-text message"),
           attribute.disabled(disabled),
+          attribute.aria_invalid(composer_input_invalid(model)),
           attribute.aria_describedby(composer_description_ids(model.feedback)),
           event.on_input(update.DraftInput),
           composer_keydown(),
@@ -492,6 +510,35 @@ fn composer_enabled(model: Model) -> Bool {
       && snapshot.room_id == domain.default_room_id
       && !snapshot.stale
     _, _ -> False
+  }
+}
+
+fn username_form_busy(model: Model) -> Bool {
+  case model.phase {
+    model.Connecting(_, _) | model.AwaitingRoomState(_, _) -> True
+    _ -> False
+  }
+}
+
+fn username_form_disabled(model: Model) -> Bool {
+  case model.phase {
+    model.ChoosingUsername -> False
+    _ -> True
+  }
+}
+
+fn username_input_invalid(feedback: Option(String)) -> String {
+  case feedback {
+    Some(_) -> "true"
+    None -> "false"
+  }
+}
+
+fn composer_input_invalid(model: Model) -> String {
+  case model.rate_limit_until, model.feedback {
+    Some(_), _ -> "false"
+    None, Some(_) -> "true"
+    None, None -> "false"
   }
 }
 

@@ -204,7 +204,8 @@ pub fn only_matching_default_room_snapshot_enters_joined_test() {
   assert wrong_room.phase == model.Blocked(model.ProtocolFailure)
   assert wrong_room.room_snapshot == waiting.room_snapshot
   assert wrong_room.send_in_flight == None
-  assert wrong_room_commands == [update.CloseSocket(1)]
+  assert wrong_room_commands
+    == [update.CloseSocket(1), update.FocusConnectionStatus]
 
   let #(joined, commands) =
     update.transition(
@@ -228,7 +229,7 @@ pub fn only_matching_default_room_snapshot_enters_joined_test() {
       [message],
       False,
     ))
-  assert commands == []
+  assert commands == [update.FocusComposer]
 
   let #(ignored_after_join, ignored_commands) =
     update.transition(
@@ -263,7 +264,7 @@ pub fn canvas_lifecycle_facts_do_not_emit_direct_draw_commands_test() {
         domain.RoomState(domain.default_room_id, self_id, [self_presence], []),
       ),
     )
-  assert join_commands == []
+  assert join_commands == [update.FocusComposer]
 
   let #(ready, ready_commands) =
     update.transition(joined, update.CanvasReady(320, 240, 2.0))
@@ -340,7 +341,7 @@ pub fn snapshot_missing_self_presence_fails_closed_test() {
 
   assert blocked.phase == model.Blocked(model.ProtocolFailure)
   assert blocked.connection_feedback == Some("Protocol error.")
-  assert commands == [update.CloseSocket(1)]
+  assert commands == [update.CloseSocket(1), update.FocusConnectionStatus]
 }
 
 pub fn snapshot_duplicate_self_presence_fails_closed_test() {
@@ -367,7 +368,7 @@ pub fn snapshot_duplicate_self_presence_fails_closed_test() {
     )
 
   assert blocked.phase == model.Blocked(model.ProtocolFailure)
-  assert commands == [update.CloseSocket(1)]
+  assert commands == [update.CloseSocket(1), update.FocusConnectionStatus]
 }
 
 pub fn snapshot_duplicate_peer_presence_fails_closed_test() {
@@ -396,7 +397,7 @@ pub fn snapshot_duplicate_peer_presence_fails_closed_test() {
     )
 
   assert blocked.phase == model.Blocked(model.ProtocolFailure)
-  assert commands == [update.CloseSocket(1)]
+  assert commands == [update.CloseSocket(1), update.FocusConnectionStatus]
 }
 
 pub fn reconnect_snapshot_replaces_stale_snapshot_and_self_identity_test() {
@@ -505,7 +506,7 @@ pub fn current_generation_self_leave_fails_closed_test() {
   assert blocked.draft == "preserve me"
   assert blocked.send_in_flight == None
   assert blocked.connection_feedback == Some("Protocol error.")
-  assert commands == [update.CloseSocket(36)]
+  assert commands == [update.CloseSocket(36), update.FocusConnectionStatus]
 }
 
 pub fn duplicate_join_keeps_one_presence_per_connection_id_test() {
@@ -614,7 +615,7 @@ pub fn room_snapshot_preserves_duplicate_usernames_by_connection_id_test() {
 
   assert joined.phase == model.Joined(30, self_id)
   assert snapshot_participants(joined) == [self_presence, peer_presence]
-  assert commands == []
+  assert commands == [update.FocusComposer]
 }
 
 pub fn current_generation_wrong_room_live_events_fail_closed_test() {
@@ -644,7 +645,7 @@ pub fn current_generation_wrong_room_live_events_fail_closed_test() {
     assert blocked.draft == "preserve me"
     assert blocked.send_in_flight == None
     assert blocked.connection_feedback == Some("Protocol error.")
-    assert commands == [update.CloseSocket(6)]
+    assert commands == [update.CloseSocket(6), update.FocusConnectionStatus]
   })
 }
 
@@ -672,7 +673,8 @@ pub fn current_generation_wrong_room_detection_is_phase_independent_test() {
   assert blocked_snapshot.phase == model.Blocked(model.ProtocolFailure)
   assert snapshot_is_stale(blocked_snapshot)
   assert blocked_snapshot.send_in_flight == None
-  assert snapshot_commands == [update.CloseSocket(7)]
+  assert snapshot_commands
+    == [update.CloseSocket(7), update.FocusConnectionStatus]
 
   let awaiting =
     model.Model(
@@ -701,7 +703,7 @@ pub fn current_generation_wrong_room_detection_is_phase_independent_test() {
     assert blocked.phase == model.Blocked(model.ProtocolFailure)
     assert snapshot_is_stale(blocked)
     assert blocked.send_in_flight == None
-    assert commands == [update.CloseSocket(8)]
+    assert commands == [update.CloseSocket(8), update.FocusConnectionStatus]
   })
 }
 
@@ -1181,7 +1183,8 @@ pub fn stale_generation_and_wrong_room_accepted_messages_never_scroll_test() {
   assert snapshot_is_stale(wrong_room)
   assert wrong_room.send_in_flight == None
   assert wrong_room.connection_feedback == Some("Protocol error.")
-  assert wrong_room_commands == [update.CloseSocket(35)]
+  assert wrong_room_commands
+    == [update.CloseSocket(35), update.FocusConnectionStatus]
 }
 
 pub fn matching_self_echo_appends_and_clears_only_matching_draft_test() {
@@ -1319,7 +1322,7 @@ pub fn room_state_snapshot_deduplicates_before_latest_50_bound_test() {
     == Ok(message("message-2", self_id, "message 2"))
   assert list.last(snapshot_messages(joined))
     == Ok(message("message-51", self_id, "message 51"))
-  assert commands == []
+  assert commands == [update.FocusComposer]
 }
 
 pub fn stale_generation_and_nonmatching_self_echo_do_not_clear_pending_send_test() {
@@ -1500,7 +1503,7 @@ pub fn active_phase_error_matrix_has_explicit_outcomes_test() {
     case expect_protocol_failure {
       True -> {
         assert updated.phase == model.Blocked(model.ProtocolFailure)
-        assert commands == [update.CloseSocket(1)]
+        assert commands == [update.CloseSocket(1), update.FocusConnectionStatus]
       }
       False -> {
         assert updated.phase != model.Blocked(model.ProtocolFailure)
@@ -1538,7 +1541,7 @@ pub fn error_recoverability_mismatch_fails_closed_without_loop_test() {
         ),
       )
     assert blocked.phase == model.Blocked(model.ProtocolFailure)
-    assert commands == [update.CloseSocket(1)]
+    assert commands == [update.CloseSocket(1), update.FocusConnectionStatus]
 
     let #(unchanged, late_commands) =
       update.transition(
@@ -1620,7 +1623,11 @@ pub fn terminal_error_close_callbacks_are_no_ops_test() {
     )
   assert blocked.phase == model.Blocked(model.RoomFull)
   assert close_commands
-    == [update.CloseSocket(21), update.CancelRateLimit(21, 5000)]
+    == [
+      update.CloseSocket(21),
+      update.FocusConnectionStatus,
+      update.CancelRateLimit(21, 5000),
+    ]
 
   let #(after_close, callbacks) =
     update.transition(blocked, update.SocketClosed(21, False, 0.5))
@@ -1715,7 +1722,7 @@ pub fn room_unavailable_keeps_phase_for_the_close_reconnect_handoff_test() {
   assert updated.draft == "keep this"
   assert updated.send_in_flight == None
   assert snapshot_is_stale(updated)
-  assert commands == []
+  assert commands == [update.FocusConnectionStatus]
 }
 
 pub fn joined_error_table_preserves_draft_and_routes_feedback_test() {
@@ -1848,7 +1855,12 @@ pub fn malformed_server_data_fails_closed_only_for_active_generation_test() {
   assert blocked.send_in_flight == None
   assert blocked.rate_limit_until == None
   assert blocked.connection_feedback == Some("Protocol error.")
-  assert commands == [update.CloseSocket(26), update.CancelRateLimit(26, 5000)]
+  assert commands
+    == [
+      update.CloseSocket(26),
+      update.FocusConnectionStatus,
+      update.CancelRateLimit(26, 5000),
+    ]
 
   let #(stale, stale_commands) =
     update.transition(active, update.ServerDecodeFailed(25))
@@ -1900,7 +1912,12 @@ pub fn current_generation_wrong_room_structured_error_fails_closed_test() {
   assert blocked.send_in_flight == None
   assert blocked.rate_limit_until == None
   assert blocked.connection_feedback == Some("Protocol error.")
-  assert commands == [update.CloseSocket(27), update.CancelRateLimit(27, 5000)]
+  assert commands
+    == [
+      update.CloseSocket(27),
+      update.FocusConnectionStatus,
+      update.CancelRateLimit(27, 5000),
+    ]
 
   let #(stale, stale_commands) =
     update.transition(active, update.ServerEvent(26, 4000, event))

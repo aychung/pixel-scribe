@@ -132,6 +132,7 @@ fn interpret_command(
     update.RenderScene -> render_current_scene(model)
     update.FocusUsername -> browser.focus_username()
     update.FocusComposer -> browser.focus_composer()
+    update.FocusConnectionStatus -> browser.focus_connection_status()
     update.ScrollChatToEnd -> browser.scroll_chat_to_end()
   }
 }

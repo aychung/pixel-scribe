@@ -60,6 +60,7 @@ pub type Command {
   RenderScene
   FocusUsername
   FocusComposer
+  FocusConnectionStatus
   ScrollChatToEnd
 }
 
@@ -412,7 +413,13 @@ fn dispatch_server_event(
                 joined,
                 list.append(
                   cancel_reconnect(model),
-                  list.append(cancel_bubble_timer(model), bubble_commands),
+                  list.append(
+                    cancel_bubble_timer(model),
+                    list.append(bubble_commands, case model.room_snapshot {
+                      None -> [FocusComposer]
+                      Some(_) -> []
+                    }),
+                  ),
                 ),
               )
             }
@@ -635,6 +642,7 @@ fn protocol_failure(model: Model, generation: Int) -> #(Model, List(Command)) {
     )
   #(updated, [
     CloseSocket(generation),
+    FocusConnectionStatus,
     ..list.append(
       cancel_rate_limit(model, generation),
       cancel_bubble_timer(model),
@@ -777,6 +785,7 @@ fn terminal_blocked_error(
     )
   #(updated, [
     CloseSocket(generation),
+    FocusConnectionStatus,
     ..list.append(
       cancel_rate_limit(model, generation),
       cancel_bubble_timer(model),
@@ -803,7 +812,7 @@ fn room_unavailable_error(
     updated,
     list.append(
       cancel_rate_limit(model, generation),
-      cancel_bubble_timer(model),
+      list.append(cancel_bubble_timer(model), [FocusConnectionStatus]),
     ),
   )
 }
@@ -1408,6 +1417,7 @@ fn manual_retry(
     list.append(cancel_bubble_timer(model), [
       CancelReconnect(timer.generation, timer.timer_id),
       OpenSocket(next_generation),
+      FocusConnectionStatus,
     ]),
   )
 }
@@ -1433,7 +1443,11 @@ fn manual_retry_active(
     cancel_reconnect(model)
     |> list.append(cancel_rate_limit_for_model(model))
     |> list.append(cancel_bubble_timer(model))
-    |> list.append([CloseSocket(generation), OpenSocket(next_generation)])
+    |> list.append([
+      CloseSocket(generation),
+      OpenSocket(next_generation),
+      FocusConnectionStatus,
+    ])
   #(updated, commands)
 }
 
@@ -1449,7 +1463,13 @@ fn manual_retry_without_timer(model: Model) -> #(Model, List(Command)) {
       feedback: None,
       connection_feedback: None,
     )
-  #(updated, list.append(cancel_bubble_timer(model), [OpenSocket(generation)]))
+  #(
+    updated,
+    list.append(cancel_bubble_timer(model), [
+      OpenSocket(generation),
+      FocusConnectionStatus,
+    ]),
+  )
 }
 
 fn return_to_username(model: Model) -> #(Model, List(Command)) {

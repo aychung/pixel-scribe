@@ -42,6 +42,9 @@ fn focus_username_ffi() -> Nil
 @external(javascript, "./browser_ffi.mjs", "focus_composer")
 fn focus_composer_ffi() -> Nil
 
+@external(javascript, "./browser_ffi.mjs", "focus_connection_status")
+fn focus_connection_status_ffi() -> Nil
+
 @external(javascript, "./browser_ffi.mjs", "scroll_chat_to_end")
 fn scroll_chat_to_end_ffi() -> Nil
 
@@ -155,6 +158,13 @@ pub fn focus_username() -> Effect(a) {
 /// is a harmless no-op.
 pub fn focus_composer() -> Effect(a) {
   effect.before_paint(fn(_dispatch, _root) { focus_composer_ffi() })
+}
+
+/// Focuses the status text when a terminal state needs an immediate recovery
+/// explanation. The target is intentionally a fixed, non-destructive status
+/// element so retry controls remain available in the next tab stop.
+pub fn focus_connection_status() -> Effect(a) {
+  effect.before_paint(fn(_dispatch, _root) { focus_connection_status_ffi() })
 }
 
 /// Scrolls the application-owned chat log to its end after Lustre has applied

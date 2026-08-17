@@ -150,6 +150,7 @@ pub fn manual_retry_cancels_timer_and_opens_without_replaying_draft_test() {
     == [
       update.CancelReconnect(timer.generation, timer.timer_id),
       update.OpenSocket(41),
+      update.FocusConnectionStatus,
     ]
 }
 
@@ -205,7 +206,12 @@ pub fn manual_retry_replaces_each_active_socket_phase_test() {
     updated.phase == model.Connecting(2, 2)
     && updated.socket_generation == 2
     && updated.reconnect_attempt == 2
-    && commands == [update.CloseSocket(1), update.OpenSocket(2)]
+    && commands
+    == [
+      update.CloseSocket(1),
+      update.OpenSocket(2),
+      update.FocusConnectionStatus,
+    ]
   })
 }
 
@@ -230,7 +236,7 @@ pub fn room_unavailable_retry_replaces_socket_and_rejects_old_close_test() {
       )),
     )
   let #(stale, unavailable_commands) = update.transition(state, unavailable)
-  assert unavailable_commands == []
+  assert unavailable_commands == [update.FocusConnectionStatus]
   assert snapshot_is_stale(stale)
   assert stale.send_in_flight == None
 
@@ -241,7 +247,12 @@ pub fn room_unavailable_retry_replaces_socket_and_rejects_old_close_test() {
   assert connecting.reconnect_attempt == 3
   assert connecting.draft == "preserve this"
   assert snapshot_is_stale(connecting)
-  assert retry_commands == [update.CloseSocket(70), update.OpenSocket(71)]
+  assert retry_commands
+    == [
+      update.CloseSocket(70),
+      update.OpenSocket(71),
+      update.FocusConnectionStatus,
+    ]
 
   let #(after_old_close, old_close_commands) =
     update.transition(connecting, update.SocketClosed(70, False, 0.0))
@@ -305,7 +316,7 @@ pub fn matching_room_state_only_resets_attempt_and_cancels_pending_timer_test() 
   assert joined.phase == model.Joined(60, self_id)
   assert joined.reconnect_attempt == 0
   assert joined.reconnect_timer == None
-  assert commands == [update.CancelReconnect(60, 61)]
+  assert commands == [update.CancelReconnect(60, 61), update.FocusComposer]
 }
 
 pub fn socket_open_does_not_reset_backoff_attempt_test() {
