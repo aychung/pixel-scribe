@@ -29,7 +29,7 @@ body {
   min-width: 320px;
   min-height: 100dvh;
   margin: 0;
-  overflow-x: hidden;
+  overflow: hidden;
   background: var(--page);
   color: var(--ink);
   font-family: ui-sans-serif, system-ui, sans-serif;
@@ -48,7 +48,15 @@ button {
 
 button:focus-visible,
 input:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+.status-copy:focus-visible,
+.message-log:focus-visible,
+.participant-list:focus-visible {
+  outline: 3px solid var(--accent-strong);
+  outline-offset: 3px;
+}
+
+.status-copy:focus {
   outline: 3px solid var(--accent-strong);
   outline-offset: 3px;
 }
@@ -61,6 +69,7 @@ textarea:focus-visible {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: var(--section-gap);
+  height: 100dvh;
   min-height: 100dvh;
   padding-block: max(1rem, env(safe-area-inset-top))
     max(1rem, env(safe-area-inset-bottom));
@@ -99,7 +108,7 @@ textarea:focus-visible {
 .workspace-shell {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(13rem, 38dvh) minmax(16rem, 1fr);
+  grid-template-rows: minmax(0, 38dvh) minmax(0, 1fr);
   gap: var(--section-gap);
   width: min(100%, 90rem);
   min-height: 0;
@@ -294,7 +303,7 @@ textarea:focus-visible {
 /* Joined workspace -------------------------------------------------------- */
 
 .joined-workspace {
-  grid-template-rows: minmax(14rem, 1fr) minmax(18rem, 1fr);
+  grid-template-rows: minmax(0, 42dvh) minmax(0, 1fr);
 }
 
 .office-stage,
@@ -360,6 +369,8 @@ textarea:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 0.2rem;
+  max-width: 100%;
+  flex-wrap: wrap;
   border: 1px solid var(--line);
   border-radius: 0.35rem;
   background: var(--surface);
@@ -401,7 +412,7 @@ textarea:focus-visible {
 
 .canvas-placeholder {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto auto;
   gap: 0.65rem;
   min-height: 0;
   margin: 0;
@@ -411,7 +422,7 @@ textarea:focus-visible {
   display: block;
   width: 100%;
   height: 100%;
-  min-height: 9rem;
+  min-height: 7rem;
   border: 1px solid var(--line);
   background: var(--preview-sky);
 }
@@ -420,12 +431,18 @@ textarea:focus-visible {
   padding-inline: 0.1rem;
 }
 
+#canvas-status {
+  margin: 0;
+  color: var(--muted-ink);
+  font-size: 0.8rem;
+  line-height: 1.2;
+}
+
 .chat-rail {
   display: grid;
-  grid-template-rows: auto auto auto minmax(7rem, 1fr) auto auto;
+  grid-template-rows: auto auto auto minmax(3rem, 1fr) auto auto;
   gap: 0.75rem;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
   padding: clamp(0.75rem, 2vw, 1.25rem);
 }
 
@@ -447,6 +464,7 @@ textarea:focus-visible {
   margin: 0;
   border-left: 3px solid var(--accent);
   color: var(--accent-strong);
+  overflow-wrap: anywhere;
   padding-left: 0.65rem;
   font-size: 0.85rem;
 }
@@ -495,9 +513,17 @@ textarea:focus-visible {
   min-height: 0;
 }
 
+.history-note {
+  margin: 0;
+  color: var(--muted-ink);
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
 .message-log {
   min-height: 0;
-  overflow-y: auto;
+  overflow: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--line);
   background: var(--page);
   padding: 0.75rem;
@@ -516,8 +542,74 @@ textarea:focus-visible {
 }
 
 @media (max-width: 767px) {
+  .joined-workspace {
+    grid-template-rows: minmax(0, 30dvh) minmax(0, 1fr);
+  }
+
   .message-log {
     max-height: min(16rem, 35dvh);
+  }
+
+  .chat-rail {
+    gap: 0.2rem;
+    padding: 0.4rem;
+  }
+
+  .status-region {
+    gap: 0.25rem;
+    padding-block: 0.4rem;
+  }
+
+  .participants-panel {
+    gap: 0.2rem;
+  }
+
+  .participant-list {
+    max-height: 1.75rem;
+  }
+
+  .chat-log-panel {
+    grid-template-rows: auto minmax(1.5rem, 1fr) auto;
+  }
+
+  .composer {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.35rem;
+    padding-top: 0.5rem;
+  }
+
+  .composer h3 {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .composer label {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .composer textarea {
+    grid-column: 1;
+    grid-row: 3;
+    height: 2.5rem;
+    min-height: 0;
+    resize: none;
+  }
+
+  .composer .field-help {
+    grid-column: 1 / -1;
+    grid-row: 4;
+  }
+
+  .composer .form-feedback {
+    grid-column: 1 / -1;
+    grid-row: 5;
+  }
+
+  .composer .send-button {
+    grid-column: 2;
+    grid-row: 3;
+    align-self: end;
   }
 }
 
@@ -579,28 +671,230 @@ textarea:focus-visible {
   gap: 0.5rem;
 }
 
+@media (max-width: 767px) {
+  .composer {
+    padding-top: 0.5rem;
+  }
+
+  .composer textarea {
+    height: 2.5rem;
+    min-height: 0;
+    resize: none;
+  }
+}
+
 @media (max-width: 25rem) {
+  .app-introduction {
+    display: none;
+  }
+
   .office-stage-header {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .office-stage-note {
+    display: none;
   }
 
   .zoom-controls {
-    justify-self: start;
+    justify-self: end;
+  }
+}
+
+@media (max-height: 40rem) {
+  :root {
+    --section-gap: 0.75rem;
+  }
+
+  .app-header h1 {
+    font-size: 1.75rem;
+  }
+
+  .app-introduction {
+    font-size: 0.9rem;
+  }
+
+  .office-stage,
+  .chat-rail,
+  .office-preview,
+  .join-panel {
+    padding: 0.75rem;
+  }
+
+  .office-canvas {
+    min-height: 0;
+  }
+
+  .participant-list {
+    max-height: 4.5rem;
+  }
+
+  .composer textarea {
+    min-height: 3.5rem;
+  }
+}
+
+@media (max-width: 767px) and (max-height: 32rem) {
+  .app-introduction {
+    display: none;
+  }
+
+  .joined-workspace {
+    grid-template-rows: minmax(3rem, 35dvh) minmax(0, 1fr);
+  }
+
+  .workspace-shell:not(.joined-workspace) {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .workspace-shell:not(.joined-workspace) .office-preview {
+    display: none;
+  }
+
+  .join-panel {
+    gap: 0.4rem;
+    padding: 0.5rem;
+  }
+
+  .username-form {
+    gap: 0.3rem;
+  }
+
+  .username-form input:disabled ~ .field-help {
+    display: none;
+  }
+
+  .username-form input,
+  .join-button,
+  .connection-actions button {
+    min-height: 2.25rem;
+    padding-block: 0.3rem;
+  }
+
+  .join-panel .status-copy {
+    margin-top: 0.25rem;
+    padding-top: 0.35rem;
+  }
+
+  .connection-actions {
+    flex-wrap: nowrap;
+    gap: 0.25rem;
+  }
+
+  .connection-actions button {
+    flex: 1 1 0;
+    font-size: 0.75rem;
+    white-space: nowrap;
+  }
+
+  .office-stage {
+    gap: 0.3rem;
+    padding: 0.4rem;
+  }
+
+  .office-stage-note {
+    display: none;
+  }
+
+  .canvas-placeholder {
+    gap: 0.2rem;
+  }
+
+  #canvas-status {
+    margin: 0;
+    font-size: 0.7rem;
+    line-height: 1.1;
+  }
+
+  .chat-rail {
+    gap: 0.25rem;
+    padding: 0.4rem;
+  }
+
+  .chat-rail h2 {
+    font-size: 0.95rem;
+  }
+
+  .status-region {
+    gap: 0.1rem;
+    padding-block: 0.2rem;
+  }
+
+  .participants-panel {
+    gap: 0.1rem;
+  }
+
+  .participants-panel h3 {
+    font-size: 0.8rem;
+  }
+
+  .participant-list {
+    max-height: 2.5rem;
+    min-height: 1rem;
+    overflow-y: auto;
+  }
+
+  .chat-log-panel {
+    gap: 0.2rem;
+  }
+
+  .composer {
+    gap: 0.2rem;
+    padding-top: 0.25rem;
+  }
+
+  .composer h3 {
+    font-size: 0.8rem;
+  }
+
+  .composer textarea {
+    height: 2.5rem;
+    min-height: 2.5rem;
+    resize: none;
+  }
+
+  .send-button {
+    min-height: 2rem;
+    padding-block: 0.2rem;
+  }
+}
+
+@media (max-width: 400px) and (max-height: 40rem) {
+  .joined-workspace {
+    grid-template-rows: minmax(4rem, 12dvh) minmax(0, 1fr);
+  }
+
+  .chat-rail {
+    gap: 0.15rem;
+  }
+
+  .status-region {
+    padding-block: 0.1rem;
+  }
+
+  .participant-list {
+    max-height: 1.5rem;
+  }
+
+  .chat-log-panel {
+    grid-template-rows: auto minmax(1rem, 1fr) auto;
+  }
+
+  .composer {
+    gap: 0.15rem;
+    padding-top: 0.15rem;
+  }
+
+  .composer textarea {
+    height: 2rem;
+    min-height: 2rem;
   }
 }
 
 @media (min-width: 768px) {
-  .app-shell {
-    height: 100dvh;
-  }
-
   .workspace-shell {
     grid-template-columns: minmax(0, 1fr) var(--chat-rail-width);
     grid-template-rows: minmax(0, 1fr);
-  }
-
-  .office-preview {
-    min-height: 24rem;
   }
 
   .joined-workspace {
@@ -609,10 +903,25 @@ textarea:focus-visible {
   }
 }
 
+@media (min-width: 768px) and (max-height: 40rem) {
+  .chat-rail {
+    gap: 0.65rem;
+  }
+
+  .composer textarea {
+    height: 4rem;
+    min-height: 4rem;
+    resize: none;
+  }
+}
+
 @media (forced-colors: active) {
   button:focus-visible,
   input:focus-visible,
-  textarea:focus-visible {
+  textarea:focus-visible,
+  .status-copy:focus,
+  .message-log:focus-visible,
+  .participant-list:focus-visible {
     outline: 3px solid Highlight;
   }
 }
