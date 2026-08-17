@@ -312,12 +312,12 @@ pub fn zoom_actions_update_only_the_camera_without_commands_test() {
   let #(zoomed, zoom_commands) = update.transition(ready, update.ZoomIn)
   let assert model.Ready(_, _, _, _, Some(zoomed_camera), _) = zoomed.scene
   assert zoom_commands == []
-  assert camera.zoom_level(zoomed_camera) == 2
+  assert camera.zoom_level(zoomed_camera) == 3
 
   let #(reset, reset_commands) = update.transition(zoomed, update.ZoomReset)
   let assert model.Ready(_, _, _, _, Some(reset_camera), _) = reset.scene
   assert reset_commands == []
-  assert camera.zoom_level(reset_camera) == 1
+  assert camera.zoom_level(reset_camera) == 2
 }
 
 pub fn snapshot_missing_self_presence_fails_closed_test() {

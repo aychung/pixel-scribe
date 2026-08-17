@@ -223,7 +223,7 @@ pub fn joined_workspace_exposes_keyboard_usable_zoom_controls_test() {
   assert string.contains(rendered, "aria-label=\"Zoom out\"")
   assert string.contains(rendered, "aria-label=\"Reset zoom\"")
   assert string.contains(rendered, "aria-label=\"Zoom in\"")
-  assert string.contains(rendered, "100%")
+  assert string.contains(rendered, "200%")
 }
 
 pub fn chat_log_renders_snapshot_messages_in_order_and_keys_by_message_id_test() {

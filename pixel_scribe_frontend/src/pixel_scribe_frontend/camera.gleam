@@ -13,7 +13,7 @@ pub const minimum_zoom = 1
 
 pub const maximum_zoom = 3
 
-pub const default_zoom = 1
+pub const default_zoom = 2
 
 pub type Camera {
   Camera(

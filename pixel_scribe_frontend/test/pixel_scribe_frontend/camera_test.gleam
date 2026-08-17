@@ -3,6 +3,15 @@ import pixel_scribe_frontend/domain
 import pixel_scribe_frontend/placement
 import pixel_scribe_frontend/scene
 
+pub fn camera_defaults_to_200_percent_zoom_test() {
+  let self = participant("self")
+  let placements = assigned([self])
+  let self_id = domain.connection_id_from_string("self")
+  let assert Ok(camera_state) = camera.new(100, 80, self_id, placements)
+
+  assert camera.zoom_percent(camera_state) == 200
+}
+
 pub fn camera_normalizes_even_odd_and_negative_viewport_extents_test() {
   let self = participant("self")
   let placements = assigned([self])
@@ -11,8 +20,8 @@ pub fn camera_normalizes_even_odd_and_negative_viewport_extents_test() {
   let assert Ok(odd) = camera.new(101, 81, self_id, placements)
   let assert Ok(negative) = camera.new(-3, -5, self_id, placements)
 
-  assert even.viewport == camera.ViewportExtent(width: 100, height: 80)
-  assert odd.viewport == camera.ViewportExtent(width: 100, height: 80)
+  assert even.viewport == camera.ViewportExtent(width: 50, height: 40)
+  assert odd.viewport == camera.ViewportExtent(width: 50, height: 40)
   assert negative.viewport == camera.ViewportExtent(width: 0, height: 0)
 }
 
@@ -25,10 +34,10 @@ pub fn camera_centers_visual_self_without_clamping_test() {
   let visual_center = scene.avatar_visual_center(self_placement.position)
 
   assert camera_state.origin
-    == scene.WorldPoint(visual_center.x - 50, visual_center.y - 40)
+    == scene.WorldPoint(visual_center.x - 25, visual_center.y - 20)
   assert camera.world_to_viewport(camera_state, visual_center)
-    == scene.ViewportPoint(x: 50, y: 40)
-  assert camera.viewport_to_world(camera_state, scene.ViewportPoint(50, 40))
+    == scene.ViewportPoint(x: 25, y: 20)
+  assert camera.viewport_to_world(camera_state, scene.ViewportPoint(25, 20))
     == visual_center
 }
 
@@ -42,7 +51,7 @@ pub fn camera_keeps_unclamped_negative_origin_at_world_edge_test() {
   let self_id = domain.connection_id_from_string("self")
   let assert Ok(camera_state) = camera.new(640, 480, self_id, placements)
 
-  assert camera_state.origin == scene.WorldPoint(-192, -128)
+  assert camera_state.origin == scene.WorldPoint(-32, -8)
 }
 
 pub fn camera_keeps_unclamped_positive_world_overflow_at_far_edge_test() {
@@ -55,7 +64,7 @@ pub fn camera_keeps_unclamped_positive_world_overflow_at_far_edge_test() {
   let self_id = domain.connection_id_from_string("self")
   let assert Ok(camera_state) = camera.new(640, 480, self_id, placements)
 
-  assert camera_state.origin == scene.WorldPoint(1104, 576)
+  assert camera_state.origin == scene.WorldPoint(1264, 696)
 }
 
 pub fn camera_centers_literal_logical_world_corners_without_clamping_test() {
@@ -85,12 +94,12 @@ pub fn camera_centers_literal_logical_world_corners_without_clamping_test() {
       scene.world_pixel_height - 1,
     ))
 
-  assert top_left_camera.origin == scene.WorldPoint(-320, -256)
-  assert bottom_right_camera.origin == scene.WorldPoint(1215, 767)
+  assert top_left_camera.origin == scene.WorldPoint(-160, -136)
+  assert bottom_right_camera.origin == scene.WorldPoint(1375, 887)
   assert camera.world_to_viewport(top_left_camera, top_left_center)
-    == scene.ViewportPoint(x: 320, y: 240)
+    == scene.ViewportPoint(x: 160, y: 120)
   assert camera.world_to_viewport(bottom_right_camera, bottom_right_center)
-    == scene.ViewportPoint(x: 320, y: 240)
+    == scene.ViewportPoint(x: 160, y: 120)
 }
 
 pub fn camera_resize_recenters_the_same_self_target_test() {
@@ -102,9 +111,9 @@ pub fn camera_resize_recenters_the_same_self_target_test() {
   let assert Ok(self_placement) = placement.anchor_for(self_id, placements)
   let visual_center = scene.avatar_visual_center(self_placement.position)
 
-  assert resized.viewport == camera.ViewportExtent(width: 110, height: 90)
+  assert resized.viewport == camera.ViewportExtent(width: 54, height: 44)
   assert camera.world_to_viewport(resized, visual_center)
-    == scene.ViewportPoint(x: 55, y: 45)
+    == scene.ViewportPoint(x: 27, y: 22)
 }
 
 pub fn camera_zoom_keeps_self_centered_while_shrinking_world_view_test() {
@@ -116,13 +125,13 @@ pub fn camera_zoom_keeps_self_centered_while_shrinking_world_view_test() {
   let assert Ok(self_placement) = placement.anchor_for(self_id, placements)
   let visual_center = scene.avatar_visual_center(self_placement.position)
 
-  assert camera.zoom_level(initial) == 1
-  assert camera.zoom_percent(initial) == 100
-  assert camera.zoom_level(zoomed) == 2
-  assert camera.zoom_percent(zoomed) == 200
-  assert zoomed.viewport == camera.ViewportExtent(width: 50, height: 40)
+  assert camera.zoom_level(initial) == 2
+  assert camera.zoom_percent(initial) == 200
+  assert camera.zoom_level(zoomed) == 3
+  assert camera.zoom_percent(zoomed) == 300
+  assert zoomed.viewport == camera.ViewportExtent(width: 32, height: 26)
   assert camera.world_to_viewport(zoomed, visual_center)
-    == scene.ViewportPoint(x: 25, y: 20)
+    == scene.ViewportPoint(x: 16, y: 13)
 }
 
 pub fn camera_zoom_reset_restores_the_original_view_test() {
@@ -144,8 +153,8 @@ pub fn camera_resize_retains_the_selected_zoom_level_test() {
   let assert Ok(zoomed) = camera.zoom_in(initial, placements)
   let assert Ok(resized) = camera.resize(zoomed, 140, 100, placements)
 
-  assert camera.zoom_level(resized) == 2
-  assert resized.viewport == camera.ViewportExtent(width: 70, height: 50)
+  assert camera.zoom_level(resized) == 3
+  assert resized.viewport == camera.ViewportExtent(width: 46, height: 32)
 }
 
 pub fn camera_zoom_stops_at_supported_limits_test() {
@@ -158,10 +167,10 @@ pub fn camera_zoom_stops_at_supported_limits_test() {
   let assert Ok(zoomed_three_times) = camera.zoom_in(zoomed_twice, placements)
   let assert Ok(zoomed_out) = camera.zoom_out(initial, placements)
 
-  assert camera.zoom_level(zoomed_once) == 2
+  assert camera.zoom_level(zoomed_once) == 3
   assert camera.zoom_level(zoomed_twice) == 3
   assert zoomed_three_times == zoomed_twice
-  assert zoomed_out == initial
+  assert camera.zoom_level(zoomed_out) == 1
 }
 
 pub fn camera_retarget_and_reconnect_self_id_immediately_recenters_test() {
@@ -177,7 +186,7 @@ pub fn camera_retarget_and_reconnect_self_id_immediately_recenters_test() {
 
   assert retargeted.self_id == peer_id
   assert camera.world_to_viewport(retargeted, peer_center)
-    == scene.ViewportPoint(x: 50, y: 40)
+    == scene.ViewportPoint(x: 25, y: 20)
   assert retargeted.origin != initial.origin
 }
 
@@ -209,7 +218,7 @@ pub fn camera_update_recenters_after_same_self_relocation_test() {
 
   assert relocated.origin != initial.origin
   assert camera.world_to_viewport(relocated, relocated_center)
-    == scene.ViewportPoint(x: 320, y: 240)
+    == scene.ViewportPoint(x: 160, y: 120)
 }
 
 pub fn camera_peer_anchor_and_list_order_changes_do_not_pan_self_test() {

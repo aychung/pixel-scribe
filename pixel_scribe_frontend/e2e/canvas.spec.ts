@@ -1291,10 +1291,11 @@ for (const dpr of [1, 2] as const) {
     test("zooms the office around the self visual center", async ({ page }) => {
       await joinOffice(page, false);
       await expect.poll(async () => (await canvasMetrics(page)).centerGold).toBeGreaterThan(0);
+      await expect(page.locator("#office-zoom-value")).toHaveText("200%");
 
       const before = await canvasMetrics(page);
       await page.getByRole("button", { name: "Zoom in" }).click();
-      await expect(page.locator("#office-zoom-value")).toHaveText("200%");
+      await expect(page.locator("#office-zoom-value")).toHaveText("300%");
       await expect.poll(async () => (await canvasMetrics(page)).centerGold).toBeGreaterThan(0);
 
       const zoomed = await canvasMetrics(page);
@@ -1303,7 +1304,7 @@ for (const dpr of [1, 2] as const) {
       expect(zoomed.fingerprint).not.toBe(before.fingerprint);
 
       await page.getByRole("button", { name: "Reset zoom" }).click();
-      await expect(page.locator("#office-zoom-value")).toHaveText("100%");
+      await expect(page.locator("#office-zoom-value")).toHaveText("200%");
     });
 
     test("keeps offscreen participants semantic while culling their canvas work", async ({
