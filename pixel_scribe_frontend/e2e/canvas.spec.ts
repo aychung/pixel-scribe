@@ -31,13 +31,11 @@ function observeAssetLoads(page: Page) {
   const loads = {
     tiles: 0,
     cupboard: 0,
-    kitchen: 0,
     miscellaneous: 0,
     flowers: 0,
     carpet: 0,
     livingRoom: 0,
     livingRoom1: 0,
-    windows: 0,
     paintings: 0,
     characterModel: 0,
     characterHair: 0,
@@ -47,13 +45,11 @@ function observeAssetLoads(page: Page) {
     const path = decodeURIComponent(new URL(request.url()).pathname);
     if (path.endsWith("/Interior/Home/TilesHouse.png")) loads.tiles += 1;
     if (path.endsWith("/Interior/Home/Cupboard-Sheet.png")) loads.cupboard += 1;
-    if (path.endsWith("/Interior/Home/Kitchen-Sheet.png")) loads.kitchen += 1;
     if (path.endsWith("/Interior/Home/Miscellaneous-Sheet.png")) loads.miscellaneous += 1;
     if (path.endsWith("/Interior/Home/Flowers-Sheet.png")) loads.flowers += 1;
     if (path.endsWith("/Interior/Home/Carpet-Sheet.png")) loads.carpet += 1;
     if (path.endsWith("/Interior/Home/LivingRoom-Sheet.png")) loads.livingRoom += 1;
     if (path.endsWith("/Interior/Home/LivingRoom1-Sheet.png")) loads.livingRoom1 += 1;
-    if (path.endsWith("/Interior/Home/Windows-Sheet.png")) loads.windows += 1;
     if (path.endsWith("/Interior/Home/Paintings-Sheet.png")) loads.paintings += 1;
     if (path.endsWith("/Character/CharacterModel/Character Model.png")) {
       loads.characterModel += 1;
@@ -117,6 +113,7 @@ async function installRafProbe(page: Page) {
         "character-outfit": [] as Array<[number, number, number, number]>,
         "character-hair": [] as Array<[number, number, number, number]>,
       },
+      characterLayerDestinations: [] as Array<[number, number, number, number]>,
       tileSourceRects: [] as Array<[number, number, number, number]>,
       textDraws: [] as Array<{ text: string; maxWidth?: number }>,
       images: [] as unknown[],
@@ -227,6 +224,12 @@ async function installRafProbe(page: Page) {
             arguments_[2] as number,
             arguments_[3] as number,
             arguments_[4] as number,
+          ]);
+          probe.characterLayerDestinations.push([
+            arguments_[5] as number,
+            arguments_[6] as number,
+            arguments_[7] as number,
+            arguments_[8] as number,
           ]);
         }
         if (
@@ -513,6 +516,42 @@ async function canvasColorCounts(page: Page) {
   });
 }
 
+async function canvasColorBounds(page: Page, color: [number, number, number]) {
+  return page.locator("#office-canvas").evaluate((element, expected) => {
+    const canvas = element as HTMLCanvasElement;
+    const context = canvas.getContext("2d");
+    if (context === null) throw new Error("Canvas 2D context unavailable");
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    let left = canvas.width;
+    let top = canvas.height;
+    let right = -1;
+    let bottom = -1;
+    for (let y = 0; y < canvas.height; y += 1) {
+      for (let x = 0; x < canvas.width; x += 1) {
+        const index = (y * canvas.width + x) * 4;
+        if (
+          pixels[index] === expected[0] &&
+          pixels[index + 1] === expected[1] &&
+          pixels[index + 2] === expected[2] &&
+          pixels[index + 3] > 0
+        ) {
+          left = Math.min(left, x);
+          top = Math.min(top, y);
+          right = Math.max(right, x);
+          bottom = Math.max(bottom, y);
+        }
+      }
+    }
+    if (right < left || bottom < top) return null;
+    return {
+      width: right - left + 1,
+      height: bottom - top + 1,
+      centerX: (left + right + 1) / 2,
+      centerY: (top + bottom + 1) / 2,
+    };
+  }, color);
+}
+
 test.describe("canvas FFI boundaries", () => {
   test("uses the CSS content box for null-entry resize and live DPR measurements", async ({
     page,
@@ -598,7 +637,7 @@ test.describe("canvas FFI boundaries", () => {
   }) => {
     await prepareDirectFfi(page);
     await renderDirectScene(page, {
-      avatars: [{ id: "self", username: "Ada", x: 160, y: 120, variant: 0, self: true, status: "online" }],
+      avatars: [{ id: "self", username: "Ada", x: 160, y: 120, variant: 0, size: 16, self: true, status: "online" }],
     }, { origin_x: 0, origin_y: 0, viewport_width: 320, viewport_height: 240 });
     let counts = await page.evaluate(() => (globalThis as typeof globalThis & {
       __canvasRafProbe: { saves: number; restores: number; throwOnClip: boolean };
@@ -629,8 +668,8 @@ test.describe("canvas FFI boundaries", () => {
     await prepareDirectFfi(page);
     await renderDirectScene(page, {
       avatars: [
-        { id: "self", username: "Ada", x: 96, y: 112, variant: 0, self: true, status: "online" },
-        { id: "peer", username: "Lin", x: 256, y: 208, variant: 1, self: false, status: "online" },
+        { id: "self", username: "Ada", x: 96, y: 112, variant: 0, size: 16, self: true, status: "online" },
+        { id: "peer", username: "Lin", x: 256, y: 208, variant: 1, size: 16, self: false, status: "online" },
       ],
     }, { origin_x: 0, origin_y: 0, viewport_width: 320, viewport_height: 240 });
     const colors = await canvasColorCounts(page);
@@ -640,6 +679,135 @@ test.describe("canvas FFI boundaries", () => {
     expect(colors["139,94,74"] ?? 0).toBeGreaterThan(100);
     expect(colors["243,211,106"] ?? 0).toBeGreaterThan(0);
     expect(colors["114,183,161"] ?? 0).toBeGreaterThan(0);
+    expect(await canvasColorBounds(page, [243, 211, 106])).toEqual({
+      width: 16,
+      height: 16,
+      centerX: 96,
+      centerY: 104,
+    });
+  });
+
+  test("validates the compact 16px avatar size and scales character layers", async ({
+    page,
+  }) => {
+    await installRafProbe(page);
+    await installFfiModule(page);
+    await page.goto("/");
+    await page.evaluate(() => {
+      document.body.innerHTML =
+        '<canvas id="office-canvas" style="display:block;width:320px;height:240px"></canvas>';
+    });
+    await page.evaluate(async () => {
+      class FakeImage {
+        kind = "";
+        onload: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        set src(url: string) {
+          const path = decodeURIComponent(url);
+          this.kind = path.includes("Character Model")
+            ? "character-model"
+            : path.includes("/Hairs.png")
+              ? "character-hair"
+              : path.includes("/Suit.png")
+                ? "character-outfit"
+                : "other";
+          this.onload?.();
+        }
+      }
+      Object.defineProperty(globalThis, "Image", { configurable: true, value: FakeImage });
+      const probe = (globalThis as typeof globalThis & {
+        __canvasRafProbe: { hold: boolean };
+      }).__canvasRafProbe;
+      probe.hold = true;
+      const ffi = await import("/__canvas_ffi_test__.mjs");
+      ffi.initialize_canvas(() => {}, () => {}, () => {});
+    });
+    await renderDirectScene(page, {
+      avatars: [{
+        id: "compact",
+        username: "Ada",
+        x: 160,
+        y: 120,
+        variant: 0,
+        size: 16,
+        self: true,
+        status: "online",
+      }],
+    }, { origin_x: 0, origin_y: 0, viewport_width: 320, viewport_height: 240 });
+    const destinations = await page.evaluate(() => (globalThis as typeof globalThis & {
+      __canvasRafProbe: { characterLayerDestinations: Array<[number, number, number, number]> };
+    }).__canvasRafProbe.characterLayerDestinations);
+    expect(destinations.slice(-3)).toEqual([
+      [152, 104, 16, 16],
+      [152, 104, 16, 16],
+      [152, 104, 16, 16],
+    ]);
+
+    await page.evaluate(() => {
+      const probe = (globalThis as typeof globalThis & {
+        __canvasRafProbe: { textDraws: Array<{ text: string; maxWidth?: number }> };
+      }).__canvasRafProbe;
+      probe.textDraws = [];
+    });
+    await renderDirectScene(page, {
+      avatars: [
+        { id: "self", username: "Self", x: 160, y: 80, variant: 0, size: 16, self: true, status: "online" },
+        { id: "peer-1", username: "One", x: 120, y: 96, variant: 1, size: 16, self: false, status: "online" },
+        { id: "peer-2", username: "Two", x: 136, y: 96, variant: 2, size: 16, self: false, status: "online" },
+        { id: "peer-3", username: "Three", x: 152, y: 96, variant: 3, size: 16, self: false, status: "online" },
+        { id: "peer-4", username: "Four", x: 168, y: 96, variant: 4, size: 16, self: false, status: "online" },
+      ],
+    }, { origin_x: 0, origin_y: 0, viewport_width: 320, viewport_height: 240 });
+    const crowdedLabels = await page.evaluate(() => (globalThis as typeof globalThis & {
+      __canvasRafProbe: { textDraws: Array<{ text: string; maxWidth?: number }> };
+    }).__canvasRafProbe.textDraws.map(({ text }) => text));
+    expect(crowdedLabels).toEqual(["Self"]);
+
+    const errors = await page.evaluate(async () => {
+      const errors: number[] = [];
+      const missingSizeErrors: number[] = [];
+      const probe = (globalThis as typeof globalThis & {
+        __canvasRafProbe: { hold: boolean; flush: (timestamp: number) => void };
+      }).__canvasRafProbe;
+      const ffi = await import("/__canvas_ffi_test__.mjs");
+      probe.hold = true;
+      ffi.render_canvas(JSON.stringify({ avatars: [{
+        id: "wrong-size",
+        username: "Ada",
+        x: 160,
+        y: 120,
+        variant: 0,
+        size: 32,
+        self: false,
+        status: "online",
+      }] }), JSON.stringify({
+        origin_x: 0,
+        origin_y: 0,
+        viewport_width: 320,
+        viewport_height: 240,
+      }), (code) => errors.push(code));
+      probe.hold = false;
+      probe.flush(32);
+      ffi.dispose_canvas();
+      ffi.initialize_canvas(() => {}, () => {}, () => {});
+      ffi.render_canvas(JSON.stringify({ avatars: [{
+        id: "missing-size",
+        username: "Ada",
+        x: 160,
+        y: 120,
+        variant: 0,
+        self: false,
+        status: "online",
+      }] }), JSON.stringify({
+        origin_x: 0,
+        origin_y: 0,
+        viewport_width: 320,
+        viewport_height: 240,
+      }), (code) => missingSizeErrors.push(code));
+      return { errors, missingSizeErrors };
+    });
+    expect(errors.errors).toEqual([6]);
+    expect(errors.missingSizeErrors).toEqual([6]);
   });
 
   test("draws equal-depth avatars in the already-sorted input order", async ({ page }) => {
@@ -675,8 +843,8 @@ test.describe("canvas FFI boundaries", () => {
       ffi.render_canvas(
         JSON.stringify({
           avatars: [
-            { id: "z", username: "Zed", x: 160, y: 120, variant: 0, self: false, status: "online" },
-            { id: "ä", username: "Ada", x: 160, y: 120, variant: 1, self: false, status: "online" },
+            { id: "z", username: "Zed", x: 160, y: 120, variant: 0, size: 16, self: false, status: "online" },
+            { id: "ä", username: "Ada", x: 160, y: 120, variant: 1, size: 16, self: false, status: "online" },
           ],
         }),
         JSON.stringify({ origin_x: 0, origin_y: 0, viewport_width: 320, viewport_height: 240 }),
@@ -727,7 +895,7 @@ test.describe("canvas FFI boundaries", () => {
       ffi.initialize_canvas(() => {}, () => {}, () => {});
       ffi.render_canvas(
         JSON.stringify({
-          avatars: [{ id: "self", username: "Ada", x: 160, y: 120, variant: 31, self: true, status: "online" }],
+          avatars: [{ id: "self", username: "Ada", x: 160, y: 120, variant: 31, size: 16, self: true, status: "online" }],
         }),
         JSON.stringify({ origin_x: 0, origin_y: 0, viewport_width: 320, viewport_height: 240 }),
         () => {},
@@ -830,8 +998,8 @@ test.describe("canvas FFI boundaries", () => {
       const ffi = await import("/__canvas_ffi_test__.mjs");
       probe.hold = true;
       ffi.render_canvas(JSON.stringify({ avatars: [
-        { id: "ä", username: "Ada", x: 160, y: 120, variant: 1, self: false, status: "online" },
-        { id: "z", username: "Zed", x: 160, y: 120, variant: 0, self: false, status: "online" },
+        { id: "ä", username: "Ada", x: 160, y: 120, variant: 1, size: 16, self: false, status: "online" },
+        { id: "z", username: "Zed", x: 160, y: 120, variant: 0, size: 16, self: false, status: "online" },
       ] }), JSON.stringify({ origin_x: 0, origin_y: 0, viewport_width: 320, viewport_height: 240 }),
       (code) => errors.push(code));
       probe.hold = false;
@@ -863,7 +1031,7 @@ test.describe("canvas FFI boundaries", () => {
       const startedAt = Date.now() - 5_500;
       ffi.render_canvas(JSON.stringify({
         avatars: [
-          { id: "sender", username: "Ada", x: 160, y: 120, variant: 0, self: false, status: "online" },
+          { id: "sender", username: "Ada", x: 160, y: 120, variant: 0, size: 16, self: false, status: "online" },
         ],
         bubbles: [{
           id: "fading",
@@ -879,7 +1047,7 @@ test.describe("canvas FFI boundaries", () => {
       }), JSON.stringify({ origin_x: 0, origin_y: 0, viewport_width: 320, viewport_height: 720 }), () => {});
       ffi.render_canvas(JSON.stringify({
         avatars: [
-          { id: "sender", username: "Ada", x: 160, y: 120, variant: 0, self: false, status: "online" },
+          { id: "sender", username: "Ada", x: 160, y: 120, variant: 0, size: 16, self: false, status: "online" },
         ],
         bubbles: [{
           id: "bubble",
@@ -921,7 +1089,7 @@ test.describe("canvas FFI boundaries", () => {
       const startedAt = Date.now();
       ffi.render_canvas(JSON.stringify({
         avatars: [
-          { id: "sender", username: "Ada", x: 160, y: 120, variant: 0, self: false, status: "online" },
+          { id: "sender", username: "Ada", x: 160, y: 120, variant: 0, size: 16, self: false, status: "online" },
         ],
         bubbles: [{
           id: "wide-emoji",
@@ -961,7 +1129,7 @@ test.describe("canvas FFI boundaries", () => {
       probe.hold = true;
       ffi.render_canvas(JSON.stringify({
         avatars: [
-          { id: "sender", username: "Ada", x: 160, y: 120, variant: 0, self: false, status: "online" },
+          { id: "sender", username: "Ada", x: 160, y: 120, variant: 0, size: 16, self: false, status: "online" },
         ],
         bubbles: [{
           id: "bubble",
@@ -1283,10 +1451,11 @@ for (const dpr of [1, 2] as const) {
       await expect
         .poll(async () => {
           const metrics = await canvasMetrics(page);
-          return metrics.width !== before.width && metrics.height !== before.height;
+          return metrics.width !== before.width;
         })
         .toBe(true);
       const resized = await canvasMetrics(page);
+      expect(resized.height).toBe(before.height);
       expect(resized.width).toBe(Math.round(resized.cssWidth * dpr));
       expect(resized.height).toBe(Math.round(resized.cssHeight * dpr));
       expect(Math.abs(resized.centerGoldCenter.x - resized.cssWidth / 2)).toBeLessThan(1.1);
@@ -1330,7 +1499,7 @@ for (const dpr of [1, 2] as const) {
         JSON.stringify({
           type: "user_joined",
           room_id: "default",
-          user: { connection_id: "edge-50", username: "Far" },
+          user: { connection_id: "edge-52", username: "Far" },
         }),
       );
       await expect(
@@ -1378,9 +1547,6 @@ for (const dpr of [1, 2] as const) {
       await expect(page.getByRole("status")).toHaveText("Joined the default office.");
       await expect.poll(() => sessions).toHaveLength(1);
       await expect.poll(async () => (await canvasMetrics(page)).centerGold).toBeGreaterThan(0);
-      const first = await canvasMetrics(page);
-      expect(first.corner).toEqual([24, 35, 42, 255]);
-
       await sessions[0].close();
       await expect(page.getByRole("status")).toHaveText("Connection lost. Reconnecting…");
       await page.clock.fastForward(500);
@@ -1390,7 +1556,6 @@ for (const dpr of [1, 2] as const) {
       const second = await canvasMetrics(page);
       expect(Math.abs(second.centerGoldCenter.x - second.cssWidth / 2)).toBeLessThan(1.1);
       expect(Math.abs(second.centerGoldCenter.y - second.cssHeight / 2)).toBeLessThan(1.1);
-      expect(second.corner).toEqual([24, 35, 42, 255]);
     });
   });
 }

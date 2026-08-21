@@ -45,37 +45,37 @@ pub fn camera_keeps_unclamped_negative_origin_at_world_edge_test() {
   let placements = [
     placement.Placement(
       domain.connection_id_from_string("self"),
-      scene.Anchor(0, scene.WorldPoint(128, 128)),
+      anchor(0, scene.WorldPoint(128, 128)),
     ),
   ]
   let self_id = domain.connection_id_from_string("self")
   let assert Ok(camera_state) = camera.new(640, 480, self_id, placements)
 
-  assert camera_state.origin == scene.WorldPoint(-32, -8)
+  assert camera_state.origin == scene.WorldPoint(-32, 0)
 }
 
 pub fn camera_keeps_unclamped_positive_world_overflow_at_far_edge_test() {
   let placements = [
     placement.Placement(
       domain.connection_id_from_string("self"),
-      scene.Anchor(49, scene.WorldPoint(1424, 832)),
+      anchor(49, scene.WorldPoint(1424, 832)),
     ),
   ]
   let self_id = domain.connection_id_from_string("self")
   let assert Ok(camera_state) = camera.new(640, 480, self_id, placements)
 
-  assert camera_state.origin == scene.WorldPoint(1264, 696)
+  assert camera_state.origin == scene.WorldPoint(1264, 704)
 }
 
 pub fn camera_centers_literal_logical_world_corners_without_clamping_test() {
   let self_id = domain.connection_id_from_string("self")
   let top_left = [
-    placement.Placement(self_id, scene.Anchor(0, scene.WorldPoint(0, 0))),
+    placement.Placement(self_id, anchor(0, scene.WorldPoint(0, 0))),
   ]
   let bottom_right = [
     placement.Placement(
       self_id,
-      scene.Anchor(
+      anchor(
         1,
         scene.WorldPoint(
           scene.world_pixel_width - 1,
@@ -94,8 +94,8 @@ pub fn camera_centers_literal_logical_world_corners_without_clamping_test() {
       scene.world_pixel_height - 1,
     ))
 
-  assert top_left_camera.origin == scene.WorldPoint(-160, -136)
-  assert bottom_right_camera.origin == scene.WorldPoint(175, 39)
+  assert top_left_camera.origin == scene.WorldPoint(-160, -128)
+  assert bottom_right_camera.origin == scene.WorldPoint(175, 47)
   assert camera.world_to_viewport(top_left_camera, top_left_center)
     == scene.ViewportPoint(x: 160, y: 120)
   assert camera.world_to_viewport(bottom_right_camera, bottom_right_center)
@@ -207,10 +207,10 @@ pub fn camera_peer_only_changes_leave_origin_unchanged_test() {
 pub fn camera_update_recenters_after_same_self_relocation_test() {
   let self_id = domain.connection_id_from_string("self")
   let initial_placements = [
-    placement.Placement(self_id, scene.Anchor(0, scene.WorldPoint(0, 0))),
+    placement.Placement(self_id, anchor(0, scene.WorldPoint(0, 0))),
   ]
   let relocated_placements = [
-    placement.Placement(self_id, scene.Anchor(49, scene.WorldPoint(1424, 832))),
+    placement.Placement(self_id, anchor(49, scene.WorldPoint(1424, 832))),
   ]
   let assert Ok(initial) = camera.new(640, 480, self_id, initial_placements)
   let assert Ok(relocated) = camera.update(initial, relocated_placements)
@@ -225,12 +225,12 @@ pub fn camera_peer_anchor_and_list_order_changes_do_not_pan_self_test() {
   let self_id = domain.connection_id_from_string("self")
   let peer_id = domain.connection_id_from_string("peer")
   let initial_placements = [
-    placement.Placement(self_id, scene.Anchor(0, scene.WorldPoint(128, 128))),
-    placement.Placement(peer_id, scene.Anchor(1, scene.WorldPoint(272, 128))),
+    placement.Placement(self_id, anchor(0, scene.WorldPoint(128, 128))),
+    placement.Placement(peer_id, anchor(1, scene.WorldPoint(272, 128))),
   ]
   let changed_peer_placements = [
-    placement.Placement(peer_id, scene.Anchor(49, scene.WorldPoint(1424, 832))),
-    placement.Placement(self_id, scene.Anchor(0, scene.WorldPoint(128, 128))),
+    placement.Placement(peer_id, anchor(49, scene.WorldPoint(1424, 832))),
+    placement.Placement(self_id, anchor(0, scene.WorldPoint(128, 128))),
   ]
   let assert Ok(initial) = camera.new(640, 480, self_id, initial_placements)
   let assert Ok(updated) = camera.update(initial, changed_peer_placements)
@@ -250,7 +250,7 @@ pub fn camera_forward_and_inverse_transforms_round_trip_negative_origin_test() {
   let placements = [
     placement.Placement(
       domain.connection_id_from_string("self"),
-      scene.Anchor(0, scene.WorldPoint(128, 128)),
+      anchor(0, scene.WorldPoint(128, 128)),
     ),
   ]
   let self_id = domain.connection_id_from_string("self")
@@ -263,6 +263,10 @@ pub fn camera_forward_and_inverse_transforms_round_trip_negative_origin_test() {
 
 fn participant(id: String) -> domain.Presence {
   domain.Presence(domain.connection_id_from_string(id), id)
+}
+
+fn anchor(index: Int, position: scene.WorldPoint) -> scene.Anchor {
+  scene.Anchor(index, position)
 }
 
 fn assigned(participants: List(domain.Presence)) -> List(placement.Placement) {

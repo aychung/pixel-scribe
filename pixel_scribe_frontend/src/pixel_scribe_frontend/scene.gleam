@@ -64,9 +64,10 @@ pub type WorldOffset {
 
 pub const avatar_bottom_center_offset = WorldOffset(dx: 0, dy: 0)
 
-/// Metrocity character cells are native 32×32 sprites with a bottom-center
-/// anchor, so their visual center is 16 logical pixels above the anchor.
-pub const avatar_visual_center_offset = WorldOffset(dx: 0, dy: -16)
+/// Every rendered avatar uses one 16×16 compact sprite cell.
+pub const avatar_size = 16
+
+pub const avatar_visual_center_offset = WorldOffset(dx: 0, dy: -8)
 
 pub type BubbleLimits {
   BubbleLimits(max_width: Int, max_lines: Int)
@@ -88,14 +89,23 @@ pub const edge_exclusions = [
   ExclusionRect(left: 160, top: 128, width: 16, height: 32),
 ]
 
-/// Furniture footprints are metadata only; no Canvas or browser code belongs here.
+/// Blocking furniture footprints mirror `ROOM_LAYOUT` in the Canvas renderer.
+/// Rugs and wall decorations are walkable backdrops drawn behind avatars.
+/// This metadata contains no Canvas or browser code.
 pub const furniture_exclusions = [
   ExclusionRect(left: 32, top: 32, width: 64, height: 96),
   ExclusionRect(left: 96, top: 32, width: 64, height: 96),
-  ExclusionRect(left: 32, top: 112, width: 64, height: 64),
-  ExclusionRect(left: 208, top: 48, width: 64, height: 64),
-  ExclusionRect(left: 208, top: 96, width: 64, height: 64),
-  ExclusionRect(left: 256, top: 48, width: 64, height: 64),
+  ExclusionRect(left: 32, top: 96, width: 64, height: 64),
+  ExclusionRect(left: 96, top: 96, width: 64, height: 64),
+  ExclusionRect(left: 64, top: 96, width: 64, height: 96),
+  ExclusionRect(left: 48, top: 96, width: 64, height: 64),
+  ExclusionRect(left: 48, top: 128, width: 64, height: 64),
+  ExclusionRect(left: 112, top: 96, width: 64, height: 64),
+  ExclusionRect(left: 112, top: 128, width: 64, height: 64),
+  ExclusionRect(left: 208, top: 64, width: 64, height: 64),
+  ExclusionRect(left: 224, top: 48, width: 64, height: 64),
+  ExclusionRect(left: 224, top: 96, width: 64, height: 64),
+  ExclusionRect(left: 256, top: 64, width: 64, height: 64),
   ExclusionRect(left: 224, top: 64, width: 64, height: 64),
 ]
 
@@ -224,60 +234,58 @@ pub const bubble_anchor_gap = 4
 // arithmetic expressions: 160 - 8 - 8 = 144px of text interior.
 const bubble_max_line_width = 144
 
-/// Fifty hand-authored, tile-aligned bottom-center positions in open floor.
-/// The index is stable so placement can refer to an anchor without using a
-/// participant's username or list position.
+/// Fifty hand-authored bottom-center positions on the compact avatar lattice.
 pub const curated_anchors = [
-  Anchor(0, WorldPoint(16, 48)),
-  Anchor(1, WorldPoint(16, 64)),
-  Anchor(2, WorldPoint(16, 80)),
-  Anchor(3, WorldPoint(16, 96)),
-  Anchor(4, WorldPoint(16, 112)),
-  Anchor(5, WorldPoint(16, 128)),
-  Anchor(6, WorldPoint(16, 144)),
-  Anchor(7, WorldPoint(208, 32)),
-  Anchor(8, WorldPoint(224, 32)),
-  Anchor(9, WorldPoint(240, 32)),
-  Anchor(10, WorldPoint(256, 32)),
-  Anchor(11, WorldPoint(96, 128)),
-  Anchor(12, WorldPoint(112, 128)),
-  Anchor(13, WorldPoint(128, 128)),
-  Anchor(14, WorldPoint(144, 128)),
-  Anchor(15, WorldPoint(96, 144)),
-  Anchor(16, WorldPoint(112, 144)),
-  Anchor(17, WorldPoint(128, 144)),
-  Anchor(18, WorldPoint(144, 144)),
-  Anchor(19, WorldPoint(160, 64)),
-  Anchor(20, WorldPoint(160, 80)),
-  Anchor(21, WorldPoint(160, 96)),
-  Anchor(22, WorldPoint(160, 112)),
-  Anchor(23, WorldPoint(176, 64)),
-  Anchor(24, WorldPoint(176, 80)),
-  Anchor(25, WorldPoint(176, 96)),
-  Anchor(26, WorldPoint(176, 112)),
-  Anchor(27, WorldPoint(176, 128)),
-  Anchor(28, WorldPoint(176, 144)),
-  Anchor(29, WorldPoint(192, 64)),
-  Anchor(30, WorldPoint(192, 80)),
-  Anchor(31, WorldPoint(192, 96)),
-  Anchor(32, WorldPoint(192, 112)),
-  Anchor(33, WorldPoint(192, 128)),
-  Anchor(34, WorldPoint(192, 144)),
-  Anchor(35, WorldPoint(16, 32)),
-  Anchor(36, WorldPoint(272, 32)),
-  Anchor(37, WorldPoint(288, 32)),
-  Anchor(38, WorldPoint(288, 112)),
-  Anchor(39, WorldPoint(288, 128)),
-  Anchor(40, WorldPoint(288, 144)),
-  Anchor(41, WorldPoint(304, 32)),
-  Anchor(42, WorldPoint(176, 48)),
-  Anchor(43, WorldPoint(192, 48)),
-  Anchor(44, WorldPoint(176, 32)),
-  Anchor(45, WorldPoint(192, 32)),
-  Anchor(46, WorldPoint(272, 144)),
-  Anchor(47, WorldPoint(304, 128)),
-  Anchor(48, WorldPoint(304, 144)),
-  Anchor(49, WorldPoint(272, 128)),
+  Anchor(0, WorldPoint(24, 32)),
+  Anchor(1, WorldPoint(40, 32)),
+  Anchor(2, WorldPoint(56, 32)),
+  Anchor(3, WorldPoint(72, 32)),
+  Anchor(4, WorldPoint(88, 32)),
+  Anchor(5, WorldPoint(104, 32)),
+  Anchor(6, WorldPoint(120, 32)),
+  Anchor(7, WorldPoint(136, 32)),
+  Anchor(8, WorldPoint(152, 32)),
+  Anchor(9, WorldPoint(184, 32)),
+  Anchor(10, WorldPoint(200, 32)),
+  Anchor(11, WorldPoint(216, 32)),
+  Anchor(12, WorldPoint(232, 32)),
+  Anchor(13, WorldPoint(248, 32)),
+  Anchor(14, WorldPoint(264, 32)),
+  Anchor(15, WorldPoint(280, 32)),
+  Anchor(16, WorldPoint(296, 32)),
+  Anchor(17, WorldPoint(312, 32)),
+  Anchor(18, WorldPoint(24, 48)),
+  Anchor(19, WorldPoint(184, 48)),
+  Anchor(20, WorldPoint(200, 48)),
+  Anchor(21, WorldPoint(216, 48)),
+  Anchor(22, WorldPoint(232, 48)),
+  Anchor(23, WorldPoint(248, 48)),
+  Anchor(24, WorldPoint(264, 48)),
+  Anchor(25, WorldPoint(280, 48)),
+  Anchor(26, WorldPoint(296, 48)),
+  Anchor(27, WorldPoint(312, 48)),
+  Anchor(28, WorldPoint(24, 64)),
+  Anchor(29, WorldPoint(184, 64)),
+  Anchor(30, WorldPoint(200, 64)),
+  Anchor(31, WorldPoint(216, 64)),
+  Anchor(32, WorldPoint(296, 64)),
+  Anchor(33, WorldPoint(312, 64)),
+  Anchor(34, WorldPoint(24, 80)),
+  Anchor(35, WorldPoint(168, 80)),
+  Anchor(36, WorldPoint(184, 80)),
+  Anchor(37, WorldPoint(200, 80)),
+  Anchor(38, WorldPoint(24, 96)),
+  Anchor(39, WorldPoint(168, 96)),
+  Anchor(40, WorldPoint(184, 96)),
+  Anchor(41, WorldPoint(200, 96)),
+  Anchor(42, WorldPoint(24, 112)),
+  Anchor(43, WorldPoint(184, 112)),
+  Anchor(44, WorldPoint(200, 112)),
+  Anchor(45, WorldPoint(24, 128)),
+  Anchor(46, WorldPoint(184, 128)),
+  Anchor(47, WorldPoint(200, 128)),
+  Anchor(48, WorldPoint(24, 144)),
+  Anchor(49, WorldPoint(184, 144)),
 ]
 
 pub fn anchor_points() -> List(WorldPoint) {
@@ -287,11 +295,9 @@ pub fn anchor_points() -> List(WorldPoint) {
 pub fn anchor_is_walkable(point: WorldPoint) -> Bool {
   let WorldPoint(x, y) = point
 
-  x % tile_size == 0
+  x % tile_size == avatar_size / 2
   && y % tile_size == 0
-  && world_point_is_in_bounds(point)
-  && !in_any_exclusion(point, edge_exclusions)
-  && !in_any_exclusion(point, furniture_exclusions)
+  && anchor_has_clear_footprint(Anchor(-1, point))
 }
 
 pub fn world_point_is_in_bounds(point: WorldPoint) -> Bool {
@@ -304,6 +310,38 @@ pub fn point_is_in_exclusion(
   exclusion: ExclusionRect,
 ) -> Bool {
   point_in_rect(point, exclusion)
+}
+
+/// The half-open rectangle occupied by one compact avatar cell.
+/// Rectangles that only touch at an edge do not overlap.
+pub fn rectangles_intersect(left: ExclusionRect, right: ExclusionRect) -> Bool {
+  left.left < right.left + right.width
+  && left.left + left.width > right.left
+  && left.top < right.top + right.height
+  && left.top + left.height > right.top
+}
+
+pub fn anchor_has_clear_footprint(anchor: Anchor) -> Bool {
+  let rect = avatar_rect(anchor.position)
+  rect.left >= 0
+  && rect.top >= 0
+  && rect.left + rect.width <= world_pixel_width
+  && rect.top + rect.height <= world_pixel_height
+  && !list.any(edge_exclusions, fn(wall) { rectangles_intersect(rect, wall) })
+  && !list.any(furniture_exclusions, fn(furniture) {
+    rectangles_intersect(rect, furniture)
+  })
+}
+
+pub fn avatar_rect(point: WorldPoint) -> ExclusionRect {
+  let WorldPoint(x, y) = point
+  let half_width = avatar_size / 2
+  ExclusionRect(
+    left: x - half_width,
+    top: y - avatar_size,
+    width: avatar_size,
+    height: avatar_size,
+  )
 }
 
 pub fn avatar_visual_center(bottom_center: WorldPoint) -> WorldPoint {
@@ -755,13 +793,13 @@ fn avatar_is_visible_in_viewport(
   viewport_height: Int,
 ) -> Bool {
   let AvatarDraw(_, _, WorldPoint(anchor_x, anchor_y), _, _, _, _) = avatar
-  // Match the native Metrocity character destination rectangle: x-16..x+16
-  // and y-32..y.
+  let half_width = avatar_size / 2
+  let height = avatar_size
   let safe_width = int.max(0, viewport_width)
   let safe_height = int.max(0, viewport_height)
-  let avatar_left = anchor_x - 16
-  let avatar_top = anchor_y - 32
-  let avatar_right = anchor_x + 16
+  let avatar_left = anchor_x - half_width
+  let avatar_top = anchor_y - height
+  let avatar_right = anchor_x + half_width
   let avatar_bottom = anchor_y
   let viewport_right = origin_x + safe_width
   let viewport_bottom = origin_y + safe_height
@@ -788,6 +826,7 @@ fn avatar_json(avatar: AvatarDraw) -> json.Json {
     #("x", json.int(x)),
     #("y", json.int(y)),
     #("variant", json.int(variant)),
+    #("size", json.int(avatar_size)),
     #("self", json.bool(is_self)),
     #("status", json.string(status_name(status))),
   ])
@@ -838,13 +877,6 @@ fn compare_avatar_draws(left: AvatarDraw, right: AvatarDraw) -> order.Order {
       )
     result -> result
   }
-}
-
-fn in_any_exclusion(
-  point: WorldPoint,
-  exclusions: List(ExclusionRect),
-) -> Bool {
-  list.any(exclusions, fn(exclusion) { point_in_rect(point, exclusion) })
 }
 
 fn point_in_rect(point: WorldPoint, rect: ExclusionRect) -> Bool {

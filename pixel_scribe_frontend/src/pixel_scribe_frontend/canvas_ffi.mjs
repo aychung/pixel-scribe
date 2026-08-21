@@ -10,6 +10,10 @@ const SCENE_UNAVAILABLE = 6;
 const FAILED = Symbol("canvas-ffi-failed");
 const TILE_SIZE = 16;
 const CHARACTER_CELL_SIZE = 32;
+const AVATAR_SIZE = 16;
+const AVATAR_HALF_SIZE = AVATAR_SIZE / 2;
+const AVATAR_LABEL_OFFSET = AVATAR_SIZE + 4;
+const MAX_LABELED_AVATARS = 4;
 const CHARACTER_FRONT_COLUMN = 0;
 const CHARACTER_MODEL_ROWS = 6;
 const CHARACTER_HAIR_ROWS = 8;
@@ -19,13 +23,11 @@ const WORLD_HEIGHT = 176;
 const ASSET_URLS = Object.freeze({
   tiles: "/pixel-art/metrocity/Interior/Home/TilesHouse.png",
   cupboard: "/pixel-art/metrocity/Interior/Home/Cupboard-Sheet.png",
-  kitchen: "/pixel-art/metrocity/Interior/Home/Kitchen-Sheet.png",
   miscellaneous: "/pixel-art/metrocity/Interior/Home/Miscellaneous-Sheet.png",
   flowers: "/pixel-art/metrocity/Interior/Home/Flowers-Sheet.png",
   carpet: "/pixel-art/metrocity/Interior/Home/Carpet-Sheet.png",
   livingRoom: "/pixel-art/metrocity/Interior/Home/LivingRoom-Sheet.png",
   livingRoom1: "/pixel-art/metrocity/Interior/Home/LivingRoom1-Sheet.png",
-  windows: "/pixel-art/metrocity/Interior/Home/Windows-Sheet.png",
   paintings: "/pixel-art/metrocity/Interior/Home/Paintings-Sheet.png",
   characterModel: "/pixel-art/metrocity/Character/CharacterModel/Character%20Model.png",
   characterHair: "/pixel-art/metrocity/Character/Hair/Hairs.png",
@@ -359,6 +361,9 @@ function validScene(payload) {
       typeof avatar.self !== "boolean" ||
       (avatar.status !== "online" && avatar.status !== "reconnecting")
     ) {
+      return null;
+    }
+    if (!Number.isSafeInteger(avatar.size) || avatar.size !== AVATAR_SIZE) {
       return null;
     }
     if (
@@ -724,6 +729,8 @@ function fillWorldRect(context, camera, worldX, worldY, width, height, color) {
 }
 
 function drawFurniture(context, camera, assets) {
+  // Rugs and wall decor are walkable backdrops. Blocking furniture is kept in
+  // ROOM_LAYOUT and mirrored by scene.furniture_exclusions.
   const carpets = [
     [176, 112, 2],
     [240, 112, 3],
@@ -947,17 +954,18 @@ function drawAvatars(context, camera, avatars, assets) {
   // would make draw order depend on the browser's locale.
   for (const avatar of avatars) {
     const { x, y } = avatarPosition(avatar, camera);
+    const zoom = camera.zoom * (AVATAR_SIZE / CHARACTER_CELL_SIZE);
     if (!rectVisible(
-      x - 16 * camera.zoom,
-      y - 32 * camera.zoom,
-      CHARACTER_CELL_SIZE * camera.zoom,
-      CHARACTER_CELL_SIZE * camera.zoom,
+      x - AVATAR_HALF_SIZE * camera.zoom,
+      y - AVATAR_SIZE * camera.zoom,
+      AVATAR_SIZE * camera.zoom,
+      AVATAR_SIZE * camera.zoom,
       camera,
       true,
     )) continue;
     context.globalAlpha = avatar.status === "reconnecting" ? 0.55 : 1;
-    const left = x - 16 * camera.zoom;
-    const top = y - 32 * camera.zoom;
+    const left = x - AVATAR_HALF_SIZE * camera.zoom;
+    const top = y - AVATAR_SIZE * camera.zoom;
     const modelRow = avatar.variant % CHARACTER_MODEL_ROWS;
     const hairRow = Math.floor(avatar.variant / 4) % CHARACTER_HAIR_ROWS;
     const outfitRow = Math.floor(avatar.variant / 8) % CHARACTER_OUTFIT_ROWS;
@@ -968,7 +976,7 @@ function drawAvatars(context, camera, avatars, assets) {
       modelRow * CHARACTER_CELL_SIZE,
       left,
       top,
-      camera.zoom,
+      zoom,
     );
     drawCharacterLayer(
       context,
@@ -977,7 +985,7 @@ function drawAvatars(context, camera, avatars, assets) {
       outfitRow * CHARACTER_CELL_SIZE,
       left,
       top,
-      camera.zoom,
+      zoom,
     );
     drawCharacterLayer(
       context,
@@ -986,7 +994,7 @@ function drawAvatars(context, camera, avatars, assets) {
       hairRow * CHARACTER_CELL_SIZE,
       left,
       top,
-      camera.zoom,
+      zoom,
     );
     context.globalAlpha = 1;
   }
@@ -1009,13 +1017,18 @@ function drawCharacterLayer(context, image, sourceX, sourceY, x, y, zoom) {
 function drawNamesAndAccents(context, camera, avatars) {
   context.font = `${12 * camera.zoom}px monospace`;
   context.textAlign = "center";
+  const showPeerNames = avatars.length <= MAX_LABELED_AVATARS;
   for (const avatar of avatars) {
+    // The participant list remains the authoritative readable name surface.
+    // In a crowded room, keep only the local user's canvas label so peer
+    // labels do not obscure avatars and furniture.
+    if (!avatar.self && !showPeerNames) continue;
     const { x, y } = avatarPosition(avatar, camera);
     if (!rectVisible(
       x - 80 * camera.zoom,
-      y - 48 * camera.zoom,
+      y - (AVATAR_LABEL_OFFSET + 16) * camera.zoom,
       160 * camera.zoom,
-      56 * camera.zoom,
+      (AVATAR_LABEL_OFFSET + 20) * camera.zoom,
       camera,
       true,
     )) continue;
@@ -1023,7 +1036,7 @@ function drawNamesAndAccents(context, camera, avatars) {
     context.fillText(
       avatar.username,
       x,
-      Math.max(12 * camera.zoom, y - 36 * camera.zoom),
+      Math.max(12 * camera.zoom, y - AVATAR_LABEL_OFFSET * camera.zoom),
       Math.max(
         1,
         Math.min(
@@ -1035,13 +1048,18 @@ function drawNamesAndAccents(context, camera, avatars) {
     if (avatar.self) {
       context.strokeStyle = "#f3d36a";
       context.strokeRect(
-        x - 19 * camera.zoom,
-        y - 35 * camera.zoom,
-        38 * camera.zoom,
-        37 * camera.zoom,
+        x - (AVATAR_HALF_SIZE + 3) * camera.zoom,
+        y - (AVATAR_SIZE + 3) * camera.zoom,
+        (AVATAR_SIZE + 6) * camera.zoom,
+        (AVATAR_SIZE + 5) * camera.zoom,
       );
       context.fillStyle = "#f3d36a";
-      context.fillRect(x - camera.zoom, y - 17 * camera.zoom, 2 * camera.zoom, 2 * camera.zoom);
+      context.fillRect(
+        x - camera.zoom,
+        y - AVATAR_HALF_SIZE * camera.zoom,
+        2 * camera.zoom,
+        2 * camera.zoom,
+      );
     }
   }
 }
@@ -1074,7 +1092,7 @@ function drawSpeechBubbles(context, camera, scene) {
       // emoji and other fallback glyphs wider than the monospace advance.
       // maxWidth keeps every line inside the padded rectangle without
       // clipping it at the viewport edge. Normal lines below this width are
-      // unaffected; only oversized native text is scaled by Canvas.
+      // unaffected; only oversized fallback glyphs are scaled by Canvas.
       const interiorWidth = Math.max(1, (bubble.width - 16) * camera.zoom);
       for (let index = 0; index < bubble.lines.length; index += 1) {
         context.fillText(
@@ -1185,30 +1203,30 @@ function drawFallback(state, scene, camera) {
     for (const avatar of avatars) {
       const { x, y } = avatarPosition(avatar, fallbackCamera);
       if (!rectVisible(
-        x - 6 * fallbackCamera.zoom,
-        y - 14 * fallbackCamera.zoom,
-        12 * fallbackCamera.zoom,
-        14 * fallbackCamera.zoom,
+        x - AVATAR_HALF_SIZE * fallbackCamera.zoom,
+        y - AVATAR_SIZE * fallbackCamera.zoom,
+        AVATAR_SIZE * fallbackCamera.zoom,
+        AVATAR_SIZE * fallbackCamera.zoom,
         fallbackCamera,
         true,
       )) continue;
       context.fillStyle = avatar.self ? "#f3d36a" : "#72b7a1";
       context.fillRect(
-        x - 6 * fallbackCamera.zoom,
-        y - 14 * fallbackCamera.zoom,
-        12 * fallbackCamera.zoom,
-        14 * fallbackCamera.zoom,
+        x - AVATAR_HALF_SIZE * fallbackCamera.zoom,
+        y - AVATAR_SIZE * fallbackCamera.zoom,
+        AVATAR_SIZE * fallbackCamera.zoom,
+        AVATAR_SIZE * fallbackCamera.zoom,
       );
       context.fillStyle = "#18232a";
       context.fillRect(
         x - 4 * fallbackCamera.zoom,
-        y - 11 * fallbackCamera.zoom,
+        y - 12 * fallbackCamera.zoom,
         2 * fallbackCamera.zoom,
         2 * fallbackCamera.zoom,
       );
       context.fillRect(
         x + 2 * fallbackCamera.zoom,
-        y - 11 * fallbackCamera.zoom,
+        y - 12 * fallbackCamera.zoom,
         2 * fallbackCamera.zoom,
         2 * fallbackCamera.zoom,
       );

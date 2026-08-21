@@ -13,7 +13,7 @@ pub fn world_metadata_has_named_logical_extents_test() {
   assert scene.world_tile_extent == scene.TileExtent(width: 21, height: 11)
   assert scene.world_pixel_extent == scene.WorldExtent(width: 336, height: 176)
   assert scene.avatar_bottom_center_offset == scene.WorldOffset(dx: 0, dy: 0)
-  assert scene.avatar_visual_center_offset == scene.WorldOffset(dx: 0, dy: -16)
+  assert scene.avatar_visual_center_offset == scene.WorldOffset(dx: 0, dy: -8)
   assert scene.bubble_limits.max_width == 160
   assert scene.bubble_limits.max_lines == 3
 }
@@ -27,27 +27,51 @@ pub fn curated_anchors_are_unique_integral_and_walkable_test() {
     && !list.any(scene.edge_exclusions, fn(exclusion) {
       scene.point_is_in_exclusion(anchor.position, exclusion)
     })
-    && !list.any(scene.furniture_exclusions, fn(exclusion) {
-      scene.point_is_in_exclusion(anchor.position, exclusion)
-    })
   })
   assert list.all(anchors, fn(anchor) {
     scene.anchor_is_walkable(anchor.position)
   })
   assert list.all(anchors, fn(anchor) {
-    anchor.position.x % scene.tile_size == 0
+    anchor.position.x % scene.tile_size == 8
     && anchor.position.y % scene.tile_size == 0
   })
   assert unique_indices(anchors) == list.length(anchors)
   assert unique_positions(anchors) == list.length(anchors)
 }
 
+pub fn compact_avatar_rectangles_do_not_hit_room_geometry_or_each_other_test() {
+  assert list.all(scene.curated_anchors, fn(left) {
+    let left_rect = scene.avatar_rect(left.position)
+    !list.any(scene.edge_exclusions, fn(wall) {
+      scene.rectangles_intersect(left_rect, wall)
+    })
+    && !list.any(scene.furniture_exclusions, fn(furniture) {
+      scene.rectangles_intersect(left_rect, furniture)
+    })
+    && !list.any(scene.curated_anchors, fn(right) {
+      left.index != right.index
+      && scene.rectangles_intersect(
+        left_rect,
+        scene.avatar_rect(right.position),
+      )
+    })
+  })
+  assert list.all(scene.curated_anchors, scene.anchor_has_clear_footprint)
+}
+
+pub fn wall_decor_and_rugs_are_walkable_backdrops_test() {
+  // The renderer draws these assets before avatars; they are decorative
+  // surfaces rather than blocking furniture.
+  assert scene.anchor_is_walkable(scene.WorldPoint(24, 32))
+  assert scene.anchor_is_walkable(scene.WorldPoint(184, 128))
+}
+
 pub fn compact_office_has_a_doorway_between_two_rooms_test() {
   assert scene.world_tile_extent == scene.TileExtent(width: 21, height: 11)
-  assert scene.anchor_is_walkable(scene.WorldPoint(160, 80))
-  assert !scene.anchor_is_walkable(scene.WorldPoint(160, 32))
-  assert !scene.anchor_is_walkable(scene.WorldPoint(160, 144))
-  assert scene.anchor_is_walkable(scene.WorldPoint(304, 128))
+  assert scene.anchor_is_walkable(scene.WorldPoint(168, 80))
+  assert !scene.anchor_is_walkable(scene.WorldPoint(168, 32))
+  assert !scene.anchor_is_walkable(scene.WorldPoint(168, 144))
+  assert scene.anchor_is_walkable(scene.WorldPoint(312, 144))
 }
 
 pub fn coordinate_spaces_are_distinct_records_test() {
@@ -481,6 +505,7 @@ pub fn renderer_json_uses_canonical_bubble_lines_and_preserves_full_text_test() 
   assert !string.contains(rendered, "\"text\"")
   assert string.contains(rendered, "\"left\":")
   assert string.contains(rendered, "\"expires_at_ms\":16000")
+  assert string.contains(rendered, "\"size\":16")
 }
 
 pub fn renderer_json_omits_fully_offscreen_bubbles_but_keeps_visible_edge_owners_test() {
