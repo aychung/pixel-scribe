@@ -1,4 +1,12 @@
-import { expect, test, type Page, type WebSocketRoute } from "@playwright/test";
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+  type WebSocketRoute,
+} from "@playwright/test";
+
+type Box = { x: number; y: number; width: number; height: number };
 
 type User = { connection_id: string; username: string };
 
@@ -51,6 +59,30 @@ async function assertNoBodyOverflow(page: Page) {
   expect(overflow).toEqual({ document: false, body: false });
 }
 
+async function expectBoundingBox(locator: Locator): Promise<Box> {
+  const bounds = await locator.boundingBox();
+  expect(bounds).not.toBeNull();
+  if (bounds === null) throw new Error("Expected a visible bounding box");
+  return bounds;
+}
+
+function assertVerticallyWithin(bounds: Box, top: number, bottom: number) {
+  expect(bounds.y).toBeGreaterThanOrEqual(top);
+  expect(bounds.y + bounds.height).toBeLessThanOrEqual(bottom);
+}
+
+function assertContained(bounds: Box, container: Box) {
+  expect(bounds.x).toBeGreaterThanOrEqual(container.x);
+  expect(bounds.x + bounds.width).toBeLessThanOrEqual(
+    container.x + container.width,
+  );
+  assertVerticallyWithin(
+    bounds,
+    container.y,
+    container.y + container.height,
+  );
+}
+
 for (const viewportWidth of [768, 1024, 1440] as const) {
   test(`keeps the desktop composer reachable at ${viewportWidth}×320`, async ({
     page,
@@ -78,12 +110,8 @@ for (const viewportWidth of [768, 1024, 1440] as const) {
     const viewportHeight = page.viewportSize()?.height;
     expect(viewportHeight).toBe(320);
     for (const control of [composer, send]) {
-      const bounds = await control.boundingBox();
-      expect(bounds).not.toBeNull();
-      expect(bounds?.y).toBeGreaterThanOrEqual(0);
-      expect((bounds?.y ?? 0) + (bounds?.height ?? 0)).toBeLessThanOrEqual(
-        viewportHeight ?? 0,
-      );
+      const bounds = await expectBoundingBox(control);
+      assertVerticallyWithin(bounds, 0, viewportHeight ?? 0);
     }
     await assertNoBodyOverflow(page);
   });
@@ -108,24 +136,22 @@ for (const viewport of [
     await expect(composer).toBeVisible();
     await expect(send).toBeVisible();
 
-    const stageBounds = await stage.boundingBox();
-    const railBounds = await rail.boundingBox();
+    const stageBounds = await expectBoundingBox(stage);
+    const railBounds = await expectBoundingBox(rail);
     const viewportSize = page.viewportSize();
-    expect(stageBounds).not.toBeNull();
-    expect(railBounds).not.toBeNull();
-    expect((stageBounds?.x ?? -1) + (stageBounds?.width ?? 0)).toBeLessThanOrEqual(
+    expect(stageBounds.x + stageBounds.width).toBeLessThanOrEqual(
       viewportSize?.width ?? 0,
     );
-    expect((railBounds?.y ?? -1) + (railBounds?.height ?? 0)).toBeLessThanOrEqual(
+    expect(railBounds.y + railBounds.height).toBeLessThanOrEqual(
       viewportSize?.height ?? 0,
     );
     if (viewport.width < 768) {
-      expect(railBounds?.y ?? 0).toBeGreaterThanOrEqual(
-        (stageBounds?.y ?? 0) + (stageBounds?.height ?? 0),
+      expect(railBounds.y).toBeGreaterThanOrEqual(
+        stageBounds.y + stageBounds.height,
       );
     } else {
-      expect(railBounds?.x ?? 0).toBeGreaterThanOrEqual(
-        (stageBounds?.x ?? 0) + (stageBounds?.width ?? 0),
+      expect(railBounds.x).toBeGreaterThanOrEqual(
+        stageBounds.x + stageBounds.width,
       );
     }
     await assertNoBodyOverflow(page);
@@ -157,15 +183,11 @@ test("keeps the 320px mobile chat rail ordered and contained", async ({ page }) 
   const textarea = composer.getByRole("textbox", { name: "Message" });
   const send = page.getByRole("button", { name: "Send message" });
 
-  const railBounds = await rail.boundingBox();
-  const stageBounds = await stage.boundingBox();
-  const canvasBounds = await canvas.boundingBox();
-  expect(railBounds).not.toBeNull();
-  expect(stageBounds).not.toBeNull();
-  expect(canvasBounds?.height ?? 0).toBeGreaterThanOrEqual(96);
-  expect((stageBounds?.y ?? 0) + (stageBounds?.height ?? 0)).toBeLessThanOrEqual(
-    railBounds?.y ?? 0,
-  );
+  const railBounds = await expectBoundingBox(rail);
+  const stageBounds = await expectBoundingBox(stage);
+  const canvasBounds = await expectBoundingBox(canvas);
+  expect(canvasBounds.height).toBeGreaterThanOrEqual(96);
+  expect(stageBounds.y + stageBounds.height).toBeLessThanOrEqual(railBounds.y);
 
   const directSections = await rail.locator(":scope > *").evaluateAll((elements) =>
     elements.map((element) => {
@@ -179,30 +201,17 @@ test("keeps the 320px mobile chat rail ordered and contained", async ({ page }) 
     );
   }
   for (const element of [participantList, messageLog, composer]) {
-    const bounds = await element.boundingBox();
-    expect(bounds).not.toBeNull();
-    expect(bounds?.y ?? -1).toBeGreaterThanOrEqual(railBounds?.y ?? 0);
-    expect((bounds?.y ?? 0) + (bounds?.height ?? 0)).toBeLessThanOrEqual(
-      (railBounds?.y ?? 0) + (railBounds?.height ?? 0),
-    );
+    assertContained(await expectBoundingBox(element), railBounds);
   }
 
-  const box = async (locator: ReturnType<typeof page.locator>) => {
-    const bounds = await locator.boundingBox();
-    expect(bounds).not.toBeNull();
-    return bounds ?? { x: 0, y: -1, width: 0, height: 0 };
-  };
-  const chatPanelBounds = await box(chatLogPanel);
+  const chatPanelBounds = await expectBoundingBox(chatLogPanel);
   const chatFlow = [
-    await box(chatHeading),
-    await box(messageLog),
-    await box(historyNote),
+    await expectBoundingBox(chatHeading),
+    await expectBoundingBox(messageLog),
+    await expectBoundingBox(historyNote),
   ];
   for (const bounds of chatFlow) {
-    expect(bounds.y).toBeGreaterThanOrEqual(chatPanelBounds.y);
-    expect(bounds.y + bounds.height).toBeLessThanOrEqual(
-      chatPanelBounds.y + chatPanelBounds.height,
-    );
+    assertContained(bounds, chatPanelBounds);
   }
   for (let index = 1; index < chatFlow.length; index += 1) {
     expect(chatFlow[index].y).toBeGreaterThanOrEqual(
@@ -210,12 +219,12 @@ test("keeps the 320px mobile chat rail ordered and contained", async ({ page }) 
     );
   }
 
-  const composerBounds = await box(composer);
-  const headingBounds = await box(composerHeading);
-  const labelBounds = await box(composerLabel);
-  const textareaBounds = await box(textarea);
-  const sendBounds = await box(send);
-  const helpBounds = await box(composerHelp);
+  const composerBounds = await expectBoundingBox(composer);
+  const headingBounds = await expectBoundingBox(composerHeading);
+  const labelBounds = await expectBoundingBox(composerLabel);
+  const textareaBounds = await expectBoundingBox(textarea);
+  const sendBounds = await expectBoundingBox(send);
+  const helpBounds = await expectBoundingBox(composerHelp);
   for (const bounds of [
     headingBounds,
     labelBounds,
@@ -223,10 +232,7 @@ test("keeps the 320px mobile chat rail ordered and contained", async ({ page }) 
     sendBounds,
     helpBounds,
   ]) {
-    expect(bounds.y).toBeGreaterThanOrEqual(composerBounds.y);
-    expect(bounds.y + bounds.height).toBeLessThanOrEqual(
-      composerBounds.y + composerBounds.height,
-    );
+    assertContained(bounds, composerBounds);
   }
   expect(labelBounds.y).toBeGreaterThanOrEqual(
     headingBounds.y + headingBounds.height - 1,
@@ -242,7 +248,7 @@ test("keeps the 320px mobile chat rail ordered and contained", async ({ page }) 
   expect(inputRowBottom).toBeLessThanOrEqual(helpBounds.y + 1);
   const feedbackCount = await composerFeedback.count();
   for (let index = 0; index < feedbackCount; index += 1) {
-    const feedbackBounds = await box(composerFeedback.nth(index));
+    const feedbackBounds = await expectBoundingBox(composerFeedback.nth(index));
     expect(feedbackBounds.y).toBeGreaterThanOrEqual(
       helpBounds.y + helpBounds.height - 1,
     );
@@ -258,12 +264,8 @@ test("keeps the 320px mobile chat rail ordered and contained", async ({ page }) 
     helpBounds,
   ];
   for (const bounds of [...chatFlow, ...composerFlow]) {
-    expect(bounds.x).toBeGreaterThanOrEqual(railBounds?.x ?? 0);
-    expect(bounds.x + bounds.width).toBeLessThanOrEqual(
-      (railBounds?.x ?? 0) + (railBounds?.width ?? 0),
-    );
-    expect(bounds.y).toBeGreaterThanOrEqual(0);
-    expect(bounds.y + bounds.height).toBeLessThanOrEqual(720);
+    assertContained(bounds, railBounds);
+    assertVerticallyWithin(bounds, 0, 720);
   }
   const renderedRailContent = await rail
     .locator("h2, h3, p, label, textarea, button, [role=\"log\"]")
@@ -279,21 +281,15 @@ test("keeps the 320px mobile chat rail ordered and contained", async ({ page }) 
       }),
     );
   for (const bounds of renderedRailContent) {
-    expect(bounds.x).toBeGreaterThanOrEqual(railBounds?.x ?? 0);
-    expect(bounds.right).toBeLessThanOrEqual(
-      (railBounds?.x ?? 0) + (railBounds?.width ?? 0),
-    );
-    expect(bounds.y).toBeGreaterThanOrEqual(railBounds?.y ?? 0);
-    expect(bounds.bottom).toBeLessThanOrEqual(
-      (railBounds?.y ?? 0) + (railBounds?.height ?? 0),
-    );
+    expect(bounds.x).toBeGreaterThanOrEqual(railBounds.x);
+    expect(bounds.right).toBeLessThanOrEqual(railBounds.x + railBounds.width);
+    expect(bounds.y).toBeGreaterThanOrEqual(railBounds.y);
+    expect(bounds.bottom).toBeLessThanOrEqual(railBounds.y + railBounds.height);
     expect(bounds.y).toBeGreaterThanOrEqual(0);
     expect(bounds.bottom).toBeLessThanOrEqual(720);
   }
   for (const control of [textarea, send]) {
-    const bounds = await control.boundingBox();
-    expect(bounds).not.toBeNull();
-    expect((bounds?.y ?? 0) + (bounds?.height ?? 0)).toBeLessThanOrEqual(720);
+    assertVerticallyWithin(await expectBoundingBox(control), 0, 720);
   }
 
   expect(await participantList.evaluate((element) => getComputedStyle(element).overflowY)).toBe(
@@ -404,9 +400,7 @@ test("keeps blocked recovery controls reachable at a 320px viewport", async ({ p
     page.getByRole("button", { name: "Return to username" }),
   ]) {
     await expect(control).toBeVisible();
-    const bounds = await control.boundingBox();
-    expect(bounds).not.toBeNull();
-    expect((bounds?.y ?? -1) + (bounds?.height ?? 0)).toBeLessThanOrEqual(320);
+    assertVerticallyWithin(await expectBoundingBox(control), 0, 320);
   }
   await assertNoBodyOverflow(page);
 });
@@ -417,9 +411,7 @@ test("keeps the composer above a reduced visual viewport", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 420 });
 
   const send = page.getByRole("button", { name: "Send message" });
-  const bounds = await send.boundingBox();
-  expect(bounds).not.toBeNull();
-  expect((bounds?.y ?? -1) + (bounds?.height ?? 0)).toBeLessThanOrEqual(420);
+  assertVerticallyWithin(await expectBoundingBox(send), 0, 420);
   await assertNoBodyOverflow(page);
 });
 

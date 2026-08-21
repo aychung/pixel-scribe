@@ -541,6 +541,36 @@ textarea:focus-visible,
   align-content: center;
 }
 
+.composer {
+  border-top: 1px solid var(--line);
+  padding-top: 0.75rem;
+}
+
+.composer label {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.composer textarea {
+  width: 100%;
+  min-height: 4.5rem;
+  resize: vertical;
+  border: 2px solid var(--line);
+  border-radius: 0.2rem;
+  background: var(--page);
+  color: var(--ink);
+  padding: 0.65rem 0.75rem;
+}
+
+.composer textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.composer textarea::placeholder {
+  color: #8f96a7;
+}
+
 @media (max-width: 767px) {
   .joined-workspace {
     grid-template-rows: minmax(0, 30dvh) minmax(0, 1fr);
@@ -613,36 +643,6 @@ textarea:focus-visible,
   }
 }
 
-.composer {
-  border-top: 1px solid var(--line);
-  padding-top: 0.75rem;
-}
-
-.composer label {
-  color: var(--ink);
-  font-weight: 700;
-}
-
-.composer textarea {
-  width: 100%;
-  min-height: 4.5rem;
-  resize: vertical;
-  border: 2px solid var(--line);
-  border-radius: 0.2rem;
-  background: var(--page);
-  color: var(--ink);
-  padding: 0.65rem 0.75rem;
-}
-
-.composer textarea:disabled {
-  cursor: not-allowed;
-  opacity: 0.7;
-}
-
-.composer textarea::placeholder {
-  color: #8f96a7;
-}
-
 .send-button,
 .connection-actions button {
   min-height: 2.75rem;
@@ -669,18 +669,6 @@ textarea:focus-visible,
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-}
-
-@media (max-width: 767px) {
-  .composer {
-    padding-top: 0.5rem;
-  }
-
-  .composer textarea {
-    height: 2.5rem;
-    min-height: 0;
-    resize: none;
-  }
 }
 
 @media (max-width: 25rem) {
