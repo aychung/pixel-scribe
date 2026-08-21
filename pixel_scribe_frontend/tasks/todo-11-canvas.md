@@ -61,7 +61,7 @@ an original or explicitly licensed top-down office/avatar baseline for review.
     `src/pixel_scribe_frontend/canvas_ffi.mjs`, `e2e/canvas.spec.ts`.
   - **Verify:** focused lifecycle browser tests plus all Gleam checks and bundle.
   - **Depends:** Task 11D.
-- [x] **Task 11F — Capture and approve the baseline scene.**
+- [ ] **Task 11F — Capture and approve the baseline scene.**
   - **Done when:** deterministic 320px/desktop and crowded screenshots show a
     recognizable original office, crisp sprite scale, useful fallback, and no
     invalid anchors; human approval and provenance review are recorded.

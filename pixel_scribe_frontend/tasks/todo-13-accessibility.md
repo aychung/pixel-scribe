@@ -41,7 +41,7 @@ not redesign protocol or add new features.
     `e2e/support/accessibility.ts` only for reusable state-neutral helpers.
   - **Verify:** focused Chromium accessibility suite.
   - **Depends:** Task 13C.
-- [x] **Task 13E — Complete cross-browser and manual accessibility evidence.**
+- [ ] **Task 13E — Complete cross-browser and manual accessibility evidence.**
   - **Done when:** Chromium/Firefox/WebKit pass and keyboard-only, 200% zoom,
     reduced-motion, screen-reader, canvas-disabled, and responsive smoke results
     are recorded without product changes hidden in this verification unit.
